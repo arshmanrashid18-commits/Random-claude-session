@@ -1,7 +1,9 @@
 /**
  * Main-thread handle to the simulation worker.
  */
-import type { CivData, EntitySnapshot, FrameData, FrameHeader, MainToWorker, RegionTextures, SpeciesInfo, StaticWorldData, WorkerToMain, WorldStats } from './protocol';
+import type { CivData, Command, EcologyData, EntitySnapshot, FrameData, FrameHeader, InspectInfo, InspectTarget, LakeData, MainToWorker, RegionTextures, RiverData, SpeciesInfo, StaticWorldData, WorkerToMain, WorldStats } from './protocol';
+
+export interface CommandResult { ok: boolean; message: string; combo?: string }
 import type { WorldPresetId } from '../sim/planet/presets';
 import type { GameEvent } from '../sim/events';
 
@@ -23,8 +25,13 @@ export class SimClient {
   onCiv: (civ: CivData) => void = () => {};
   civ: CivData | null = null;
   onError: (msg: string) => void = () => {};
+  onHeights: (faces: number[], data: Float32Array[]) => void = () => {};
+  onWater: (rivers: RiverData, lakes: LakeData) => void = () => {};
   private nextId = 1;
   private pending = new Map<number, (v: number) => void>();
+  private pendingCmd = new Map<number, (r: CommandResult) => void>();
+  private pendingInspect = new Map<number, (r: InspectInfo | null) => void>();
+  private pendingEco = new Map<number, (r: EcologyData) => void>();
 
   constructor() {
     this.worker = new Worker(new URL('./sim.worker.ts', import.meta.url), { type: 'module' });
@@ -66,6 +73,23 @@ export class SimClient {
       case 'advanced': this.resolve(msg.id, msg.tick); break;
       case 'hash': this.resolve(msg.id, msg.hash); break;
       case 'error': this.onError(msg.message); break;
+      case 'commandResult': {
+        const r = this.pendingCmd.get(msg.id);
+        if (r) { this.pendingCmd.delete(msg.id); r({ ok: msg.ok, message: msg.message, combo: msg.combo }); }
+        break;
+      }
+      case 'inspect': {
+        const r = this.pendingInspect.get(msg.id);
+        if (r) { this.pendingInspect.delete(msg.id); r(msg.info); }
+        break;
+      }
+      case 'ecology': {
+        const r = this.pendingEco.get(msg.id);
+        if (r) { this.pendingEco.delete(msg.id); r(msg.data); }
+        break;
+      }
+      case 'heights': this.onHeights(msg.faces, msg.data); break;
+      case 'water': this.onWater(msg.rivers, msg.lakes); break;
     }
   }
 
@@ -91,6 +115,21 @@ export class SimClient {
   advance(ticks: number): Promise<number> {
     const id = this.nextId++;
     return new Promise((res) => { this.pending.set(id, res); this.send({ type: 'advance', ticks, id }); });
+  }
+
+  command(cmd: Command): Promise<CommandResult> {
+    const id = this.nextId++;
+    return new Promise((res) => { this.pendingCmd.set(id, res); this.send({ type: 'command', cmd, id }); });
+  }
+
+  inspect(target: InspectTarget): Promise<InspectInfo | null> {
+    const id = this.nextId++;
+    return new Promise((res) => { this.pendingInspect.set(id, res); this.send({ type: 'inspect', target, id }); });
+  }
+
+  ecology(): Promise<EcologyData> {
+    const id = this.nextId++;
+    return new Promise((res) => { this.pendingEco.set(id, res); this.send({ type: 'ecology', id }); });
   }
 
   hash(): Promise<number> {

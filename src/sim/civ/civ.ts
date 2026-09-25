@@ -22,6 +22,7 @@ import type { Fires } from '../ecology/fire';
 import type { EventLog } from '../events';
 import type { Geography } from '../planet/geography';
 import { AGE_NAMES } from './defs';
+import { Society } from './society';
 
 const INV_R = 1 / PLANET_RADIUS;
 const BRAIN = 8;
@@ -85,7 +86,31 @@ export interface Settlement {
   colonyCooldown: number;
   walls: boolean;
   capturedFrom: number;
+  /** Tick until which the settlement is blessed (work, health, births). */
+  blessed: number;
 }
+
+/** A remembered death: enough to bring the person back (Resurrection). */
+export interface Grave {
+  uid: number;
+  tribe: number;
+  settle: number;
+  x: number; y: number; z: number;
+  age: number;
+  sex: number;
+  tick: number;
+  cause: string;
+  skills: number[];
+  traits: number[];
+  love: number;
+  fear: number;
+  generation: number;
+  mother: number;
+  father: number;
+  role: number;
+}
+
+const GRAVE_LIMIT = 900;
 
 export interface RoadSeg {
   ax: number; ay: number; az: number;
@@ -113,15 +138,32 @@ export class Civ {
   /** Death causes (diagnostics and chronicle statistics). */
   deathCauses: Record<string, number> = {};
   /** Devotion (the god's mana) accumulated from worship. */
-  devotion = 30;
+  devotion = 120;
   devotionRate = 0;
+  /** Recent deaths (ring, newest last) for resurrection and mourning. */
+  graves: Grave[] = [];
+  /** Tick until which an eclipse terrifies the world into prayer. */
+  omenUntil = 0;
+  /** Divine beacon calling settlers (null when none). */
+  beacon: { x: number; y: number; z: number; cell: number; until: number } | null = null;
+  /** Region cells consecrated as sacred groves (hunting forbidden). */
+  sanctuary: Uint8Array;
   private scratch = [0, 0, 0];
+  /** Scratch direction for helpers (society). */
+  scratchDir = [0, 0, 0];
+  private lastTick = 0;
+  /** RNG of the running world (set every tick; used by helpers without an rng parameter). */
+  rngRef: Rng | null = null;
+  readonly region: import('../planet/cubesphere').CellGrid;
+  society = new Society();
 
   constructor(planet: Planet) {
+    this.region = planet.region;
     this.paths = new Pathfinder(planet.region, planet.terrain);
     this.hash = new SpatialHash(planet.region, this.people.cap);
     this.owner = new Int32Array(planet.region.count).fill(-1);
     this.fish = new Float32Array(planet.region.count);
+    this.sanctuary = new Uint8Array(planet.region.count);
     for (let c = 0; c < planet.region.count; c++) {
       const t = planet.terrain;
       this.fish[c] = t.oceanFrac[c] > 0.3 || t.lakeFrac[c] > 0.2 || t.river[c] > 2 ? 1 : 0;
@@ -254,6 +296,7 @@ export class Civ {
       colonyCooldown: TICKS_PER_YEAR * 3,
       walls: false,
       capturedFrom: -1,
+      blessed: 0,
     };
     this.settlements.push(s);
     t.settlements.push(id);
@@ -410,6 +453,8 @@ export class Civ {
   // ------------------------------------------------------------------ main tick
   tick(tick: number, rng: Rng, planet: Planet, plants: Plants, animals: Animals, fires: Fires, events: EventLog, geo: Geography): void {
     const P = this.people;
+    this.lastTick = tick;
+    this.rngRef = rng;
     this.hash.rebuild(P.count, P.alive, P.x, P.y, P.z);
     const night = dayFrac(tick);
     const isNight = night < 0.23 || night > 0.8;
@@ -424,7 +469,7 @@ export class Civ {
       if ((tick + k * 7) % 40 === 0) this.settlementBrain(s, tick, rng, planet, plants, animals, events, geo, fires);
       if (s.stock[Res.Food] > 0) {
         // Spoilage.
-        const spoil = s.stock[Res.Food] * (s.stock[Res.Food] > s.storage ? 0.0005 : 0.00004);
+        const spoil = s.stock[Res.Food] * (s.stock[Res.Food] > s.storage ? 0.0002 : 0.00004);
         s.stock[Res.Food] -= spoil;
         this.destroy(Res.Food, spoil);
       }
@@ -437,6 +482,8 @@ export class Civ {
     if (tick % TICKS_PER_DAY === 17) this.research(tick, events);
     // Devotion from worship.
     if (tick % 16 === 5) this.worship();
+    // Diplomacy, war, trade and religion.
+    this.society.tick(this, tick, rng, planet, events, geo);
   }
 
   private growFarms(planet: Planet): void {
@@ -449,7 +496,8 @@ export class Civ {
       const t = this.tribes[b.tribe];
       const fert = Math.min(1.6, 0.35 + cl.soil[c] * 0.8 + Math.min(0.5, planet.terrain.river[c] * 0.08) + (t.known[TECH_INDEX.get('irrigation')!] ? 0.25 : 0));
       const warm = Math.exp(-(((temp - 20) / 14) ** 2));
-      b.growth += 0.017 * fert * warm * (0.4 + Math.min(3, b.workers) * 0.25);
+      const blessed = this.settlements[b.settle]?.blessed > this.lastTick ? 1.4 : 1;
+      b.growth += 0.017 * fert * warm * (0.4 + Math.min(3, b.workers) * 0.25) * blessed;
     }
   }
 
@@ -461,7 +509,8 @@ export class Civ {
       const faith = P.love[i] + P.fear[i] * 0.7;
       gain += faith * (P.state[i] === PState.Pray ? 3 : 1);
     }
-    gain *= 0.0008;
+    // ~1 devotion per faithful person per day at full faith.
+    gain *= 0.1;
     this.devotionRate = gain * (TICKS_PER_DAY / 16);
     this.devotion = Math.min(9999, this.devotion + gain);
   }
@@ -478,14 +527,15 @@ export class Civ {
     let hp = P.health[i];
     if (P.hunger[i] >= 1) { P.hunger[i] = 1; hp -= 0.0022; }
     const c = this.hash.bucketOf[i];
-    if (c >= 0 && fires.intensity[c] > 0.35) hp -= fires.intensity[c] * 0.012;
+    if (c >= 0 && fires.intensity[c] > 0.35) hp -= fires.intensity[c] * 0.007;
+    if (P.sick[i] > 0) hp = this.diseaseStep(i, tick, rng, hp);
     if (P.hunger[i] < 0.5 && hp < 1) hp = Math.min(1, hp + 0.0015);
     P.health[i] = hp;
     // Death: health, or old age.
     const age = P.age[i];
     const oldAge = age > 48 ? 0.00012 * Math.exp((age - 48) / 9) : age < 3 ? 0.000012 : 0.000004;
     if (hp <= 0 || rng.chance(oldAge)) {
-      this.personDies(i, tick, hp <= 0 ? (P.hunger[i] >= 1 ? 'starvation' : c >= 0 && fires.intensity[c] > 0.35 ? 'fire' : 'hardship') : 'old age', events);
+      this.personDies(i, tick, hp <= 0 ? (P.hunger[i] >= 1 ? 'starvation' : c >= 0 && fires.intensity[c] > 0.35 ? 'fire' : P.sick[i] > 0 ? 'plague' : 'hardship') : 'old age', events);
       return;
     }
     // Pregnancy.
@@ -508,10 +558,10 @@ export class Civ {
     }
     // Movement.
     if (s2 === PState.Walk || s2 === PState.Carry || s2 === PState.Travel || s2 === PState.Flee || s2 === PState.March) {
-      const speed = WALK * (s2 === PState.Flee ? 1.8 : s2 === PState.Carry ? 0.85 : 1) * (age < 12 ? 0.8 : age > 60 ? 0.75 : 1);
+      const speed = WALK * (s2 === PState.Flee ? 1.8 : s2 === PState.Carry ? 0.85 : 1) * (age < 12 ? 0.8 : age > 60 ? 0.75 : 1) * (P.vessel[i] ? 2.6 : 1);
       const ox = P.x[i], oy = P.y[i], oz = P.z[i];
       const rem = stepToward(P.x, P.y, P.z, P.tx, P.ty, P.tz, i, speed);
-      if ((i + tick) % 2 === 0 && planet.heightAt(P.x[i], P.y[i], P.z[i]) < 0.12) {
+      if ((i + tick) % 2 === 0 && P.vessel[i] === 0 && planet.heightAt(P.x[i], P.y[i], P.z[i]) < 0.12 && planet.heightAt(P.x[i], P.y[i], P.z[i]) < planet.heightAt(ox, oy, oz)) {
         // Reached the water's edge: stop here.
         P.x[i] = ox; P.y[i] = oy; P.z[i] = oz;
         if (s2 === PState.Travel && P.intent[i] === Intent.Settle && this.nextWaypoint(i, planet, rng)) return;
@@ -535,25 +585,46 @@ export class Civ {
       this.consume(Res.Food, eat);
       P.hunger[i] = Math.max(0, P.hunger[i] - 0.95 * eat);
     }
-    // Busy with timed activity or long journeys: don't interrupt.
-    if ((st === PState.Work || st === PState.Build || st === PState.Eat || st === PState.Pray) && P.timer[i] > 0) return;
-    if (st === PState.Travel || P.intent[i] === Intent.Settle) return;
+    // An eclipse: everyone who can falls to their knees.
+    if (tick < this.omenUntil && st !== PState.Pray && st !== PState.Travel && P.age[i] >= 4) {
+      P.state[i] = PState.Pray;
+      P.intent[i] = Intent.Pray;
+      P.timer[i] = Math.max(8, this.omenUntil - tick);
+      return;
+    }
+    // The sick rest.
+    if (P.sick[i] > 0.4 && st !== PState.Sleep && st !== PState.Travel && rng.chance(0.5)) {
+      P.state[i] = PState.Sleep;
+      P.timer[i] = 30;
+      return;
+    }
     // Fire: flee away from the flames, toward the calmest neighbouring ground.
     const c = this.hash.bucketOf[i];
     if (c >= 0 && (fires.intensity[c] > 0.12 || fires.intensity[planet.region.neighbors[c * 8]] > 0.3 || fires.intensity[planet.region.neighbors[c * 8 + 1]] > 0.3 || fires.intensity[planet.region.neighbors[c * 8 + 2]] > 0.3 || fires.intensity[planet.region.neighbors[c * 8 + 3]] > 0.3)) {
       const g = planet.region;
+      // Safe ground: unburnt-and-calm or already burnt out (no fuel left).
       let best = c, bestV = fires.intensity[c] + 1;
       for (let k = 0; k < 8; k++) {
         const nb = g.neighbors[c * 8 + k];
         if (planet.terrain.oceanFrac[nb] > 0.5) continue;
-        let v = fires.intensity[nb];
-        for (let q = 0; q < 4; q++) v += fires.intensity[g.neighbors[nb * 8 + q]] * 0.5;
+        let v = fires.intensity[nb] * 1.5 + (fires.scar[nb] > 0.3 && fires.intensity[nb] < 0.05 ? -0.5 : 0);
+        for (let q = 0; q < 4; q++) v += fires.intensity[g.neighbors[nb * 8 + q]] * 0.3;
         if (v < bestV) { bestV = v; best = nb; }
       }
       this.goTo(i, g.centers[best * 3], g.centers[best * 3 + 1], g.centers[best * 3 + 2], 6, PState.Flee, Intent.Wander, -1, rng);
       return;
     }
+    // Busy with timed activity or long journeys: don't interrupt.
+    if ((st === PState.Work || st === PState.Build || st === PState.Eat || st === PState.Pray) && P.timer[i] > 0) return;
+    if (st === PState.Travel || P.intent[i] === Intent.Settle) return;
+    // Soldiers on campaign follow their army's orders.
+    if (P.army[i] >= 0 && (P.intent[i] === Intent.March || st === PState.Fight || st === PState.March)) return;
     if (!s) { this.wander(i, rng, 8); return; }
+    // Starving: eat before anything else.
+    if (P.hunger[i] > 0.8 && s.stock[Res.Food] >= 1 && P.intent[i] !== Intent.Eat) {
+      this.goTo(i, s.x, s.y, s.z, 5, PState.Walk, Intent.Eat, s.id, rng);
+      return;
+    }
     // Carrying: deliver first.
     if (P.carryRes[i] >= 0 && P.carryAmt[i] > 0 && P.intent[i] !== Intent.Deliver && P.intent[i] !== Intent.Build) {
       this.goDeliver(i, s, rng);
@@ -606,6 +677,7 @@ export class Civ {
           for (let q = hs.cellStart[cell], qe = hs.cellStart[cell + 1]; q < qe; q++) {
             const a = hs.items[q];
             if (!animals.alive[a] || animals.defs[animals.species[a]].diet !== 'herbivore') continue;
+            if (this.sanctuary[cell]) continue;
             const dx = animals.x[a] - P.x[i], dy = animals.y[a] - P.y[i], dz = animals.z[a] - P.z[i];
             const d = dx * dx + dy * dy + dz * dz;
             if (d < bestD) { bestD = d; best = a; }
@@ -844,6 +916,9 @@ export class Civ {
       case Intent.Sleep:
         P.state[i] = PState.Sleep; return;
       case Intent.Deliver: {
+        // Caravans heading home follow their path first.
+        if (P.state[i] === PState.Travel && P.pathId[i] >= 0 && this.nextWaypoint(i, planet, rng)) return;
+        P.vessel[i] = 0;
         if (s && P.carryRes[i] >= 0) {
           s.stock[P.carryRes[i]] += P.carryAmt[i];
           P.carryRes[i] = -1; P.carryAmt[i] = 0;
@@ -906,6 +981,13 @@ export class Civ {
         this.arriveSettler(i, tick, rng, planet, events, geo);
         return;
       }
+      case Intent.Trade: this.society.arriveTrader(this, i, tick, rng, planet); return;
+      case Intent.Pilgrim: this.society.arrivePilgrim(this, i, tick, rng, planet, events); return;
+      case Intent.March: {
+        if (P.state[i] === PState.March && P.pathId[i] >= 0 && this.nextWaypoint(i, planet, rng)) return;
+        P.state[i] = PState.March; P.timer[i] = 6; return;
+      }
+
       default:
         P.state[i] = PState.Idle; P.intent[i] = 0; P.timer[i] = rng.int(4, 20);
     }
@@ -1102,7 +1184,7 @@ export class Civ {
     void events;
   }
 
-  private personDies(i: number, tick: number, cause: string, events: EventLog): void {
+  personDies(i: number, tick: number, cause: string, events: EventLog): void {
     const P = this.people;
     this.deathCauses[cause] = (this.deathCauses[cause] ?? 0) + 1;
     if (P.carryRes[i] >= 0 && P.carryAmt[i] > 0) this.destroy(P.carryRes[i], P.carryAmt[i]);
@@ -1111,6 +1193,14 @@ export class Civ {
     if (sp >= 0) P.spouse[sp] = -1;
     const t = P.tribe[i] >= 0 ? this.tribes[P.tribe[i]] : null;
     if (t) t.stats.deaths++;
+    if (cause === 'plague' && t) t.stats.plagueDays++;
+    this.graves.push({
+      uid: P.uid[i], tribe: P.tribe[i], settle: P.settle[i], x: P.x[i], y: P.y[i], z: P.z[i], age: P.age[i], sex: P.sex[i], tick, cause,
+      skills: [P.skFarm[i], P.skBuild[i], P.skFight[i], P.skLore[i]],
+      traits: [P.brave[i], P.pious[i], P.greedy[i], P.social[i], P.curious[i]],
+      love: P.love[i], fear: P.fear[i], generation: P.generation[i], mother: P.mother[i], father: P.father[i], role: P.role[i],
+    });
+    if (this.graves.length > GRAVE_LIMIT) this.graves.splice(0, this.graves.length - GRAVE_LIMIT);
     if (P.role[i] === 1) this.succession(i, tick, events);
     if (P.role[i] >= 1 && t) {
       events.emit(tick, 'death-notable', { x: P.x[i], y: P.y[i], z: P.z[i] }, 0.5, { name: this.personName(i), role: P.role[i], tribe: t.name, cause, age: Math.floor(P.age[i]) });
@@ -1157,6 +1247,15 @@ export class Civ {
       return;
     }
     const t = this.tribes[s.tribe];
+    // Cleared, trampled, watched ground around the settlement resists fire.
+    if (fireRef) {
+      const fb = Math.min(0.92, 0.45 + s.pop / 90 + s.tier * 0.1);
+      fireRef.firebreak[s.cell] = fb;
+      for (let k = 0; k < 8; k++) {
+        const nb = planet.region.neighbors[s.cell * 8 + k];
+        fireRef.firebreak[nb] = Math.max(fireRef.firebreak[nb], fb * 0.6);
+      }
+    }
     // Tier.
     let tier = 0;
     for (let k = TIER_POP.length - 1; k >= 0; k--) if (s.pop >= TIER_POP[k]) { tier = k; break; }
@@ -1194,7 +1293,7 @@ export class Civ {
       if (c === s.cell) plants.logged[c] += 0.01;
     }
     // Famine tracking.
-    if (s.stock[Res.Food] < s.pop * 0.5) { s.famine++; t.stats.famineDays++; t.needs[TechField.Agriculture] += 0.02; }
+    if (s.stock[Res.Food] < s.pop * 0.5) { s.famine++; t.stats.famineDays++; t.needs[TechField.Agriculture] += 0.02; if (s.famine === 3 && s.pop >= 8) events.emit(tick, 'famine', s, 0.45, { settlement: s.name, tribe: t.name }); }
     else s.famine = Math.max(0, s.famine - 1);
     // Job allocation.
     const able = members.filter((i) => P.age[i] >= 14 && P.age[i] < 62 && P.job[i] !== Job.Child);
@@ -1258,8 +1357,18 @@ export class Civ {
       for (const i of members) {
         if (P.sex[i] !== 0 || P.pregnant[i] > 0 || P.age[i] < 17 || P.age[i] > 42 || P.spouse[i] < 0) continue;
         if (P.children[i] >= 6) continue;
-        if (rng.chance(0.05)) P.pregnant[i] = 300;
+        if (rng.chance(s.blessed > tick ? 0.08 : 0.05)) P.pregnant[i] = 300;
       }
+    }
+    // Disease burden (drives medicine research and the chronicle).
+    let sick = 0;
+    for (const i of members) if (P.sick[i] > 0) sick++;
+    const wasSick = s.disease;
+    s.disease = sick / members.length;
+    if (s.disease > 0.05) {
+      const t = this.tribes[s.tribe];
+      t.needs[TechField.Medicine] += s.disease * 2;
+      if (wasSick <= 0.05 && s.disease > 0.15) events.emit(tick, 'plague', s, 0.6, { settlement: s.name, tribe: t.name, sick });
     }
   }
 
@@ -1274,22 +1383,24 @@ export class Civ {
     const unfinished = blds.filter((b) => !b.complete).length;
     // Builders first (if there is work).
     if (unfinished > 0) take(Job.Builder, Math.max(1, Math.min(adults * 0.15, 1 + unfinished)));
-    // Food.
-    const foodDays = s.stock[Res.Food] / Math.max(1, s.pop * 3.2);
-    const hungry = foodDays < 6 ? 1.4 : foodDays < 15 ? 1 : 0.7;
+    // Food: a person eats about 0.65 food per day.
+    const foodDays = s.stock[Res.Food] / Math.max(1, s.pop * 0.65);
+    const hungry = foodDays < 3 ? 1.5 : foodDays < 8 ? 1 : foodDays < 16 ? 0.7 : 0.4;
     take(Job.Farmer, complete(BType.Farm) * 3);
     if (s.coastal || s.fish > 0) take(Job.Fisher, Math.max(1, adults * 0.12 * hungry) + complete(BType.Harbor) * 3);
     const game = animals.pop.reduce((a, b) => a + b, 0) > 0 ? 1 : 0;
     take(Job.Hunter, adults * 0.1 * hungry * game);
     // Materials.
-    const woodNeed = s.stock[Res.Wood] < 25 + s.pop * 0.6 ? 1 : 0.3;
+    const building = unfinished > 0 || s.housing < s.pop + 2;
+    const woodNeed = s.stock[Res.Wood] < 25 + s.pop * 0.6 ? (building ? 2 : 1) : 0.3;
     take(Job.Woodcutter, Math.max(1, adults * 0.12 * woodNeed));
     if (complete(BType.Quarry)) take(Job.Quarrier, complete(BType.Quarry) * (s.stock[Res.Stone] < 40 + s.pop ? 3 : 1));
     if (complete(BType.Mine)) take(Job.Miner, complete(BType.Mine) * (s.stock[Res.Metal] < 20 + s.pop * 0.3 ? 3 : 1));
     take(Job.Scholar, complete(BType.Library) * 3 + complete(BType.Observatory) * 2);
     take(Job.Priest, complete(BType.Temple) * 2 + complete(BType.Healer));
     take(Job.Soldier, complete(BType.Barracks) * 4 + complete(BType.Tower) + (t.stats.warDays > 0 ? adults * 0.1 : 0));
-    // The rest gather.
+    // The rest gather — or, with full granaries, cut timber for the future.
+    if (foodDays > 10 && s.stock[Res.Wood] < 60 + s.pop) take(Job.Woodcutter, remaining * 0.5);
     tgt[Job.Gatherer] += remaining;
     void plants; void planet;
     return tgt;
@@ -1308,10 +1419,10 @@ export class Civ {
       return knows(d.tech) && s.tier >= d.tier && count(type) < d.max;
     };
     let pick: BType | -1 = -1;
-    const foodDays = s.stock[Res.Food] / Math.max(1, s.pop * 3.2);
+    const foodDays = s.stock[Res.Food] / Math.max(1, s.pop * 0.65);
     if (count(BType.Storehouse) === 0) pick = BType.Storehouse;
     else if (s.housing < s.pop + 4 && can(BType.House)) pick = BType.House;
-    else if (can(BType.Farm) && (foodDays < 20 || count(BType.Farm) < Math.ceil(s.pop / 9))) pick = BType.Farm;
+    else if (can(BType.Farm) && (foodDays < 5 || count(BType.Farm) < Math.ceil(s.pop / 9))) pick = BType.Farm;
     else if (!s.water && can(BType.Well) && planet.terrain.river[s.cell] < 1) pick = BType.Well;
     else if (can(BType.Temple) && count(BType.Temple) === 0) pick = BType.Temple;
     else if (can(BType.Quarry) && count(BType.Quarry) === 0) pick = BType.Quarry;
@@ -1340,6 +1451,18 @@ export class Civ {
     const g = planet.region;
     // Search a ring of candidate cells around the settlement.
     let best = -1, bestScore = 0;
+    const bc = this.beacon;
+    if (bc && bc.until > tick) {
+      // A divine sign: settle beneath the beacon if the land allows it.
+      const d = Math.acos(Math.min(1, bc.x * s.x + bc.y * s.y + bc.z * s.z)) * PLANET_RADIUS;
+      if (d < 900) {
+        for (let k = 0; k < 9; k++) {
+          const c = k === 0 ? bc.cell : g.neighbors[bc.cell * 8 + k - 1];
+          const sc = this.siteScore(c, planet, animals, s.tribe);
+          if (sc > 0 && sc * 4 > bestScore && this.paths.find(s.cell, c, 'land', 6000)) { bestScore = sc * 4; best = c; }
+        }
+      }
+    }
     for (let k = 0; k < 90; k++) {
       const a = rng.range(0, Math.PI * 2);
       const r = rng.range(110, 260);
@@ -1367,7 +1490,7 @@ export class Civ {
     if (group.length < 4) return;
     // Children follow their mothers.
     for (const i of members) if (P.job[i] === Job.Child && group.some((g2) => P.uid[g2] === P.mother[i])) group.push(i);
-    const path = this.paths.find(s.cell, best, 'land', 4000)!;
+    const path = this.paths.find(s.cell, best, 'land', 6000)!;
     const pathId = this.registerPath(path);
     for (const i of group) {
       P.intent[i] = Intent.Settle;
@@ -1382,12 +1505,43 @@ export class Civ {
     events.emit(tick, 'migration', s, 0.3, { settlement: s.name, tribe: this.tribes[s.tribe].name, count: group.length, to: geo.describe(best) });
   }
 
-  // Path registry (paths shared by groups of travellers).
-  pathTable: Int32Array[] = [];
+  // Path registry (paths shared by groups of travellers). Ids are stable;
+  // old paths are evicted unless pinned by a trade route.
+  pathTable: Record<number, Int32Array> = {};
+  nextPathId = 0;
+  /** Trade route id → pinned path id. */
+  routePaths = new Map<number, number>();
   registerPath(path: Int32Array): number {
-    this.pathTable.push(path);
-    if (this.pathTable.length > 2000) this.pathTable.splice(0, 500);
-    return this.pathTable.length - 1;
+    const id = this.nextPathId++;
+    this.pathTable[id] = path;
+    if (id % 256 === 255) {
+      const pinned = new Set(this.routePaths.values());
+      for (const k of Object.keys(this.pathTable)) {
+        const n = Number(k);
+        if (n < id - 3000 && !pinned.has(n)) delete this.pathTable[n];
+      }
+    }
+    return id;
+  }
+
+  /** Lay (or upgrade) a road along a land path. */
+  layRoad(path: Int32Array, planet: Planet): void {
+    const g = planet.region;
+    for (let k = 0; k + 1 < path.length; k++) {
+      const a = path[k], b = path[k + 1];
+      this.paths.roads[a] = Math.min(3, this.paths.roads[a] + 1);
+      if (k % 2 === 0) {
+        const o = this.owner[a];
+        const level = o >= 0 ? Math.min(3, this.tribes[this.settlements[o].tribe].age >> 1) : 0;
+        this.roads.push({ ax: g.centers[a * 3], ay: g.centers[a * 3 + 1], az: g.centers[a * 3 + 2], bx: g.centers[b * 3], by: g.centers[b * 3 + 1], bz: g.centers[b * 3 + 2], level, settle: o });
+      }
+    }
+    this.paths.clearCache();
+    this.version++;
+  }
+
+  cellOfDir(x: number, y: number, z: number): number {
+    return this.region.cellOf(x, y, z);
   }
 
   /** Advance a traveller to the next waypoint of its path. */
@@ -1457,7 +1611,7 @@ export class Civ {
     for (const t of this.tribes) {
       if (!t.alive) continue;
       const pt = perTribe[t.id];
-      const base = pt.adults * 0.012 * (0.6 + t.traits.curiosity);
+      const base = pt.adults * 0.012 * (0.6 + t.traits.curiosity) * (t.inspired > tick ? 2 : 1);
       for (let f = 0; f < FIELD_COUNT; f++) {
         t.research[f] += base * (f === TechField.Seafaring ? (pt.coastal ? 1 : 0.1) : 1) + t.needs[f];
         t.needs[f] *= 0.97;
@@ -1502,4 +1656,268 @@ export class Civ {
     for (let i = 0; i < P.count; i++) if (P.alive[i]) n++;
     return n;
   }
+  // ------------------------------------------------------------------ disease
+  /** One tick of an infection: sickness, contagion, recovery. Returns new health. */
+  private diseaseStep(i: number, tick: number, rng: Rng, hp: number): number {
+    const P = this.people;
+    const t = this.tribes[P.tribe[i]];
+    const k = (name: string) => (t && t.known[TECH_INDEX.get(name)!] ? 1 : 0);
+    const care = 1 - 0.18 * k('herbalism') - 0.2 * k('sanitation') - 0.15 * k('anatomy') - 0.25 * k('vaccination');
+    const s = P.settle[i] >= 0 ? this.settlements[P.settle[i]] : null;
+    const blessed = s && s.blessed > tick ? 0.3 : 1;
+    P.sick[i] += 1 / TICKS_PER_DAY;
+    hp -= 0.0019 * care * blessed * (P.age[i] > 55 || P.age[i] < 5 ? 1.6 : 1);
+    P.energy[i] = Math.max(0, P.energy[i] - 0.002);
+    // Contagion: people sharing this ground may catch it.
+    if ((i + tick) % 6 === 0) {
+      const b = this.hash.bucketOf[i];
+      if (b >= 0) {
+        const hs = this.hash;
+        const quarantine = 1 - 0.6 * k('quarantine');
+        for (let q = hs.cellStart[b], qe = hs.cellStart[b + 1]; q < qe; q++) {
+          const j = hs.items[q];
+          if (j === i || !P.alive[j] || P.sick[j] > 0 || P.immune[j]) continue;
+          const dx = P.x[j] - P.x[i], dy = P.y[j] - P.y[i], dz = P.z[j] - P.z[i];
+          if (dx * dx + dy * dy + dz * dz > (6 * INV_R) ** 2) continue;
+          if (rng.chance(0.07 * quarantine * (1 - 0.3 * k('sanitation')))) P.sick[j] = 0.001;
+        }
+      }
+    }
+    // Recovery after a few days.
+    if (P.sick[i] > 3.2 && rng.chance(0.02)) {
+      P.sick[i] = 0;
+      P.immune[i] = 1;
+    }
+    return hp;
+  }
+
+  /** Infect people within `radius` of a point (plague power, trade routes). */
+  infectArea(x: number, y: number, z: number, radius: number, frac: number, rng: Rng): number {
+    const P = this.people;
+    const r2 = (radius * INV_R) ** 2;
+    let n = 0;
+    for (let i = 0; i < P.count; i++) {
+      if (!P.alive[i] || P.sick[i] > 0 || P.immune[i]) continue;
+      const dx = P.x[i] - x, dy = P.y[i] - y, dz = P.z[i] - z;
+      if (dx * dx + dy * dy + dz * dz > r2) continue;
+      if (rng.chance(frac)) { P.sick[i] = 0.001; n++; }
+    }
+    return n;
+  }
+
+  /** Cure everyone in a settlement (Miracle Cure). */
+  cureSettlement(s: Settlement): number {
+    const P = this.people;
+    let n = 0;
+    for (let i = 0; i < P.count; i++) {
+      if (!P.alive[i] || P.settle[i] !== s.id || P.sick[i] <= 0) continue;
+      P.sick[i] = 0; P.immune[i] = 1; P.health[i] = 1; n++;
+    }
+    s.disease = 0;
+    return n;
+  }
+
+  // ------------------------------------------------------------------ divine interface
+  /** Nearest living settlement to a direction within `maxDist` world units. */
+  nearestSettlement(x: number, y: number, z: number, maxDist: number, tribe = -1): Settlement | null {
+    let best: Settlement | null = null, bestD = maxDist;
+    for (const s of this.settlements) {
+      if (!s.alive || (tribe >= 0 && s.tribe !== tribe)) continue;
+      const d = Math.acos(Math.min(1, s.x * x + s.y * y + s.z * z)) * PLANET_RADIUS;
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    return best;
+  }
+
+  /**
+   * Mortals near a divine act react: love and fear rise with proximity and
+   * piety; the act enters their memory (and their tribe's scripture).
+   */
+  witness(x: number, y: number, z: number, radius: number, love: number, fear: number, kind: string, tick: number, place: string, deaths: number): number {
+    const P = this.people;
+    const cosR = Math.cos(radius * INV_R);
+    let n = 0;
+    const settlementsHit = new Set<number>();
+    const mem = this.godMemories.length;
+    for (let i = 0; i < P.count; i++) {
+      if (!P.alive[i]) continue;
+      const dot = P.x[i] * x + P.y[i] * y + P.z[i] * z;
+      if (dot < cosR) continue;
+      const t = 1 - Math.acos(Math.min(1, dot)) / (radius * INV_R);
+      const k = (0.4 + t * 0.6) * (0.6 + P.pious[i] * 0.8);
+      P.love[i] = Math.max(0, Math.min(1, P.love[i] + love * k));
+      P.fear[i] = Math.max(0, Math.min(1, P.fear[i] + fear * k));
+      if (fear > love && fear > 0.05) P.worstMem[i] = mem;
+      if (love >= fear && love > 0.05) P.bestMem[i] = mem;
+      if (P.settle[i] >= 0) settlementsHit.add(P.settle[i]);
+      n++;
+    }
+    if (n > 0) {
+      const settlementName = settlementsHit.size ? this.settlements[[...settlementsHit][0]].name : '';
+      const m: GodMemory = { kind, tick, place, deaths, settlement: settlementName };
+      this.godMemories.push(m);
+      const tribesHit = new Set<number>();
+      for (const sid of settlementsHit) tribesHit.add(this.settlements[sid].tribe);
+      for (const tid of tribesHit) {
+        const t = this.tribes[tid];
+        t.religion.love = Math.max(0, Math.min(1, t.religion.love + love * 0.3));
+        t.religion.fear = Math.max(0, Math.min(1, t.religion.fear + fear * 0.3));
+        const weight = (love + fear) * (1 + deaths * 0.1);
+        if (fear > love && (!t.worst || weight > (t.worst.deaths + 1) * 0.1)) t.worst = m;
+        if (love >= fear && (!t.best || love > 0.2)) t.best = m;
+      }
+    }
+    return n;
+  }
+
+  /** Ruin one building (disaster), returning its stored goods to the ledger as destroyed. */
+  ruinBuilding(b: Building): void {
+    if (b.ruin) return;
+    b.ruin = true;
+    b.hp = 0;
+    for (let r = 0; r < RES_COUNT; r++) { this.destroy(r, b.delivered[r]); b.delivered[r] = 0; }
+    if (b.stock > 0) { this.destroy(b.type === BType.Quarry ? Res.Stone : b.type === BType.Mine ? Res.Metal : Res.Food, b.stock); b.stock = 0; }
+    if (b.type === BType.Storehouse || b.type === BType.Market || b.type === BType.Harbor || b.type === BType.Hall) {
+      // Part of the settlement's stores burn or wash away with it.
+      const s = this.settlements[b.settle];
+      if (s) for (let r = 0; r < RES_COUNT; r++) { const loss = s.stock[r] * 0.25; s.stock[r] -= loss; this.destroy(r, loss); }
+    }
+    this.version++;
+  }
+
+  /**
+   * Area damage from quakes, lava, meteors: buildings lose integrity and may
+   * collapse; people may be killed. Returns the number of deaths.
+   */
+  damageArea(x: number, y: number, z: number, radius: number, intensity: number, cause: string, tick: number, rng: Rng, events: EventLog, lethality = intensity * 0.45): { deaths: number; ruined: number } {
+    const R = radius * INV_R;
+    let ruined = 0, deaths = 0;
+    for (const b of this.buildings) {
+      if (b.ruin) continue;
+      const d = Math.acos(Math.min(1, b.x * x + b.y * y + b.z * z));
+      if (d > R) continue;
+      const t = 1 - d / R;
+      const sturdy = b.type === BType.Wall || b.type === BType.Tower || b.type === BType.Monument ? 0.5 : 1;
+      b.hp -= intensity * t * t * sturdy * (0.7 + rng.float() * 0.6);
+      if (b.hp <= 0) { this.ruinBuilding(b); ruined++; }
+    }
+    const P = this.people;
+    for (let i = 0; i < P.count; i++) {
+      if (!P.alive[i]) continue;
+      const d = Math.acos(Math.min(1, P.x[i] * x + P.y[i] * y + P.z[i] * z));
+      if (d > R) continue;
+      const t = 1 - d / R;
+      if (rng.chance(Math.min(1, lethality * t))) { this.personDies(i, tick, cause, events); deaths++; }
+    }
+    return { deaths, ruined };
+  }
+
+  /** Flood water over a region cell: low buildings wash away, fields are salted, people drown. */
+  floodCell(c: number, depth: number, planet: Planet, tick: number, rng: Rng, events: EventLog, cause: string): number {
+    const g = planet.region;
+    let deaths = 0;
+    const cx = g.centers[c * 3], cy = g.centers[c * 3 + 1], cz = g.centers[c * 3 + 2];
+    const half = g.spacing * 0.75;
+    for (const b of this.buildings) {
+      if (b.ruin) continue;
+      if (Math.acos(Math.min(1, b.x * cx + b.y * cy + b.z * cz)) > half) continue;
+      if (b.type === BType.Farm) { const loss = Math.min(b.growth, 1) * 0.5; b.growth = 0; void loss; }
+      b.hp -= depth * 0.45;
+      if (b.hp <= 0) this.ruinBuilding(b);
+    }
+    const P = this.people;
+    for (let i = 0; i < P.count; i++) {
+      if (!P.alive[i] || this.hash.bucketOf[i] !== c) continue;
+      if (rng.chance(Math.min(0.9, depth * 0.18))) { this.personDies(i, tick, cause, events); deaths++; }
+    }
+    return deaths;
+  }
+
+  /** Bring back the recently dead near a point. Returns revived slots. */
+  resurrect(x: number, y: number, z: number, radius: number, sinceTick: number, tick: number, rng: Rng): number[] {
+    const P = this.people;
+    const cosR = Math.cos(radius * INV_R);
+    const out: number[] = [];
+    const keep: Grave[] = [];
+    for (const g of this.graves) {
+      const dot = g.x * x + g.y * y + g.z * z;
+      if (g.tick < sinceTick || dot < cosR || g.cause === 'old age' || out.length >= 60) { keep.push(g); continue; }
+      let settle = g.settle;
+      if (settle < 0 || !this.settlements[settle]?.alive) {
+        const near = this.nearestSettlement(g.x, g.y, g.z, 400, g.tribe);
+        settle = near ? near.id : -1;
+      }
+      let tribe = g.tribe;
+      if (tribe < 0 || !this.tribes[tribe]?.alive) {
+        const near = this.nearestSettlement(g.x, g.y, g.z, 400);
+        if (!near) { keep.push(g); continue; }
+        settle = near.id;
+        tribe = near.tribe;
+      }
+      const i = P.spawn(rng, tick, g.x, g.y, g.z, tribe, settle, g.age, null);
+      if (i < 0) { keep.push(g); continue; }
+      P.assignUid(i, g.uid);
+      P.sex[i] = g.sex;
+      [P.skFarm[i], P.skBuild[i], P.skFight[i], P.skLore[i]] = g.skills;
+      [P.brave[i], P.pious[i], P.greedy[i], P.social[i], P.curious[i]] = g.traits;
+      P.love[i] = 1;
+      P.fear[i] = Math.min(1, g.fear + 0.2);
+      P.generation[i] = g.generation;
+      P.mother[i] = g.mother;
+      P.father[i] = g.father;
+      P.returned[i] = tick + TICKS_PER_DAY * 2;
+      P.immune[i] = 1;
+      P.hunger[i] = 0.2;
+      out.push(i);
+      const t = this.tribes[tribe];
+      if (t) { t.stats.deaths = Math.max(0, t.stats.deaths - 1); }
+    }
+    this.graves = keep;
+    return out;
+  }
+
+  /** A mortal receives a vision and becomes a prophet. */
+  raiseProphet(i: number, tick: number, events: EventLog, kind: 'vision' | 'saint' | 'doom'): void {
+    const P = this.people;
+    const t = this.tribes[P.tribe[i]];
+    P.role[i] = 3;
+    const s = P.settle[i] >= 0 ? this.settlements[P.settle[i]] : null;
+    for (let j = 0; j < P.count; j++) {
+      if (!P.alive[j] || P.tribe[j] !== P.tribe[i]) continue;
+      if (kind === 'saint') P.love[j] = Math.min(1, P.love[j] + 0.1);
+      if (kind === 'doom') P.fear[j] = Math.min(1, P.fear[j] + 0.12);
+    }
+    if (kind === 'doom') t.religion.fear = Math.min(1, t.religion.fear + 0.2);
+    else t.religion.love = Math.min(1, t.religion.love + (kind === 'saint' ? 0.2 : 0.08));
+    events.emit(tick, 'prophet', { x: P.x[i], y: P.y[i], z: P.z[i] }, 0.7, { name: this.personName(i), tribe: t.name, settlement: s ? s.name : '', kind });
+  }
+
+  /** Harmony: end wars among these tribes. Returns wars ended. */
+  truce(tribes: number[], tick: number, events: EventLog): number {
+    return this.society.truce(this, tribes, tick, events);
+  }
+
+  /** The land changed shape: drowned buildings, swallowed settlements, stale paths. */
+  afterTerraform(planet: Planet, tick: number, rng: Rng, events: EventLog): void {
+    this.paths.clearCache();
+    for (const b of this.buildings) {
+      if (b.ruin) continue;
+      if (planet.heightAt(b.x, b.y, b.z) < -0.4) this.ruinBuilding(b);
+    }
+    const P = this.people;
+    for (let i = 0; i < P.count; i++) {
+      if (!P.alive[i] || P.vessel[i]) continue;
+      const h = planet.heightAt(P.x[i], P.y[i], P.z[i]);
+      if (h < -1.5 && rng.chance(0.6)) this.personDies(i, tick, 'drowning', events);
+    }
+    for (const s of this.settlements) {
+      if (!s.alive) continue;
+      if (planet.heightAt(s.x, s.y, s.z) < -0.3) {
+        events.emit(tick, 'flood', s, 0.8, { settlement: s.name, tribe: this.tribes[s.tribe].name, swallowed: 1 });
+        this.abandon(s, tick, events);
+      }
+    }
+    this.version++;
+  }
+
 }

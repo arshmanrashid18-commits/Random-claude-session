@@ -16,6 +16,16 @@ import { Animals } from './ecology/animals';
 import { EventLog } from './events';
 import { Civ } from './civ/civ';
 import { TICKS_PER_YEAR } from './constants';
+import { Terraformer, type BrushTool } from './planet/terraform';
+import { Divine, type CastResult } from './powers/divine';
+import type { PowerId } from './powers/defs';
+
+/** Player commands (from the UI, applied between ticks). */
+export type Command =
+  | { kind: 'power'; power: PowerId; x: number; y: number; z: number }
+  | { kind: 'brush'; tool: BrushTool; x: number; y: number; z: number; radius: number; strength: number; paint?: number; level?: number }
+  | { kind: 'brushEnd' }
+  | { kind: 'boundless'; on: boolean };
 
 export interface WorldOptions {
   seed: number;
@@ -36,6 +46,8 @@ export class World {
   animals: Animals;
   civ: Civ;
   events = new EventLog();
+  terraform: Terraformer;
+  divine: Divine;
 
   constructor(opts: WorldOptions, progress: ProgressFn = () => {}) {
     this.seed = opts.seed >>> 0;
@@ -60,7 +72,31 @@ export class World {
     progress('Seeding life', 0.85);
     this.civ = new Civ(p);
     this.civ.seedTribes(this.rng, 0, p, this.animals, this.geo, this.events);
+    this.divine = new Divine(p.region.count);
+    this.terraform = new Terraformer(p);
+    this.terraform.onCommit = () => {
+      this.animals.computeWater(p.region, p.terrain);
+      this.civ.afterTerraform(p, this.tick, this.rng, this.events);
+    };
     progress('Seeding life', 1);
+  }
+
+  /** Apply a player command immediately (between ticks). */
+  command(cmd: Command): CastResult {
+    switch (cmd.kind) {
+      case 'power':
+        return this.divine.cast(this, cmd);
+      case 'brush': {
+        const changed = this.terraform.brush(cmd);
+        return { ok: changed, message: changed ? '' : 'Nothing to change here' };
+      }
+      case 'brushEnd':
+        if (this.terraform.pending) this.terraform.commit();
+        return { ok: true, message: '' };
+      case 'boundless':
+        this.divine.boundless = cmd.on;
+        return { ok: true, message: '' };
+    }
   }
 
   /** Advance the simulation by one fixed tick. */
@@ -81,6 +117,7 @@ export class World {
     this.plants.tick(cl, p.terrain);
     this.animals.tick(t, this.rng, cl, this.plants, p.terrain, this.events, this.geo, this.fires);
     this.civ.tick(t, this.rng, p, this.plants, this.animals, this.fires, this.events, this.geo);
+    this.divine.tick(this);
     if (t % TICKS_PER_YEAR === TICKS_PER_YEAR - 1) {
       p.refreshFlow();
       this.animals.computeWater(p.region, p.terrain);
@@ -114,6 +151,8 @@ export class World {
     mix(P.x); mix(P.y); mix(P.z); mix(P.alive); mix(P.hunger); mix(P.job);
     mix(this.civ.settlements.flatMap((s) => s.stock));
     mix(this.civ.buildings.map((b) => b.progress));
+    mix(this.divine.lava); mix(this.divine.flood);
+    mix([this.civ.devotion, this.divine.effects.length, this.civ.tribes.length, this.civ.society.wars.length]);
     return h >>> 0;
   }
 }

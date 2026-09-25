@@ -65,6 +65,14 @@ export class People {
   generation: Uint16Array;
   kills: Uint16Array;
   born: Int32Array;
+  /** Days of active infection (0 = healthy). */
+  sick: Float32Array;
+  /** 1 after surviving the plague (or a divine cure). */
+  immune: Uint8Array;
+  /** Tick until which this person is recovering from resurrection (glow). */
+  returned: Int32Array;
+  /** 1 while travelling by ship. */
+  vessel: Uint8Array;
   /** Slot of each uid (for fast lookup of family members). */
   slotOfUid = new Map<number, number>();
 
@@ -109,6 +117,10 @@ export class People {
     this.generation = new Uint16Array(cap);
     this.kills = new Uint16Array(cap);
     this.born = new Int32Array(cap);
+    this.sick = new Float32Array(cap);
+    this.immune = new Uint8Array(cap);
+    this.returned = new Int32Array(cap);
+    this.vessel = new Uint8Array(cap);
   }
 
   spawn(rng: Rng, tick: number, x: number, y: number, z: number, tribe: number, settle: number, age: number, parents: [number, number] | null): number {
@@ -165,7 +177,18 @@ export class People {
     this.generation[i] = pa >= 0 ? this.generation[pa] + 1 : 0;
     this.kills[i] = 0;
     this.born[i] = tick;
+    this.sick[i] = 0;
+    this.immune[i] = 0;
+    this.returned[i] = 0;
+    this.vessel[i] = 0;
     return i;
+  }
+
+  /** Give slot i a specific uid (resurrection keeps a person's identity). */
+  assignUid(i: number, uid: number): void {
+    this.slotOfUid.delete(this.uid[i]);
+    this.uid[i] = uid;
+    this.slotOfUid.set(uid, i);
   }
 
   kill(i: number): void {

@@ -13,7 +13,7 @@ import { PostChain } from './post';
 import { PlanetCamera } from './camera';
 import { generateCloudNoise } from './cloudNoise';
 import { QUALITY_PRESETS, type QualityId, type QualityPreset } from './quality';
-import { moonDirection, MOON_DISTANCE, sunDirection, TICKS_PER_DAY, TIDE_AMPLITUDE } from '../sim/constants';
+import { moonDirection, MOON_DISTANCE, PLANET_RADIUS, sunDirection, TICKS_PER_DAY, TIDE_AMPLITUDE } from '../sim/constants';
 import type { StaticWorldData } from '../worker/protocol';
 import { WaterBodies } from './water';
 import { Vegetation } from './vegetation';
@@ -22,6 +22,9 @@ import { Grass } from './grass';
 import { Creatures } from './creatures';
 import { PeopleRenderer } from './people';
 import { BuildingsRenderer } from './buildings';
+import { Vfx } from './vfx';
+import { Precipitation } from './precip';
+import type { EffectData, RiverData, LakeData, TribeData } from '../worker/protocol';
 import type { StormData } from '../worker/protocol';
 
 export interface RenderStats {
@@ -46,11 +49,19 @@ export class GameRenderer {
   creatures!: Creatures;
   people!: PeopleRenderer;
   buildings!: BuildingsRenderer;
+  vfx = new Vfx();
+  precip = new Precipitation();
+  /** Divine effects from the latest frame (for VFX). */
+  effects: EffectData[] = [];
+  /** Current simulation speed multiplier (VFX timing). */
+  simSpeed = 1;
+  private world: StaticWorldData | null = null;
   private lastRenderTick = 0;
   atmosphere!: AtmospherePass;
   sky!: SkyLayer;
   post: PostChain;
   quality: QualityPreset = QUALITY_PRESETS.high;
+  qualityId: QualityId = 'high';
   private hdrRT: THREE.WebGLRenderTarget;
   private compRT: THREE.WebGLRenderTarget;
   private width = 1;
@@ -110,7 +121,12 @@ export class GameRenderer {
       uShadowMatrix: { value: new THREE.Matrix4() },
       uShadowOn: { value: 0 },
       uShadowTexel: { value: 1 / 2048 },
+      uEclipse: { value: 0 },
+      uTsunami: { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) },
+      uTsunamiAmp: { value: [0, 0, 0, 0] },
+      uTribeCol: { value: Array.from({ length: 32 }, () => new THREE.Color(0.8, 0.8, 0.8)) },
     };
+    this.vfx.tsunamis = this.shared.uTsunami.value as THREE.Vector4[];
     this.shadows = new ShadowSystem(2048);
     this.shared.uShadowMap.value = this.shadows.rt.depthTexture;
     this.hdrRT = this.makeHdrTarget(1, 1, true);
@@ -140,6 +156,7 @@ export class GameRenderer {
 
   /** Build all GPU resources for a freshly generated world. */
   init(world: StaticWorldData): void {
+    this.world = world;
     this.data = new PlanetData(world.heights, world.heightN, world.regionN, 9);
     const s = this.shared;
     s.uHeightTex.value = this.data.heightTex;
@@ -177,6 +194,8 @@ export class GameRenderer {
     this.buildings = new BuildingsRenderer(s);
     this.scene.add(this.buildings.group);
     this.buildings.onNewMesh = (m) => this.shadows.register(m, this.buildings.depthMaterial);
+    this.scene.add(this.vfx.group);
+    this.scene.add(this.precip.mesh);
     this.shadows.register(this.terrain.terrainMesh, this.terrain.depthMat);
     this.renderer.setRenderTarget(null);
     this.data.computeNormals(this.renderer);
@@ -193,6 +212,7 @@ export class GameRenderer {
   }
 
   setQuality(id: QualityId): void {
+    this.qualityId = id;
     this.quality = QUALITY_PRESETS[id];
     if (this.ready) this.applyQuality(this.quality);
   }
@@ -252,7 +272,17 @@ export class GameRenderer {
     const sun = sunDirection(tick);
     (this.shared.uSunDir.value as THREE.Vector3).set(sun[0], sun[1], sun[2]);
     const moon = moonDirection(tick);
-    (this.shared.uMoonDir.value as THREE.Vector3).set(moon[0], moon[1], moon[2]);
+    const md = this.shared.uMoonDir.value as THREE.Vector3;
+    md.set(moon[0], moon[1], moon[2]);
+    // Eclipse: the moon slides across the sun; daylight fails.
+    const e = this.vfx.eclipse;
+    this.shared.uEclipse.value = e;
+    if (e > 0.001) {
+      const sd = new THREE.Vector3(sun[0], sun[1], sun[2]);
+      const off = new THREE.Vector3(0, 1, 0).cross(sd).normalize().multiplyScalar((1 - e) * 0.03);
+      md.lerp(sd.clone().add(off).normalize(), Math.min(1, e * 1.5)).normalize();
+    }
+    this.shared.uSunIntensity.value = 20 * (1 - 0.93 * e);
   }
 
   render(dt: number): void {
@@ -271,6 +301,19 @@ export class GameRenderer {
     this.lastRenderTick = this.renderTick;
     this.creatures.update(cam, this.renderTick, dTick, this.data, dt);
     this.people.update(cam, this.renderTick, dTick, this.data, dt, this.shared.uSunDir.value as THREE.Vector3);
+    this.vfx.update({ camera: cam, data: this.data, renderTick: this.renderTick, dt, effects: this.effects, speed: this.simSpeed });
+    let extraRain = 0;
+    for (const e of this.effects) {
+      if (e.power !== 'rain' || this.renderTick > e.end) continue;
+      const d = cam.position.clone().normalize().angleTo(new THREE.Vector3(e.x, e.y, e.z)) * PLANET_RADIUS;
+      if (d < e.radius) extraRain = Math.max(extraRain, 0.8 * (1 - d / e.radius));
+    }
+    this.precip.update(cam, this.data, dt, this.shared.uSunDir.value as THREE.Vector3, this.shared.uSunIntensity.value as number, extraRain);
+    (this.shared.uTsunamiAmp.value as number[]).splice(0, 4, ...this.vfx.tsunamiAmp);
+    const fin = this.post.final.uniforms;
+    fin.uCA.value = Math.min(1, this.vfx.aberration);
+    fin.uFade.value = Math.min(0.85, this.vfx.flash * 0.8);
+    (fin.uFadeColor.value as THREE.Vector3).set(this.vfx.flashColor.r * 1.4, this.vfx.flashColor.g * 1.4, this.vfx.flashColor.b * 1.4);
 
     const r = this.renderer;
     r.info.reset();
@@ -312,6 +355,27 @@ export class GameRenderer {
       P[i].set(Math.min(1, st.intensity * (st.type === 1 ? 0.9 : 0.75)), st.y >= 0 ? 1 : -1, st.type, 0);
     });
     this.shared.uStormCount.value = list.length;
+  }
+
+  /** Terrain changed in the simulation: re-upload faces, normals, vegetation. */
+  updateHeights(faces: number[], data: Float32Array[]): void {
+    if (!this.ready) return;
+    this.data.updateFaces(faces, data);
+    this.data.computeNormals(this.renderer, faces);
+    this.vegetation.invalidate();
+  }
+
+  /** Rivers and lakes changed (terraforming). */
+  updateWater(rivers: RiverData, lakes: LakeData): void {
+    if (!this.ready || !this.world) return;
+    this.world = { ...this.world, rivers, lakes };
+    this.water.rebuild(this.world, this.data);
+  }
+
+  setTribes(tribes: TribeData[]): void {
+    const cols = this.shared.uTribeCol.value as THREE.Color[];
+    tribes.forEach((t, i) => { if (i < 32) cols[i].setHex(t.color); });
+    this.people.tribes = tribes;
   }
 
   /** Capture the current frame as a PNG data URL (photo mode export). */

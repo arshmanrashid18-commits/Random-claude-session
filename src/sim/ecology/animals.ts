@@ -101,7 +101,10 @@ export class Animals {
   deaths: Uint32Array = new Uint32Array(64 * 8);
   private scratch = [0, 0, 0];
 
+  readonly grid: import('../planet/cubesphere').CellGrid;
+
   constructor(regionCount: number, grid: import('../planet/cubesphere').CellGrid, cap = ANIMAL_CAPACITY) {
+    this.grid = grid;
     this.cap = cap;
     this.alive = new Uint8Array(cap);
     this.species = new Uint8Array(cap);
@@ -290,6 +293,59 @@ export class Animals {
     this.pop[sp]++;
     this.everExisted[sp] = 1;
     return i;
+  }
+
+  /** Divine beacon: herbivores within reach travel toward it. */
+  attractor: { x: number; y: number; z: number; cosR: number; until: number } | null = null;
+
+  /** Kill animals within `radius` world units with probability chance·falloff (disasters). */
+  killNear(x: number, y: number, z: number, radius: number, chance: number, rng: Rng, carrion = true): number {
+    const R = radius / PLANET_RADIUS;
+    const cosR = Math.cos(R);
+    let n = 0;
+    for (let i = 0; i < this.count; i++) {
+      if (!this.alive[i]) continue;
+      const dot = this.x[i] * x + this.y[i] * y + this.z[i] * z;
+      if (dot < cosR) continue;
+      const t = 1 - Math.acos(Math.min(1, dot)) / R;
+      if (!rng.chance(chance * (0.3 + 0.7 * t))) continue;
+      const sp = this.species[i];
+      this.deaths[sp * 8 + 7]++;
+      if (carrion) {
+        const c = this.grid.cellOf(this.x[i], this.y[i], this.z[i]);
+        this.carrion[c] += this.defs[sp].meat * this.gSize[i];
+      }
+      this.kill(i);
+      n++;
+    }
+    return n;
+  }
+
+  /** Murrain: infect animals near a point. */
+  infectNear(x: number, y: number, z: number, radius: number, frac: number, rng: Rng): number {
+    const cosR = Math.cos(radius / PLANET_RADIUS);
+    let n = 0;
+    for (let i = 0; i < this.count; i++) {
+      if (!this.alive[i] || this.infected[i] !== 0) continue;
+      if (this.x[i] * x + this.y[i] * y + this.z[i] * z < cosR) continue;
+      if (rng.chance(frac)) { this.infected[i] = 1; this.infTimer[i] = 480; n++; }
+    }
+    return n;
+  }
+
+  /** Fertile Bloom: well-fed, healthy herds ready to breed. */
+  bless(x: number, y: number, z: number, radius: number): number {
+    const cosR = Math.cos(radius / PLANET_RADIUS);
+    let n = 0;
+    for (let i = 0; i < this.count; i++) {
+      if (!this.alive[i]) continue;
+      if (this.x[i] * x + this.y[i] * y + this.z[i] * z < cosR) continue;
+      this.hunger[i] = 0; this.thirst[i] = Math.min(this.thirst[i], 0.2); this.health[i] = 1;
+      this.cooldown[i] = 0;
+      if (this.infected[i] === 1) { this.infected[i] = 2; this.infTimer[i] = 960; }
+      n++;
+    }
+    return n;
   }
 
   kill(i: number): void {
@@ -637,6 +693,17 @@ export class Animals {
             }
           }
         }
+      }
+    }
+    // ----- a divine beacon calls the herds
+    const at = this.attractor;
+    if (at && at.until > tick && d.diet === 'herbivore') {
+      const dot = this.x[i] * at.x + this.y[i] * at.y + this.z[i] * at.z;
+      if (dot > at.cosR && dot < 0.99998) {
+        offsetDir(at.x, at.y, at.z, rng.range(-18, 18) * INV_R, rng.range(-18, 18) * INV_R, this.scratch);
+        this.tx[i] = this.scratch[0]; this.ty[i] = this.scratch[1]; this.tz[i] = this.scratch[2];
+        this.state[i] = AState.Migrate;
+        return;
       }
     }
     // ----- migration toward better habitat

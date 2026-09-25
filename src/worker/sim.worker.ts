@@ -6,7 +6,9 @@
 import { World } from '../sim/world';
 import { TICKS_PER_SECOND_1X } from '../sim/constants';
 import { buildPadMap, packRGBA } from '../sim/planet/regiontex';
-import type { CivData, EntitySnapshot, FrameData, MainToWorker, RegionTextures, SpeciesInfo, StaticWorldData, WorkerToMain } from './protocol';
+import type { CivData, EcologyData, EntitySnapshot, FrameData, LakeData, MainToWorker, RegionTextures, RiverData, SpeciesInfo, StaticWorldData, WorkerToMain } from './protocol';
+import { HISTORY_INTERVAL, HISTORY_LEN } from '../sim/ecology/animals';
+import { inspect } from './inspect';
 import { BUILDINGS } from '../sim/civ/defs';
 const BUILDING_COSTS = BUILDINGS.map((b) => b.cost);
 
@@ -31,6 +33,8 @@ const spareSnaps: EntitySnapshot[] = [];
 const sparePeople: EntitySnapshot[] = [];
 let lastPeopleTick = -1;
 let lastCivVersion = -1;
+let lastHeightSend = 0;
+let lastWaterVersion = -1;
 let lastCivProgress = -1;
 let lastCivTime = 0;
 let lastTexTime = 0;
@@ -66,9 +70,10 @@ function fillTextures(w: World, t: RegionTextures): void {
     const d = Math.acos(Math.min(1, st.x * g.centers[c * 3] + st.y * g.centers[c * 3 + 1] + st.z * g.centers[c * 3 + 2])) * 1000;
     return Math.max(0, 1 - d / (st.radius + 10)) * Math.min(1, 0.25 + st.pop / 120);
   };
-  packRGBA(pm, t.surface, (c) => w.fires.scar[c], (c) => cl.ash[c], () => 0, dev);
+  const lava = w.divine.lava, flood = w.divine.flood;
+  packRGBA(pm, t.surface, (c) => w.fires.scar[c], (c) => cl.ash[c], (c) => Math.min(1, lava[c] * 0.8), dev);
   packRGBA(pm, t.owner, (c) => (civ.owner[c] >= 0 && civ.settlements[civ.owner[c]].alive ? (civ.settlements[civ.owner[c]].tribe + 1) / 255 : 0), (c) => (civ.owner[c] >= 0 ? civ.settlements[civ.owner[c]].tier / 255 : 0), () => 0, () => 0);
-  packRGBA(pm, t.fx, (c) => cl.rain[c] * 2, (c) => fogAt(w, c), (c) => w.fires.intensity[c], () => 0);
+  packRGBA(pm, t.fx, (c) => cl.rain[c] * 2, (c) => fogAt(w, c), (c) => w.fires.intensity[c], (c) => Math.min(1, flood[c] / 4));
 }
 
 /** Fog: saturated, calm air near dawn-cool surfaces. */
@@ -80,11 +85,52 @@ function fogAt(w: World, c: number): number {
   return Math.max(0, (rh - 0.82) * 5) * Math.max(0, 1 - wind / 9);
 }
 
+function ecologyData(w: World): EcologyData {
+  const a = w.animals;
+  const n = a.defs.length;
+  const history: number[][] = [];
+  const count = a.historyCount;
+  const step = Math.max(1, Math.ceil(count / 400));
+  for (let sp = 0; sp < n; sp++) {
+    const h: number[] = [];
+    for (let k = count - 1 - Math.floor((count - 1) / step) * step; k < count; k += step) {
+      const idx = (a.historyHead - count + k + HISTORY_LEN * 2) % HISTORY_LEN;
+      h.push(a.history[idx * 64 + sp]);
+    }
+    history.push(h);
+  }
+  const deaths: number[][] = [];
+  for (let sp = 0; sp < n; sp++) deaths.push(Array.from(a.deaths.subarray(sp * 8, sp * 8 + 8)));
+  let cover = 0, land = 0;
+  const pd = w.plants.density, terr = w.planet.terrain;
+  for (let c = 0; c < terr.oceanFrac.length; c += 3) {
+    if (terr.oceanFrac[c] > 0.5) continue;
+    land++;
+    let s2 = 0;
+    for (let k = 0; k < 8; k++) s2 += pd[c * 8 + k];
+    cover += Math.min(1, s2);
+  }
+  return {
+    tick: w.tick,
+    species: speciesInfo(w),
+    alive: Array.from(a.pop.subarray(0, n)),
+    history,
+    interval: HISTORY_INTERVAL * step,
+    records: a.records.map((r) => ({ tick: r.tick, kind: r.kind, name: r.name, parent: r.parent, where: r.where })),
+    deaths,
+    biomes: w.planet.climate.biome.slice(),
+    regionN: w.planet.region.n,
+    shannon: a.shannon(),
+    plantCover: land ? cover / land : 0,
+    people: w.civ.totalPeople(),
+  };
+}
+
 function speciesInfo(w: World): SpeciesInfo[] {
   return w.animals.defs.map((d) => ({ id: d.id, name: d.name, plural: d.plural, body: d.body, diet: d.diet, size: d.size, colour: d.colour, colour2: d.colour2, parent: d.parent }));
 }
 
-function staticData(w: World): { data: StaticWorldData; transfer: Transferable[] } {
+function waterData(w: World): { rivers: RiverData; lakes: LakeData; transfer: Transferable[] } {
   const p = w.planet;
   const rivers = p.hydro.rivers;
   let total = 0;
@@ -108,6 +154,29 @@ function staticData(w: World): { data: StaticWorldData; transfer: Transferable[]
   const levels = new Float32Array(lakeCells);
   let k = 0;
   for (const l of p.hydro.lakes) for (const c of l.cells) { cells[k] = c; levels[k] = l.level; k++; }
+  return { rivers: { points, width, level, offsets }, lakes: { cells, levels }, transfer: [points.buffer, width.buffer, level.buffer, offsets.buffer, cells.buffer, levels.buffer] };
+}
+
+function sendHeights(w: World): void {
+  const tf = w.terraform;
+  const faces = [...tf.renderDirty].sort((a, b) => a - b);
+  tf.renderDirty.clear();
+  const fs = w.planet.hg.faceSize;
+  const data = faces.map((f) => w.planet.heights.slice(f * fs, (f + 1) * fs));
+  post({ type: 'heights', faces, data }, data.map((d) => d.buffer));
+  lastHeightSend = performance.now();
+  texDirty = true;
+}
+
+function sendWater(w: World): void {
+  lastWaterVersion = w.planet.heightVersion;
+  const wd = waterData(w);
+  post({ type: 'water', rivers: wd.rivers, lakes: wd.lakes }, wd.transfer);
+}
+
+function staticData(w: World): { data: StaticWorldData; transfer: Transferable[] } {
+  const p = w.planet;
+  const wd = waterData(w);
   const heights = p.heights.slice();
   const data: StaticWorldData = {
     seed: w.seed,
@@ -116,11 +185,11 @@ function staticData(w: World): { data: StaticWorldData; transfer: Transferable[]
     regionN: p.region.n,
     hydroN: p.hydroGrid.n,
     heights,
-    rivers: { points, width, level, offsets },
-    lakes: { cells, levels },
+    rivers: wd.rivers,
+    lakes: wd.lakes,
     species: speciesInfo(w),
   };
-  return { data, transfer: [heights.buffer, points.buffer, width.buffer, level.buffer, offsets.buffer, cells.buffer, levels.buffer] };
+  return { data, transfer: [heights.buffer, ...wd.transfer] };
 }
 
 function fillAnimals(w: World, s: EntitySnapshot): void {
@@ -247,8 +316,13 @@ function sendFrame(now: number): void {
     post({ type: 'civ', civ }, [civ.roads.buffer]);
   }
   const strikes = w.weather.strikeLog.splice(0);
+  const dv = w.divine;
   const frame: FrameData = {
     header: { tick: w.tick, tps, simMs: simMsAvg, speed, paused },
+    effects: dv.effects.map((e) => ({ id: e.id, power: e.power, x: e.x, y: e.y, z: e.z, radius: e.radius, start: e.start, end: e.end, phase: e.phase, combo: e.combo, dx: e.dx, dy: e.dy, dz: e.dz })),
+    cooldowns: dv.cooldowns(w.tick),
+    boundless: dv.boundless,
+    chill: -w.planet.climate.forcing.transientOffset,
     storms: w.weather.storms.map((s) => ({ id: s.id, type: s.type, name: s.name, x: s.x, y: s.y, z: s.z, radius: s.radius, intensity: s.intensity })),
     strikes,
     events: w.events.drain(),
@@ -282,6 +356,8 @@ function loop(): void {
     tpsWindowStart = now;
   }
   if (world) {
+    if (world.terraform.renderDirty.size > 0 && now - lastHeightSend > 90) sendHeights(world);
+    if (world.planet.heightVersion !== lastWaterVersion && world.terraform.renderDirty.size === 0) sendWater(world);
     sendFrame(now);
     if (texDirty && spareTextures.length > 0 && now - lastTexTime > 200) sendTextures();
   }
@@ -312,6 +388,7 @@ ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
         for (let i = 0; i < 3; i++) sparePeople.push(makeSnapshot(world.civ.people.cap, 'people'));
         lastCivVersion = -1;
         speciesCount = world.animals.defs.length;
+        lastWaterVersion = world.planet.heightVersion;
         const { data, transfer } = staticData(world);
         post({ type: 'ready', data }, transfer);
         texDirty = true;
@@ -337,6 +414,23 @@ ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
         break;
       case 'returnTextures':
         spareTextures.push(msg.tex);
+        break;
+      case 'command': {
+        if (!world) break;
+        const r = world.command(msg.cmd);
+        post({ type: 'commandResult', id: msg.id, ok: r.ok, message: r.message, combo: r.combo });
+        texDirty = true;
+        if (msg.cmd.kind === 'power') sendFrame(performance.now());
+        break;
+      }
+      case 'inspect':
+        post({ type: 'inspect', id: msg.id, info: world ? inspect(world, msg.target) : null });
+        break;
+      case 'ecology':
+        if (world) {
+          const data = ecologyData(world);
+          post({ type: 'ecology', id: msg.id, data }, [data.biomes.buffer]);
+        }
         break;
       case 'returnSnapshot':
         if (msg.snap.kind === 'people') sparePeople.push(msg.snap);

@@ -14,6 +14,8 @@ for (let y = 0; y < years; y++) {
   const ms = (performance.now() - t0) / TICKS_PER_YEAR;
   if ((y + 1) % every) continue;
   civ.census();
+  const so = civ.society;
+  console.log(`    wars active ${so.wars.filter((x) => x.end < 0).length}/${so.wars.length} armies ${so.armies.length} routes ${so.routes.filter((r) => r.alive).length} trips ${so.routes.reduce((a, r) => a + r.trips, 0)} tribes ${civ.tribes.filter((t) => t.alive).length}/${civ.tribes.length} causes ${JSON.stringify(civ.deathCauses)}`);
   console.log(`--- year ${y + 1}  people=${civ.totalPeople()} animals=${w.animals.totalAlive()} ms/tick=${ms.toFixed(2)} devotion=${civ.devotion.toFixed(0)}`);
   for (const t of civ.tribes) {
     const sets = t.settlements.map((id) => civ.settlements[id]).filter((s) => s.alive);
@@ -31,5 +33,5 @@ for (let y = 0; y < years; y++) {
 }
 const h = civ.holdings(), L = civ.ledger;
 for (let r = 0; r < 4; r++) console.log('res', r, 'created', L.created[r].toFixed(1), 'held', h[r].toFixed(1), 'consumed', L.consumed[r].toFixed(1), 'used', L.used[r].toFixed(1), 'destroyed', L.destroyed[r].toFixed(1), 'balance', (L.created[r] - h[r] - L.consumed[r] - L.used[r] - L.destroyed[r]).toFixed(3));
-const ev = w.events.history.filter((e) => ['tech', 'age', 'settlement-founded', 'settlement-grew', 'migration', 'settlement-abandoned', 'tribe-founded'].includes(e.kind)).slice(-30);
+const ev = w.events.history.filter((e) => ['age', 'settlement-abandoned', 'tribe-founded', 'war', 'holy-war', 'peace', 'conquest', 'schism', 'first-contact', 'alliance', 'betrayal', 'refugees', 'religion', 'plague', 'trade-route', 'siege'].includes(e.kind)).slice(-30);
 for (const e of ev) console.log(Math.floor(e.tick / TICKS_PER_YEAR), e.kind, JSON.stringify(e.data));

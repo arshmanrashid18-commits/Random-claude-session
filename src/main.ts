@@ -3,6 +3,11 @@
  * screen, and exposes the automation harness used by `npm run shots`.
  */
 import './ui/styles.css';
+import './ui/hud.css';
+import * as THREE from 'three';
+import { Game } from './game';
+import { InputController } from './ui/input';
+import { worldName } from './core/worldname';
 import { GameRenderer } from './render/renderer';
 import { SimClient } from './worker/client';
 import { applyViewpoint, computeViewpoint, type ViewpointId } from './render/viewpoints';
@@ -22,6 +27,9 @@ const renderer = new GameRenderer(canvas);
 if (params.get('quality')) renderer.setQuality(params.get('quality') as 'low' | 'medium' | 'high' | 'ultra');
 const sim = new SimClient();
 const loading = new LoadingScreen(uiRoot);
+const game = new Game(renderer, sim, uiRoot);
+new InputController(game, canvas);
+const harnessMode = params.get('harness') === '1';
 
 function resize(): void {
   renderer.resize(window.innerWidth, window.innerHeight);
@@ -38,11 +46,19 @@ sim.onReady = (data) => {
   loading.setStage('Lighting the sky', 0.95);
   renderer.init(data);
   resize();
+  game.worldName = worldName(data.seed);
+  game.buildUi();
   if (sim.civ) sim.onCiv(sim.civ);
   loading.done();
   readyResolve();
-  sim.setSpeed(1, params.get('harness') === '1');
+  game.enabled = true;
+  game.paused = harnessMode;
+  sim.setSpeed(1, harnessMode);
+  if (!harnessMode) game.banner.show(game.worldName, 'A world waits for its god', 5000);
 };
+sim.onHeights = (faces, data) => renderer.updateHeights(faces, data);
+sim.onWater = (rivers, lakes) => renderer.updateWater(rivers, lakes);
+sim.onEvents = (events) => { if (renderer.ready && game.enabled) game.handleEvents(events); };
 sim.onTextures = (tex) => {
   if (renderer.ready) renderer.data.updateRegion(tex);
 };
@@ -51,11 +67,22 @@ sim.onPeople = (snap) => (renderer.ready ? renderer.people.pushSnapshot(snap) : 
 sim.onCiv = (civ) => {
   if (!renderer.ready) return;
   renderer.buildings.sync(civ, renderer.data);
-  renderer.people.tribes = civ.tribes;
+  renderer.setTribes(civ.tribes);
+  game.onCiv(civ);
 };
 sim.onFrame = (f) => {
   if (!renderer.ready) return;
-  renderer.setStorms(f.storms);
+  renderer.effects = f.effects;
+  renderer.simSpeed = f.header.paused ? 0 : f.header.speed;
+  // Divine rain clouds join the weather systems in the cloud shader.
+  const storms = f.storms.concat(f.effects.filter((e) => e.power === 'rain' && e.end > f.header.tick).map((e) => ({ id: -e.id, type: 0, name: '', x: e.x, y: e.y, z: e.z, radius: (e.radius * 1.3) / 1000, intensity: 1.1 })));
+  renderer.setStorms(storms);
+  const cam = renderer.camera.camera.position;
+  for (const st of f.strikes) {
+    const p = new THREE.Vector3(st.x, st.y, st.z).multiplyScalar(1000);
+    if (p.distanceTo(cam) < 1600) renderer.vfx.bolt(p, st.power, renderer.data);
+  }
+  game.onFrame(f);
   if (renderer.creatures.species.length !== sim.species.length) renderer.creatures.species = sim.species;
 };
 sim.init(seed, preset);
@@ -70,6 +97,7 @@ function frame(now: number): void {
     const est = h.tick + Math.min(1, ((now - sim.headerTime) / 1000) * rate);
     renderer.renderTick += (est - renderer.renderTick) * Math.min(1, dt * 10);
     if (Math.abs(est - renderer.renderTick) > 50) renderer.renderTick = est;
+    game.update(dt, now);
     renderer.render(dt);
   }
   requestAnimationFrame(frame);
@@ -86,6 +114,9 @@ interface Harness {
   stats(): unknown;
   hash(): Promise<number>;
   groundCheck(): { maxErrGround: number; maxErrNoise: number; maxErrBilinear: number; samples: number };
+  command(cmd: import('./worker/protocol').Command): Promise<{ ok: boolean; message: string }>;
+  hud(show: boolean): void;
+  game: Game;
 }
 const harness: Harness = {
   ready: readyPromise,
@@ -107,6 +138,9 @@ const harness: Harness = {
     return { ...renderer.stats, tick: sim.header.tick };
   },
   hash: () => sim.hash(),
+  command: (cmd) => sim.command(cmd),
+  hud(show) { document.body.classList.toggle('hud-hidden', !show); },
+  game,
   groundCheck() {
     const n = 256;
     const dirs = new Float32Array(n * 3);

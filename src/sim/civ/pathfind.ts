@@ -94,6 +94,12 @@ export class Pathfinder {
     return d * (1 + t.slope[b] * 4 + climb) * (road ? 1 - road * 0.22 : 1) + (t.river[b] > 2 ? d * 0.8 : 0);
   }
 
+  /** Forget cached paths (terrain or roads changed). */
+  clearCache(): void {
+    this.cache.clear();
+    this.cacheOrder.length = 0;
+  }
+
   /** Returns cells from start to goal (inclusive) or null if unreachable. */
   find(start: number, goal: number, mode: PathMode, maxExpand = 12000): Int32Array | null {
     if (start === goal) return Int32Array.of(start);

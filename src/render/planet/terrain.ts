@@ -101,8 +101,25 @@ ${GLSL_SHADOW_SAMPLE}
 uniform highp sampler2DArray uNormalTex;
 uniform vec3 uCamPos;
 uniform float uNightLights;
+uniform float uBorders;
+uniform vec3 uTribeCol[32];
 in vec3 vWorld;
 in float vDist;
+
+// Territory: smooth iso-line between region cells owned by different tribes.
+float ownerAt(ivec3 t) { return floor(texelFetch(uOwnerTex, t, 0).r * 255.0 + 0.5); }
+float territory(vec3 dir, out float own) {
+  vec2 ab;
+  int f = dirToFaceAB(dir, ab);
+  vec2 p = (ab + 1.0) * 0.5 * uRegionN + 0.5;
+  vec2 i0 = floor(p);
+  vec2 t = p - i0;
+  ivec3 b = ivec3(int(i0.x), int(i0.y), f);
+  float o00 = ownerAt(b), o10 = ownerAt(b + ivec3(1, 0, 0)), o01 = ownerAt(b + ivec3(0, 1, 0)), o11 = ownerAt(b + ivec3(1, 1, 0));
+  own = t.x < 0.5 ? (t.y < 0.5 ? o00 : o01) : (t.y < 0.5 ? o10 : o11);
+  float w = mix(mix(float(o00 == own), float(o10 == own), t.x), mix(float(o01 == own), float(o11 == own), t.x), t.y);
+  return w;
+}
 
 vec3 detailNormal(vec3 N, vec3 dir, float dist) {
   float fade = 1.0 - smoothstep(40.0, 180.0, dist);
@@ -156,6 +173,42 @@ void main() {
   if (h < 0.0) color *= exp(-vec3(0.35, 0.12, 0.06) * min(-h, 30.0) * 0.35);
   // Emissive lava glow.
   color += vec3(4.0, 1.2, 0.25) * si.emissive * (0.7 + 0.3 * snoise(dir * 900.0 + uTime * 0.3));
+  vec3 ruv = regionUV(dir);
+  // Floodwater: a muddy, reflective sheet over drowned land.
+  float flood = texture(uFxTex, ruv).a;
+  if (flood > 0.01 && h > -0.5) {
+    float fw = smoothstep(0.01, 0.12, flood + snoise(dir * 1800.0) * 0.03);
+    vec3 R = reflect(-V, dir);
+    vec3 muddy = mix(vec3(0.16, 0.13, 0.08), vec3(0.06, 0.09, 0.08), smoothstep(0.1, 0.6, flood));
+    vec3 water = muddy * (sunCol * max(mu, 0.0) * 0.35 + skyAmbient(dir, dir, L) * uSunIntensity * 0.05);
+    float fres = 0.02 + 0.98 * pow(1.0 - max(dot(V, dir), 0.0), 5.0);
+    water += skyAmbient(dir, R, L) * uSunIntensity * 0.025 * fres;
+    float ripple = snoise(dir * 3000.0 + uTime * 0.4) * 0.5 + 0.5;
+    water *= 0.9 + ripple * 0.2;
+    color = mix(color, water, fw * 0.88);
+  }
+  // Night: the lights of settlements.
+  vec4 surf = texture(uSurfaceTex, ruv);
+  float night = smoothstep(0.02, -0.12, mu);
+  if (night > 0.0 && surf.a > 0.02 && h > 0.0) {
+    float speck = smoothstep(0.35, 0.9, snoise(dir * 2600.0) * 0.5 + snoise(dir * 700.0) * 0.5 + surf.a);
+    float farGlow = smoothstep(200.0, 900.0, vDist);
+    float lights = surf.a * mix(speck, 0.6, farGlow) * night * uNightLights;
+    color += vec3(3.2, 1.9, 0.8) * lights * 0.9;
+  }
+  // Borders between peoples, seen from afar.
+  if (uBorders > 0.0) {
+    float own;
+    float w = territory(dir, own);
+    float far = smoothstep(120.0, 500.0, vDist);
+    if (own > 0.5 && far > 0.0) {
+      vec3 tc = uTribeCol[int(own) - 1];
+      float line = 1.0 - smoothstep(0.5, 0.72, w);
+      float glow = mix(0.02, 0.12, night);
+      color = mix(color, color * (0.6 + tc * 0.9), 0.18 * far * uBorders);
+      color += tc * line * far * uBorders * (sunCol.g * 0.02 + glow * 2.0);
+    }
+  }
   outColor = vec4(color, 1.0);
 }
 `;
@@ -308,6 +361,8 @@ ${GLSL_ATMOSPHERE}
 ${GLSL_SKYLIGHT}
 uniform vec3 uCamPos;
 uniform float uTime;
+uniform vec4 uTsunami[4];
+uniform float uTsunamiAmp[4];
 ${OCEAN_SHADING}
 in vec3 vWorld;
 in float vDist;
@@ -318,6 +373,21 @@ void main() {
   float depth = (r - PLANET_R) - ground;
   if (depth < -0.02) discard;
   vec4 c = shadeWater(vWorld, dir, max(depth, 0.0), vDist, 0.0);
+  // Tsunami fronts: a white-crested wall of water racing outward.
+  float px = max(1.5, vDist * 0.004);
+  for (int i = 0; i < 4; i++) {
+    float amp = uTsunamiAmp[i];
+    if (amp <= 0.0) continue;
+    float d = acos(clamp(dot(dir, normalize(uTsunami[i].xyz)), -1.0, 1.0)) * PLANET_R;
+    float x = d - uTsunami[i].w;
+    float crest = exp(-x * x / (px * px * 4.0)) * amp;
+    float trough = exp(-(x + 8.0) * (x + 8.0) / (px * px * 30.0)) * amp * 0.4;
+    vec3 L = uSunDir;
+    float lit = max(dot(dir, L), 0.0) * 0.8 + 0.1;
+    c.rgb = mix(c.rgb, vec3(0.9, 0.97, 1.0) * lit * uSunIntensity * 0.09, clamp(crest * 0.6, 0.0, 0.95));
+    c.rgb *= 1.0 - clamp(trough * 0.3, 0.0, 0.5);
+    c.a = max(c.a, clamp(crest, 0.0, 1.0));
+  }
   outColor = vec4(c.rgb, c.a);
 }
 `;

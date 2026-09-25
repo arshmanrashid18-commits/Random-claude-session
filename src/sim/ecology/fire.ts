@@ -21,9 +21,13 @@ export class Fires {
   private complexSize = 0;
   private complexAnnounced = false;
 
+  /** Cleared, trampled and watched ground around settlements (0..1): fire struggles there. */
+  firebreak: Float32Array;
+
   constructor(count: number) {
     this.intensity = new Float32Array(count);
     this.scar = new Float32Array(count);
+    this.firebreak = new Float32Array(count);
   }
 
   ignite(c: number, strength: number): boolean {
@@ -55,11 +59,11 @@ export class Fires {
       const fuel = plants.fuel(c);
       const rain = climate.rain[c];
       const dry = 1 - Math.min(1, climate.soil[c] * 1.4);
-      // Burn biomass.
-      plants.burn(c, 0.02 * I);
-      this.scar[c] = Math.min(1, this.scar[c] + 0.02 * I);
+      // Burn biomass: a cell's fuel is consumed within a few dozen ticks.
+      plants.burn(c, 0.045 * I);
+      this.scar[c] = Math.min(1, this.scar[c] + 0.03 * I);
       // Growth or decay of the fire.
-      I += (fuel * 0.25 * (0.4 + dry) - 0.06 - rain * 2.5) * 0.25;
+      I += (fuel * 0.25 * (0.4 + dry) * (1 - 0.7 * this.firebreak[c]) - 0.06 - rain * 2.5) * 0.25;
       if (terrain.oceanFrac[c] > 0.5 || climate.snow[c] > 0.4) I = 0;
       if (I <= 0.02) { this.intensity[c] = 0; continue; }
       this.intensity[c] = Math.min(1, I);
@@ -71,7 +75,7 @@ export class Fires {
         for (let k = 0; k < 4; k++) {
           const nb = g.neighbors[c * 8 + k];
           if (this.intensity[nb] > 0 || terrain.oceanFrac[nb] > 0.5) continue;
-          const nf = plants.fuel(nb);
+          const nf = plants.fuel(nb) * (1 - 0.8 * this.firebreak[nb]);
           const align = ws > 0.01 ? (we * climate.nbE[c * 4 + k] + wn * climate.nbN[c * 4 + k]) / ws : 0;
           const windK = 1 + Math.max(-0.7, align) * Math.min(2.5, ws * 0.18);
           const ndry = 1 - Math.min(1, climate.soil[nb] * 1.3);

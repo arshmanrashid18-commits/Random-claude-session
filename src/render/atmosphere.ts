@@ -84,13 +84,21 @@ uniform float uSunDiscScale;
 uniform float uExposureHint;
 in vec2 vUv;
 
+uniform float uEclipse;
 vec3 sunDiscRadiance(vec3 rd) {
   float c = dot(rd, uSunDir);
   float ang = acos(clamp(c, -1.0, 1.0));
   float rad = 0.0095 * uSunDiscScale;
   float disc = 1.0 - smoothstep(rad * 0.9, rad, ang);
   float limb = sqrt(max(0.0, 1.0 - pow(ang / rad, 2.0)));
-  return vec3(1.0, 0.96, 0.9) * disc * (0.4 + 0.6 * limb) * 260.0;
+  vec3 sun = vec3(1.0, 0.96, 0.9) * disc * (0.4 + 0.6 * limb) * 260.0 * (1.0 - 0.995 * uEclipse);
+  // During an eclipse the corona and a diamond ring appear around the moon.
+  if (uEclipse > 0.0) {
+    float x = max(0.0, ang - rad * 0.98) / rad;
+    float streak = 0.75 + 0.25 * sin(atan(dot(rd, cross(uSunDir, vec3(0.0, 1.0, 0.0))), dot(rd, vec3(0.0, 1.0, 0.0))) * 14.0);
+    sun += vec3(0.9, 0.95, 1.0) * exp(-x * 3.0) * streak * 6.0 * uEclipse * step(rad * 0.98, ang);
+  }
+  return sun;
 }
 
 // Aurora emission density at p (night-side high latitudes only).
@@ -163,11 +171,15 @@ void main() {
         float phase = mix(phaseM(mu, 0.55), phaseM(mu, -0.2), 0.3) * 4.0 * PI;
         float lod = seg > 60.0 ? 1.0 : 0.0;
         float wsum = 0.0;
+        // Clouds part around a low camera so the god can see the land.
+        float camAlt = length(ro) - PLANET_R;
+        float nearFade = clamp(camAlt * 1.8, 25.0, 700.0);
         for (int i = 0; i < 48; i++) {
           if (i >= steps || cloudT < 0.03) break;
           float t = cs + (float(i) + jitter) * dt;
           vec3 p = ro + rd * t;
           float dens = cloudDensity(p, lod);
+          if (camAlt < 700.0) dens *= smoothstep(nearFade * 0.35, nearFade, t);
           if (dens > 0.001) {
             float r = length(p);
             vec3 up = p / r;

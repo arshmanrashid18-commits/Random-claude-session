@@ -75,6 +75,8 @@ export interface Tribe {
   style: number;
   /** Research boosts by need (decay over time). */
   needs: number[];
+  /** Tick until which research runs at double speed (Spark of Genius). */
+  inspired: number;
 }
 
 const PATTERN_NAMES = ['plain', 'band', 'pale', 'cross', 'bend', 'quartered', 'bordure', 'chevron'];
@@ -159,6 +161,7 @@ export function createTribe(id: number, rng: Rng, tick: number, hueSlot: number,
     stats: { births: 0, deaths: 0, famineDays: 0, warDays: 0, plagueDays: 0, kills: 0 },
     style: rng.int(0, 4),
     needs: new Array(FIELD_COUNT).fill(0),
+    inspired: 0,
   };
   void CONCEPTS;
   return tribe;

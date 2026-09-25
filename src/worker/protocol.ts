@@ -6,6 +6,10 @@
  */
 import type { WorldPresetId } from '../sim/planet/presets';
 import type { GameEvent } from '../sim/events';
+import type { Command } from '../sim/world';
+import type { PowerId } from '../sim/powers/defs';
+
+export type { Command };
 
 export interface RiverData {
   points: Float32Array;
@@ -96,8 +100,27 @@ export interface FrameHeader {
   paused: boolean;
 }
 
+/** A divine effect as the renderer needs it. */
+export interface EffectData {
+  id: number;
+  power: PowerId;
+  x: number; y: number; z: number;
+  radius: number;
+  start: number;
+  end: number;
+  phase: number;
+  combo: string;
+  dx: number; dy: number; dz: number;
+}
+
 export interface FrameData {
   header: FrameHeader;
+  effects: EffectData[];
+  /** Remaining cooldown ticks per power (POWERS order). */
+  cooldowns: number[];
+  boundless: boolean;
+  /** Global temperature offset (ice ages). */
+  chill: number;
   storms: StormData[];
   strikes: { x: number; y: number; z: number; power: number }[];
   events: GameEvent[];
@@ -160,6 +183,148 @@ export interface CivData {
   tribes: TribeData[];
 }
 
+export type InspectTarget =
+  | { kind: 'person'; uid: number }
+  | { kind: 'animal'; uid: number }
+  | { kind: 'settlement'; id: number }
+  | { kind: 'tribe'; id: number }
+  | { kind: 'place'; x: number; y: number; z: number };
+
+export interface PersonInfo {
+  kind: 'person';
+  uid: number;
+  name: string;
+  age: number;
+  sex: number;
+  tribe: number;
+  tribeName: string;
+  settlement: string;
+  settlementId: number;
+  job: string;
+  role: string;
+  state: string;
+  health: number;
+  hunger: number;
+  happiness: number;
+  love: number;
+  fear: number;
+  skills: { farm: number; build: number; fight: number; lore: number };
+  traits: { brave: number; pious: number; greedy: number; social: number; curious: number };
+  spouse: string;
+  children: number;
+  generation: number;
+  kills: number;
+  sick: boolean;
+  returned: boolean;
+  memory: string;
+  x: number; y: number; z: number;
+}
+
+export interface AnimalInfo {
+  kind: 'animal';
+  uid: number;
+  species: string;
+  speciesId: number;
+  diet: string;
+  age: number;
+  sex: number;
+  health: number;
+  hunger: number;
+  thirst: number;
+  state: string;
+  genes: { speed: number; size: number; fertility: number; cold: number; heat: number };
+  generation: number;
+  infected: boolean;
+  population: number;
+  x: number; y: number; z: number;
+}
+
+export interface SettlementInfo {
+  kind: 'settlement';
+  id: number;
+  name: string;
+  tribe: number;
+  tribeName: string;
+  tier: string;
+  pop: number;
+  stock: number[];
+  storage: number;
+  housing: number;
+  happiness: number;
+  faith: number;
+  disease: number;
+  famine: number;
+  founded: number;
+  walls: boolean;
+  blessed: boolean;
+  buildings: { name: string; count: number; building: number }[];
+  jobs: { name: string; count: number }[];
+  capital: boolean;
+  where: string;
+  x: number; y: number; z: number;
+}
+
+export interface TribeInfo {
+  kind: 'tribe';
+  id: number;
+  name: string;
+  adjective: string;
+  color: number;
+  color2: number;
+  flag: TribeData['flag'];
+  alive: boolean;
+  age: string;
+  population: number;
+  settlements: { id: number; name: string; pop: number; tier: string }[];
+  religion: string;
+  deity: string;
+  love: number;
+  fear: number;
+  tenets: { concept: string; weight: number }[];
+  scripture: string[];
+  techs: string[];
+  researching: string[];
+  traits: { aggression: number; piety: number; trade: number; curiosity: number; honor: number };
+  relations: { tribe: string; opinion: number; pact: number; war: boolean }[];
+  stats: { births: number; deaths: number; kills: number };
+  worst: string;
+  best: string;
+}
+
+export interface PlaceInfo {
+  kind: 'place';
+  biome: string;
+  temp: number;
+  rain: number;
+  elevation: number;
+  soil: number;
+  region: string;
+  owner: string;
+  plants: { name: string; density: number }[];
+  fire: number;
+  x: number; y: number; z: number;
+}
+
+export type InspectInfo = PersonInfo | AnimalInfo | SettlementInfo | TribeInfo | PlaceInfo;
+
+export interface EcologyData {
+  tick: number;
+  species: SpeciesInfo[];
+  alive: number[];
+  /** Population history per species id, oldest first. */
+  history: number[][];
+  /** Ticks between history samples. */
+  interval: number;
+  records: { tick: number; kind: 'speciation' | 'extinction'; name: string; parent?: string; where?: string }[];
+  /** Deaths per species by cause (starvation, thirst, old age, predation, disease, fire, cold/heat, disaster). */
+  deaths: number[][];
+  biomes: Uint8Array;
+  regionN: number;
+  shannon: number;
+  plantCover: number;
+  people: number;
+}
+
 export interface WorldStats {
   animals: number;
   species: number;
@@ -176,7 +341,10 @@ export type MainToWorker =
   | { type: 'advance'; ticks: number; id: number }
   | { type: 'hash'; id: number }
   | { type: 'returnTextures'; tex: RegionTextures }
-  | { type: 'returnSnapshot'; snap: EntitySnapshot };
+  | { type: 'returnSnapshot'; snap: EntitySnapshot }
+  | { type: 'command'; cmd: Command; id: number }
+  | { type: 'inspect'; target: InspectTarget; id: number }
+  | { type: 'ecology'; id: number };
 
 export type WorkerToMain =
   | { type: 'progress'; stage: string; frac: number }
@@ -187,4 +355,9 @@ export type WorkerToMain =
   | { type: 'civ'; civ: CivData }
   | { type: 'advanced'; id: number; tick: number }
   | { type: 'hash'; id: number; hash: number }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'commandResult'; id: number; ok: boolean; message: string; combo?: string }
+  | { type: 'heights'; faces: number[]; data: Float32Array[] }
+  | { type: 'water'; rivers: RiverData; lakes: LakeData }
+  | { type: 'inspect'; id: number; info: InspectInfo | null }
+  | { type: 'ecology'; id: number; data: EcologyData };

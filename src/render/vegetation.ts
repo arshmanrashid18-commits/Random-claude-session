@@ -277,7 +277,14 @@ export class Vegetation {
    * Rebuild placement around `focus` (unit dir) when the view has moved
    * enough or the vegetation data changed.
    */
+  private invalid = false;
+  /** Terrain changed: re-place everything on the next update. */
+  invalidate(): void {
+    this.invalid = true;
+  }
+
   update(focus: THREE.Vector3, camDistance: number, data: PlanetData, now: number, force = false): void {
+    if (this.invalid) { force = true; this.invalid = false; }
     if (!this.enabled || camDistance > 1100) {
       if (this.count > 0) { for (const g of this.geos) g.instanceCount = 0; this.count = 0; }
       this.lastRadius = 0;
