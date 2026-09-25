@@ -295,7 +295,7 @@ export class Animals {
     return i;
   }
 
-  /** Divine beacon: herbivores within reach travel toward it. */
+  /** Divine beacon: animals within reach travel toward it (the scattered find each other). */
   attractor: { x: number; y: number; z: number; cosR: number; until: number } | null = null;
 
   /** Kill animals within `radius` world units with probability chance·falloff (disasters). */
@@ -697,7 +697,7 @@ export class Animals {
     }
     // ----- a divine beacon calls the herds
     const at = this.attractor;
-    if (at && at.until > tick && d.diet === 'herbivore') {
+    if (at && at.until > tick) {
       const dot = this.x[i] * at.x + this.y[i] * at.y + this.z[i] * at.z;
       if (dot > at.cosR && dot < 0.99998) {
         offsetDir(at.x, at.y, at.z, rng.range(-18, 18) * INV_R, rng.range(-18, 18) * INV_R, this.scratch);

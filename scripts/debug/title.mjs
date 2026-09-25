@@ -1,0 +1,35 @@
+/** Screenshot the title screen and the scenario list, then begin play. */
+import { chromium } from 'playwright';
+import { createServer } from 'vite';
+import { mkdirSync } from 'node:fs';
+const out = process.argv[2] ?? '/tmp/claude-0/ui';
+mkdirSync(out, { recursive: true });
+const server = await createServer({ server: { port: 0, host: '127.0.0.1' }, logLevel: 'error' });
+await server.listen();
+const url = `http://127.0.0.1:${server.httpServer.address().port}/?quality=high`;
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-gl=angle', '--disable-gpu-sandbox', '--autoplay-policy=no-user-gesture-required'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+page.setDefaultTimeout(600_000);
+const problems = [];
+page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') problems.push(`[${m.type()}] ${m.text()}`); });
+page.on('pageerror', (e) => problems.push(`[pageerror] ${e.message}\n${e.stack}`));
+await page.goto(url);
+await page.waitForFunction(() => window.__genesis !== undefined, null, { timeout: 180_000 });
+await page.evaluate(() => window.__genesis.ready);
+await page.evaluate(() => window.__genesis.renderFrames(4));
+await page.screenshot({ path: `${out}/title.png` });
+await page.click('[data-act="scenarios"]');
+await page.evaluate(() => window.__genesis.renderFrames(2));
+await page.screenshot({ path: `${out}/title-scenarios.png` });
+await page.click('[data-act="back"]');
+await page.click('[data-act="new"]');
+await page.evaluate(() => window.__genesis.renderFrames(2));
+await page.screenshot({ path: `${out}/title-new.png` });
+await page.click('[data-act="back"]');
+await page.click('[data-act="begin"]');
+await page.evaluate(() => window.__genesis.renderFrames(30));
+await page.screenshot({ path: `${out}/begin.png` });
+await browser.close();
+await server.close();
+if (problems.length) { console.log(problems.slice(0, 30).join('\n')); process.exit(1); }
+console.log('title ok');

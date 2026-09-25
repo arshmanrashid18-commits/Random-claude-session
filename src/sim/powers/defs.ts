@@ -73,7 +73,7 @@ export const POWERS: PowerDef[] = [
   { id: 'harmony', name: 'Harmony', school: 'spirit', cost: 120, cooldown: 720, radius: 400, target: 'any', mood: 0.7, key: '',
     desc: 'Still the hearts of warriors.', effect: 'Every tribe within reach lays down arms: wars end in truce and grudges soften.', color: 0xb8f0e0 },
   { id: 'beacon', name: 'Beacon', school: 'spirit', cost: 35, cooldown: 120, radius: 280, target: 'land', mood: 0.2, key: '',
-    desc: 'Light a pillar that calls the living.', effect: 'Herds gather at the beacon and wanderers take it as a sign to settle there.', color: 0xfff0a0 },
+    desc: 'Light a pillar that calls the living.', effect: 'Every beast within reach gathers at the beacon — the scattered last of a kind find each other — and wanderers take it as a sign to settle there.', color: 0xfff0a0 },
   { id: 'eclipse', name: 'Eclipse', school: 'spirit', cost: 200, cooldown: 1920, radius: 0, target: 'global', mood: -0.3, key: '',
     desc: 'Draw the moon across the sun.', effect: 'Darkness at noon. Every people falls to its knees; fear and devotion surge across the world.', color: 0xff9a5a },
   { id: 'sanctuary', name: 'Sacred Grove', school: 'spirit', cost: 60, cooldown: 240, radius: 25, target: 'land', mood: 0.6, key: '',

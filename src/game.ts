@@ -75,6 +75,10 @@ export class Game {
   private strokeLevel: number | null = null;
   private lastDab = 0;
   enabled = false;
+  /** Title screen: the camera drifts around the planet. */
+  titleMode = false;
+  private titleDrift = 0;
+  tutorial: import('./ui/title').Tutorial | null = null;
   /** Hooks for audio and effects (set by the audio engine / VFX). */
   onCast: (p: PowerId, at: THREE.Vector3, ok: boolean) => void = () => {};
   onEvent: (e: GameEvent) => void = () => {};
@@ -148,7 +152,10 @@ export class Game {
     importFile: async (_f: File) => {},
   };
 
+  onSettings: (s: Settings) => void = () => {};
+
   applySettings(s: Settings): void {
+    this.onSettings(s);
     document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
     document.body.classList.toggle('reduced-motion', s.reducedMotion);
     this.renderer.camera.reducedMotion = s.reducedMotion;
@@ -422,9 +429,24 @@ export class Game {
 
   // ------------------------------------------------------------------ per frame
   update(dt: number, now: number): void {
-    if (!this.enabled) return;
     const r = this.renderer;
     const cam = r.camera;
+    if (this.titleMode) {
+      // Keep the lit hemisphere in view with the terminator on the right,
+      // drifting slowly westward.
+      const sun = r.shared.uSunDir.value as THREE.Vector3;
+      this.titleDrift += dt * 0.012;
+      const lon = Math.atan2(-sun.z, sun.x) - 0.75 + Math.sin(this.titleDrift) * 0.25;
+      const lat = 0.32;
+      const want = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), -Math.cos(lat) * Math.sin(lon));
+      cam.target.focus.lerp(want, Math.min(1, dt * 0.5)).normalize();
+      cam.current.focus.copy(cam.target.focus);
+      cam.target.heading = 0.25;
+      cam.current.heading = 0.25;
+      return;
+    }
+    if (!this.enabled) return;
+    this.tutorial?.update(dt);
     // Held keys move the camera.
     if (!this.modalOpen && !this.photo) {
       const k = (id: string) => this.held.has(this.keys.keyOf(id));
@@ -442,6 +464,8 @@ export class Game {
       if (k('zoomIn')) cam.target.distance = Math.max(MIN_DISTANCE, cam.target.distance * Math.exp(-dt * 1.6));
       if (k('zoomOut')) cam.target.distance = Math.min(MAX_DISTANCE, cam.target.distance * Math.exp(dt * 1.6));
     } else if (this.photo) {
+      const hit = cam.raycast(0, 0);
+      r.post.setFocus(hit ? hit.distanceTo(cam.camera.position) : 400, 1.2);
       const k = (c: string) => this.held.has(c);
       const f = (k('KeyW') ? 1 : 0) - (k('KeyS') ? 1 : 0), s2 = (k('KeyD') ? 1 : 0) - (k('KeyA') ? 1 : 0), u = (k('KeyE') ? 1 : 0) - (k('KeyQ') ? 1 : 0);
       if (f || s2 || u) cam.moveFree(f * dt, s2 * dt, u * dt);
@@ -510,6 +534,12 @@ export class Game {
         `buildings ${r.buildings.count}  vegetation ${r.vegetation.count}  speed ${h.paused ? 'paused' : `${h.speed}×`} (${(h.tps / TICKS_PER_SECOND_1X).toFixed(1)}× real)`,
       ]);
     }
+  }
+
+  /** Fly to the most populous settlement. */
+  focusPeople(): void {
+    const s = this.civ?.settlements.filter((q) => q.alive).sort((a, b) => b.pop - a.pop)[0];
+    if (s) this.renderer.camera.flyTo({ focus: new THREE.Vector3(s.x, s.y, s.z), distance: 520, tiltOffset: 0.08 }, 4);
   }
 
   /** Move the camera focus east/north by world units. */

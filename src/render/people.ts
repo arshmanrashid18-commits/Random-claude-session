@@ -58,6 +58,14 @@ function buildHuman(): THREE.BufferGeometry {
   // Torch (tag 16, left hand) with glowing head (slot 7 = emissive).
   b.segment(V(-0.27, 0.72, 0.06), V(-0.27, 1.25, 0.2), 0.022, 0.022, 4, { color: lin(0x5a3a22), tag: 16, pivot: shL });
   b.blob(0.07, 1, V(-0.27, 1.3, 0.21), V(0.9, 1.4, 0.9), { slot: 7, tag: 16, pivot: shL });
+  // Boat (tag 17): hull, thwart, mast and a sail in the tribe's colour.
+  const hull = lin(0x6a4a2c), hullDark = lin(0x4a3220);
+  b.box(1.1, 0.35, 3.4, V(0, -0.05, 0), { color: hull, tag: 17, ao: 0.4 });
+  b.box(1.16, 0.12, 3.5, V(0, 0.16, 0), { color: hullDark, tag: 17 });
+  b.cone(0.55, 0.9, 4, V(0, -0.05, 2.05), { color: hull, tag: 17 }, new THREE.Euler(Math.PI / 2, Math.PI / 4, 0));
+  b.box(1.0, 0.06, 0.25, V(0, 0.25, -0.6), { color: hullDark, tag: 17 });
+  b.segment(V(0, 0.1, 0.5), V(0, 3.4, 0.5), 0.05, 0.04, 5, { color: lin(0x5a3a22), tag: 17 });
+  b.quad(1.8, 2.3, V(0, 0.95, 0.52), new THREE.Euler(0, Math.PI / 2, 0), { slot: 1, tag: 17 }, 0.35);
   return b.build();
 }
 
@@ -74,6 +82,7 @@ in float aTag;
 in float aSlot;
 in vec3 color;
 uniform float uNight;
+uniform float uTime;
 out vec3 vWorld;
 out vec3 vNormal;
 out vec3 vColor;
@@ -102,6 +111,9 @@ void main() {
   float ageC = mod(floor(flags / 128.0), 4.0);
   float role = mod(floor(flags / 512.0), 8.0);
   float torch = mod(floor(flags / 4096.0), 2.0);
+  float vessel = mod(floor(flags / 8192.0), 2.0);
+  float sick = mod(floor(flags / 16384.0), 2.0);
+  float returned = mod(floor(flags / 32768.0), 2.0);
   float speed = aMotion.w;
   float phase = aMotion.z;
   vec3 lp = position;
@@ -116,8 +128,11 @@ void main() {
   else if (tag > 10.5 && tag < 12.5) show = soldier;
   else if (tag > 12.5 && tag < 14.5) show = priest || (tag > 13.5 && ageC > 1.5);
   else if (tag > 14.5 && tag < 15.5) show = worker && carry < 0.5;
-  else if (tag > 15.5) show = torch > 0.5;
+  else if (tag > 15.5 && tag < 16.5) show = torch > 0.5;
+  else if (tag > 16.5) show = vessel > 0.5;
   if (!show) lp = vec3(0.0, 0.9, 0.0);
+  // Aboard a boat the traveller sits amidships.
+  if (vessel > 0.5 && tag < 16.5) { lp *= 0.9; lp.y += 0.05; lp.z -= 0.8; }
   bool walking = state > 0.5 && state < 1.5 || state > 2.5 && state < 3.5 || state > 8.5 && state < 9.5 || state > 10.5 && state < 12.5;
   bool working = state > 1.5 && state < 2.5 || state > 7.5 && state < 8.5;
   bool praying = state > 5.5 && state < 6.5;
@@ -149,18 +164,25 @@ void main() {
   lp.y += bob;
   if (ageC > 1.5) lp = rotX(lp, vec3(0.0, 0.8, 0.0), 0.12 * step(0.8, lp.y));
   if (sleeping) { lp = rotZ(lp, vec3(0.0), 1.5708); lp.y += 0.15; nl = rotZ(nl, vec3(0.0), 1.5708); }
-  float sc = ageC < 0.5 ? 0.62 : 1.0;
+  float sc = ageC < 0.5 && tag < 16.5 ? 0.62 : 1.0;
   lp *= sc;
   vec3 up = aDir;
   vec3 ax, az;
   tangentFrame(up, aMotion.y, ax, az);
-  vWorld = up * (PLANET_R + aMotion.x) + ax * lp.x + up * lp.y + az * lp.z;
+  float ground = aMotion.x;
+  if (vessel > 0.5) {
+    // Float on the sea, rolling with the swell.
+    ground = max(ground, 0.05) + sin(uTime * 1.3 + aDir.x * 400.0) * 0.08;
+    lp = rotZ(lp, vec3(0.0), sin(uTime * 1.1 + aDir.z * 300.0) * 0.06);
+  }
+  vWorld = up * (PLANET_R + ground) + ax * lp.x + up * lp.y + az * lp.z;
   vNormal = normalize(ax * nl.x + up * nl.y + az * nl.z);
   vec3 c1 = unpackRGB(aLook.z), c2 = unpackRGB(aLook.w), skin = unpackRGB(aSkin.x), hair = unpackRGB(aSkin.y);
   vec3 cargo = carry < 1.5 ? vec3(0.45, 0.35, 0.08) : carry < 2.5 ? vec3(0.25, 0.13, 0.05) : carry < 3.5 ? vec3(0.3, 0.3, 0.3) : vec3(0.18, 0.16, 0.14);
   if (priest) c1 = mix(c1, vec3(0.8, 0.78, 0.7), 0.6);
+  if (sick > 0.5) skin = mix(skin, vec3(0.42, 0.5, 0.28), 0.55);
   vColor = aSlot < 0.5 ? color : aSlot < 1.5 ? c1 * color : aSlot < 2.5 ? c2 * color : aSlot < 3.5 ? skin * color : aSlot < 4.5 ? hair : aSlot < 5.5 ? cargo : aSlot < 6.5 ? c2 : vec3(1.0, 0.6, 0.2);
-  vEmissive = aSlot > 6.5 ? 1.0 : 0.0;
+  vEmissive = aSlot > 6.5 ? 1.0 : returned > 0.5 && tag < 16.5 ? -0.35 : 0.0;
   gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0);
 }
 `;
@@ -172,7 +194,9 @@ in vec3 vNormal;
 in vec3 vColor;
 in float vEmissive;
 void main() {
-  vec3 c = shadeObject(vWorld, normalize(vNormal), vColor, 0.0, vEmissive, vec3(9.0, 4.2, 1.2) * (0.85 + 0.15 * sin(uTime * 13.0 + vWorld.x * 7.0)));
+  // Positive emissive: torch flame; negative: the soft glow of the returned.
+  vec3 ec = vEmissive > 0.0 ? vec3(9.0, 4.2, 1.2) * (0.85 + 0.15 * sin(uTime * 13.0 + vWorld.x * 7.0)) : vec3(2.2, 2.1, 1.7) * (0.8 + 0.2 * sin(uTime * 3.0));
+  vec3 c = shadeObject(vWorld, normalize(vNormal), vColor, 0.0, abs(vEmissive), ec);
   outColor = vec4(c, 1.0);
 }
 `;
@@ -286,6 +310,9 @@ export class PeopleRenderer {
       const tribe = (packed >>> 12) & 63;
       const ageC = (packed >>> 18) & 3;
       const role = (packed >>> 20) & 7;
+      const vessel = (packed >>> 24) & 1;
+      const sick = (packed >>> 25) & 1;
+      const returned = (packed >>> 26) & 1;
       const mx = t.cx - t.px, my = t.cy - t.py, mz = t.cz - t.pz;
       const moved = Math.hypot(mx, my, mz) * PLANET_RADIUS;
       let ex = z, ez = -x;
@@ -312,7 +339,7 @@ export class PeopleRenderer {
       // Torches after dark for people on the move.
       const night = x * sunDir.x + y * sunDir.y + z * sunDir.z < -0.05;
       const torch = night && (state === PState.Walk || state === PState.Carry || state === PState.Travel || state === PState.March || state === PState.Flee) && ageC > 0 && (uid % 3 !== 0) ? 1 : 0;
-      const flags = job | (carry << 4) | (ageC << 7) | (role << 9) | (torch << 12);
+      const flags = job | (carry << 4) | (ageC << 7) | (role << 9) | (torch << 12) | (vessel << 13) | (sick << 14) | (returned << 15);
       const o = n * STRIDE;
       const a = this.arr;
       a[o] = x; a[o + 1] = y; a[o + 2] = z;

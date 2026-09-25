@@ -9,6 +9,8 @@ import { buildPadMap, packRGBA } from '../sim/planet/regiontex';
 import type { CivData, EcologyData, EntitySnapshot, FrameData, LakeData, MainToWorker, RegionTextures, RiverData, SpeciesInfo, StaticWorldData, WorkerToMain } from './protocol';
 import { HISTORY_INTERVAL, HISTORY_LEN } from '../sim/ecology/animals';
 import { inspect } from './inspect';
+import { saveWorld, loadWorld } from '../sim/serialize';
+import { startScenario } from '../sim/scenarios';
 import { BUILDINGS } from '../sim/civ/defs';
 const BUILDING_COSTS = BUILDINGS.map((b) => b.cost);
 
@@ -174,6 +176,27 @@ function sendWater(w: World): void {
   post({ type: 'water', rivers: wd.rivers, lakes: wd.lakes }, wd.transfer);
 }
 
+/** Begin streaming a (new or loaded) world to the main thread. */
+function start(w: World, loaded: boolean): void {
+  padMap = buildPadMap(w.planet.region);
+  spareTextures.length = 0;
+  spareTextures.push(makeTextures(w.planet.region.n), makeTextures(w.planet.region.n));
+  spareSnaps.length = 0;
+  for (let i = 0; i < 3; i++) spareSnaps.push(makeSnapshot(w.animals.cap, 'animals'));
+  sparePeople.length = 0;
+  for (let i = 0; i < 3; i++) sparePeople.push(makeSnapshot(w.civ.people.cap, 'people'));
+  lastCivVersion = -1;
+  lastSnapTick = -1;
+  lastPeopleTick = -1;
+  speciesCount = w.animals.defs.length;
+  lastWaterVersion = w.planet.heightVersion;
+  const { data, transfer } = staticData(w);
+  if (loaded) data.history = w.events.history.slice(-3000);
+  post({ type: 'ready', data }, transfer);
+  texDirty = true;
+  sendTextures();
+}
+
 function staticData(w: World): { data: StaticWorldData; transfer: Transferable[] } {
   const p = w.planet;
   const wd = waterData(w);
@@ -219,7 +242,7 @@ function fillPeople(w: World, s: EntitySnapshot): void {
     s.pos[n * 3 + 1] = P.y[i];
     s.pos[n * 3 + 2] = P.z[i];
     const age = P.age[i] < 13 ? 0 : P.age[i] < 60 ? 1 : 2;
-    const packed = (P.state[i] & 31) | ((P.job[i] & 15) << 5) | (((P.carryRes[i] + 1) & 7) << 9) | ((P.tribe[i] & 63) << 12) | (age << 18) | ((P.role[i] & 7) << 20) | ((P.sex[i] & 1) << 23);
+    const packed = (P.state[i] & 31) | ((P.job[i] & 15) << 5) | (((P.carryRes[i] + 1) & 7) << 9) | ((P.tribe[i] & 63) << 12) | (age << 18) | ((P.role[i] & 7) << 20) | ((P.sex[i] & 1) << 23) | ((P.vessel[i] & 1) << 24) | ((P.sick[i] > 0 ? 1 : 0) << 25) | ((P.returned[i] > w.tick ? 1 : 0) << 26);
     s.info[n * 2] = P.uid[i];
     s.info[n * 2 + 1] = packed >>> 0;
     n++;
@@ -323,6 +346,7 @@ function sendFrame(now: number): void {
     cooldowns: dv.cooldowns(w.tick),
     boundless: dv.boundless,
     chill: -w.planet.climate.forcing.transientOffset,
+    scenario: w.scenario ? { id: w.scenario.id, status: w.scenario.status, progress: w.scenario.progress, detail: w.scenario.detail, outcome: w.scenario.outcome } : null,
     storms: w.weather.storms.map((s) => ({ id: s.id, type: s.type, name: s.name, x: s.x, y: s.y, z: s.z, radius: s.radius, intensity: s.intensity })),
     strikes,
     events: w.events.drain(),
@@ -379,20 +403,26 @@ ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
     switch (msg.type) {
       case 'init': {
         world = new World({ seed: msg.seed, preset: msg.preset }, (stage, frac) => post({ type: 'progress', stage, frac }));
-        padMap = buildPadMap(world.planet.region);
-        spareTextures.length = 0;
-        spareTextures.push(makeTextures(world.planet.region.n), makeTextures(world.planet.region.n));
-        spareSnaps.length = 0;
-        for (let i = 0; i < 3; i++) spareSnaps.push(makeSnapshot(world.animals.cap, 'animals'));
-        sparePeople.length = 0;
-        for (let i = 0; i < 3; i++) sparePeople.push(makeSnapshot(world.civ.people.cap, 'people'));
-        lastCivVersion = -1;
-        speciesCount = world.animals.defs.length;
-        lastWaterVersion = world.planet.heightVersion;
-        const { data, transfer } = staticData(world);
-        post({ type: 'ready', data }, transfer);
-        texDirty = true;
-        sendTextures();
+        if (msg.scenario) startScenario(world, msg.scenario);
+        if (msg.boundless) world.divine.boundless = true;
+        start(world, false);
+        break;
+      }
+      case 'save': {
+        if (!world) break;
+        const w = world;
+        void saveWorld(w, msg.name).then((data) => {
+          post({ type: 'saved', id: msg.id, data, meta: { seed: w.seed, preset: w.preset, tick: w.tick, name: msg.name, people: w.civ.totalPeople(), when: Date.now() } }, [data.buffer]);
+        }).catch((err) => post({ type: 'saved', id: msg.id, data: null, error: String(err instanceof Error ? err.message : err) }));
+        break;
+      }
+      case 'load': {
+        post({ type: 'progress', stage: 'Awakening the world', frac: 0.3 });
+        void loadWorld(msg.data).then((w) => {
+          world = w;
+          post({ type: 'progress', stage: 'Awakening the world', frac: 0.9 });
+          start(w, true);
+        }).catch((err) => post({ type: 'error', message: `Could not load this world: ${err instanceof Error ? err.message : err}` }));
         break;
       }
       case 'speed':
@@ -442,4 +472,5 @@ ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
   }
 };
 
-loop();
+// Tests drive the message handler directly without the scheduler.
+if (!(globalThis as { __genesisNoLoop?: boolean }).__genesisNoLoop) loop();

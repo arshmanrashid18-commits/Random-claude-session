@@ -53,7 +53,7 @@ export const TECHS: TechDef[] = [
   { id: 'navigation', name: 'Navigation', field: S, cost: 50, req: ['sailing', 'starlore'], desc: 'Steer by the stars across open sea.' },
   { id: 'cartography', name: 'Cartography', field: S, cost: 80, req: ['navigation', 'writing'], desc: 'Maps of distant shores.' },
   { id: 'galleons', name: 'Galleons', field: S, cost: 150, req: ['cartography', 'steel'], desc: 'Great ships cross oceans.' },
-  { id: 'steamships', name: 'Steamships', field: S, cost: 260, req: ['galleons', 'steam'], desc: 'Ships that need no wind.' },
+  { id: 'steamships', name: 'Steamships', field: S, cost: 320, req: ['galleons', 'steam'], desc: 'Ships that need no wind.' },
   // Writing & society (8)
   { id: 'ritual', name: 'Ritual', field: W, cost: 3, req: [], desc: 'Shrines and offerings to the one above.' },
   { id: 'pottery', name: 'Pottery', field: W, cost: 8, req: [], desc: 'Clay vessels store food and water.' },

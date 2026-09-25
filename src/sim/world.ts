@@ -19,6 +19,7 @@ import { TICKS_PER_YEAR } from './constants';
 import { Terraformer, type BrushTool } from './planet/terraform';
 import { Divine, type CastResult } from './powers/divine';
 import type { PowerId } from './powers/defs';
+import { tickScenario, type ScenarioState } from './scenarios';
 
 /** Player commands (from the UI, applied between ticks). */
 export type Command =
@@ -48,6 +49,8 @@ export class World {
   events = new EventLog();
   terraform: Terraformer;
   divine: Divine;
+  /** Active scenario (null in sandbox). */
+  scenario: ScenarioState | null = null;
 
   constructor(opts: WorldOptions, progress: ProgressFn = () => {}) {
     this.seed = opts.seed >>> 0;
@@ -74,11 +77,17 @@ export class World {
     this.civ.seedTribes(this.rng, 0, p, this.animals, this.geo, this.events);
     this.divine = new Divine(p.region.count);
     this.terraform = new Terraformer(p);
+    this.wire();
+    progress('Seeding life', 1);
+  }
+
+  /** Reconnect callbacks (after construction or after loading a save). */
+  wire(): void {
+    const p = this.planet;
     this.terraform.onCommit = () => {
       this.animals.computeWater(p.region, p.terrain);
       this.civ.afterTerraform(p, this.tick, this.rng, this.events);
     };
-    progress('Seeding life', 1);
   }
 
   /** Apply a player command immediately (between ticks). */
@@ -87,7 +96,8 @@ export class World {
       case 'power':
         return this.divine.cast(this, cmd);
       case 'brush': {
-        const changed = this.terraform.brush(cmd);
+        const l = Math.hypot(cmd.x, cmd.y, cmd.z) || 1;
+        const changed = this.terraform.brush({ ...cmd, x: cmd.x / l, y: cmd.y / l, z: cmd.z / l });
         return { ok: changed, message: changed ? '' : 'Nothing to change here' };
       }
       case 'brushEnd':
@@ -118,6 +128,7 @@ export class World {
     this.animals.tick(t, this.rng, cl, this.plants, p.terrain, this.events, this.geo, this.fires);
     this.civ.tick(t, this.rng, p, this.plants, this.animals, this.fires, this.events, this.geo);
     this.divine.tick(this);
+    if (t % 40 === 39) tickScenario(this);
     if (t % TICKS_PER_YEAR === TICKS_PER_YEAR - 1) {
       p.refreshFlow();
       this.animals.computeWater(p.region, p.terrain);

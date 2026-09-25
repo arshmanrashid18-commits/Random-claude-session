@@ -48,6 +48,17 @@ export interface StaticWorldData {
   rivers: RiverData;
   lakes: LakeData;
   species: SpeciesInfo[];
+  /** Past events (only when resuming a saved world). */
+  history?: GameEvent[];
+}
+
+export interface SaveInfo {
+  seed: number;
+  preset: string;
+  tick: number;
+  name: string;
+  people: number;
+  when: number;
 }
 
 /** Region textures: padded (n+2)²×6 RGBA8 arrays. */
@@ -121,6 +132,7 @@ export interface FrameData {
   boundless: boolean;
   /** Global temperature offset (ice ages). */
   chill: number;
+  scenario: { id: string; status: 'active' | 'won' | 'lost'; progress: number; detail: string; outcome: string } | null;
   storms: StormData[];
   strikes: { x: number; y: number; z: number; power: number }[];
   events: GameEvent[];
@@ -336,7 +348,7 @@ export interface WorldStats {
 }
 
 export type MainToWorker =
-  | { type: 'init'; seed: number; preset: WorldPresetId }
+  | { type: 'init'; seed: number; preset: WorldPresetId; scenario?: string; boundless?: boolean }
   | { type: 'speed'; speed: number; paused: boolean }
   | { type: 'advance'; ticks: number; id: number }
   | { type: 'hash'; id: number }
@@ -344,7 +356,9 @@ export type MainToWorker =
   | { type: 'returnSnapshot'; snap: EntitySnapshot }
   | { type: 'command'; cmd: Command; id: number }
   | { type: 'inspect'; target: InspectTarget; id: number }
-  | { type: 'ecology'; id: number };
+  | { type: 'ecology'; id: number }
+  | { type: 'save'; id: number; name: string }
+  | { type: 'load'; data: Uint8Array };
 
 export type WorkerToMain =
   | { type: 'progress'; stage: string; frac: number }
@@ -360,4 +374,5 @@ export type WorkerToMain =
   | { type: 'heights'; faces: number[]; data: Float32Array[] }
   | { type: 'water'; rivers: RiverData; lakes: LakeData }
   | { type: 'inspect'; id: number; info: InspectInfo | null }
-  | { type: 'ecology'; id: number; data: EcologyData };
+  | { type: 'ecology'; id: number; data: EcologyData }
+  | { type: 'saved'; id: number; data: Uint8Array | null; meta?: SaveInfo; error?: string };

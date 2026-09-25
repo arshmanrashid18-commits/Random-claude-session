@@ -1,7 +1,7 @@
 /**
  * Main-thread handle to the simulation worker.
  */
-import type { CivData, Command, EcologyData, EntitySnapshot, FrameData, FrameHeader, InspectInfo, InspectTarget, LakeData, MainToWorker, RegionTextures, RiverData, SpeciesInfo, StaticWorldData, WorkerToMain, WorldStats } from './protocol';
+import type { CivData, Command, EcologyData, SaveInfo, EntitySnapshot, FrameData, FrameHeader, InspectInfo, InspectTarget, LakeData, MainToWorker, RegionTextures, RiverData, SpeciesInfo, StaticWorldData, WorkerToMain, WorldStats } from './protocol';
 
 export interface CommandResult { ok: boolean; message: string; combo?: string }
 import type { WorldPresetId } from '../sim/planet/presets';
@@ -32,6 +32,7 @@ export class SimClient {
   private pendingCmd = new Map<number, (r: CommandResult) => void>();
   private pendingInspect = new Map<number, (r: InspectInfo | null) => void>();
   private pendingEco = new Map<number, (r: EcologyData) => void>();
+  private pendingSave = new Map<number, { res: (r: { data: Uint8Array; meta: SaveInfo }) => void; rej: (e: Error) => void }>();
 
   constructor() {
     this.worker = new Worker(new URL('./sim.worker.ts', import.meta.url), { type: 'module' });
@@ -88,6 +89,14 @@ export class SimClient {
         if (r) { this.pendingEco.delete(msg.id); r(msg.data); }
         break;
       }
+      case 'saved': {
+        const r = this.pendingSave.get(msg.id);
+        if (!r) break;
+        this.pendingSave.delete(msg.id);
+        if (msg.data && msg.meta) r.res({ data: msg.data, meta: msg.meta });
+        else r.rej(new Error(msg.error ?? 'Save failed'));
+        break;
+      }
       case 'heights': this.onHeights(msg.faces, msg.data); break;
       case 'water': this.onWater(msg.rivers, msg.lakes); break;
     }
@@ -102,8 +111,8 @@ export class SimClient {
     this.worker.postMessage(msg, transfer);
   }
 
-  init(seed: number, preset: WorldPresetId): void {
-    this.send({ type: 'init', seed, preset });
+  init(seed: number, preset: WorldPresetId, scenario?: string, boundless?: boolean): void {
+    this.send({ type: 'init', seed, preset, scenario, boundless });
   }
 
   setSpeed(speed: number, paused: boolean): void {
@@ -125,6 +134,15 @@ export class SimClient {
   inspect(target: InspectTarget): Promise<InspectInfo | null> {
     const id = this.nextId++;
     return new Promise((res) => { this.pendingInspect.set(id, res); this.send({ type: 'inspect', target, id }); });
+  }
+
+  save(name: string): Promise<{ data: Uint8Array; meta: SaveInfo }> {
+    const id = this.nextId++;
+    return new Promise((res, rej) => { this.pendingSave.set(id, { res, rej }); this.send({ type: 'save', id, name }); });
+  }
+
+  load(data: Uint8Array): void {
+    this.send({ type: 'load', data }, [data.buffer]);
   }
 
   ecology(): Promise<EcologyData> {

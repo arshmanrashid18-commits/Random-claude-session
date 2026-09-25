@@ -8,7 +8,7 @@ import type { RegionTerrain } from '../planet/regions';
 
 export type PathMode = 'land' | 'sea';
 
-class Heap {
+export class Heap {
   k: Float64Array;
   v: Int32Array;
   n = 0;

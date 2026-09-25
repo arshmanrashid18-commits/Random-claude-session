@@ -55,6 +55,8 @@ export interface Building {
   workers: number;
   ruin: boolean;
   built: number;
+  /** Last tick anyone delivered to or worked on this site. */
+  lastWork: number;
 }
 
 export interface Settlement {
@@ -345,6 +347,7 @@ export class Civ {
       workers: 0,
       ruin: false,
       built: tick,
+      lastWork: tick,
     };
     this.buildings.push(b);
     s.buildings.push(b.id);
@@ -478,8 +481,9 @@ export class Civ {
     if (tick % 8 === 0) this.growFarms(planet);
     // Fish regenerate.
     if (tick % 32 === 0) for (let c = 0; c < this.fish.length; c++) if (this.fish[c] > 0 && this.fish[c] < 1) this.fish[c] = Math.min(1, this.fish[c] + 0.004);
-    // Research once a day.
+    // Research once a day; head counts twice a day.
     if (tick % TICKS_PER_DAY === 17) this.research(tick, events);
+    if (tick % 80 === 3) this.census();
     // Devotion from worship.
     if (tick % 16 === 5) this.worship();
     // Diplomacy, war, trade and religion.
@@ -1032,10 +1036,12 @@ export class Civ {
           const r = P.carryRes[i];
           const put = Math.min(P.carryAmt[i], this.missing(b, r));
           b.delivered[r] += put;
+          if (put > 0) b.lastWork = tick;
           P.carryAmt[i] -= put;
           if (P.carryAmt[i] <= 0.0001) { P.carryRes[i] = -1; P.carryAmt[i] = 0; }
         }
         if (this.hasMaterials(b)) {
+          b.lastWork = tick;
           b.progress += (8 / BUILDINGS[b.type].work) * (0.7 + P.skBuild[i] * 0.6);
           P.skBuild[i] = Math.min(1, P.skBuild[i] + 0.004);
           if (b.progress >= 1 && s) this.completeBuilding(b, s, tick, events);
@@ -1247,6 +1253,14 @@ export class Civ {
       return;
     }
     const t = this.tribes[s.tribe];
+    // Abandon building sites nobody has touched for two years (materials return to the store).
+    for (const id of s.buildings) {
+      const b = this.buildings[id];
+      if (b.complete || b.ruin || tick - (b.lastWork ?? b.built) < TICKS_PER_YEAR * 2) continue;
+      for (let r = 0; r < RES_COUNT; r++) { s.stock[r] += b.delivered[r]; b.delivered[r] = 0; }
+      b.ruin = true;
+      this.version++;
+    }
     // Cleared, trampled, watched ground around the settlement resists fire.
     if (fireRef) {
       const fb = Math.min(0.92, 0.45 + s.pop / 90 + s.tier * 0.1);
@@ -1357,7 +1371,7 @@ export class Civ {
       for (const i of members) {
         if (P.sex[i] !== 0 || P.pregnant[i] > 0 || P.age[i] < 17 || P.age[i] > 42 || P.spouse[i] < 0) continue;
         if (P.children[i] >= 6) continue;
-        if (rng.chance(s.blessed > tick ? 0.08 : 0.05)) P.pregnant[i] = 300;
+        if (rng.chance(s.blessed > tick ? 0.11 : 0.05)) P.pregnant[i] = 300;
       }
     }
     // Disease burden (drives medicine research and the chronicle).
@@ -1414,8 +1428,11 @@ export class Civ {
     if (unfinished >= 1 + Math.floor(s.pop / 25)) return;
     const count = (type: BType) => blds.filter((b) => b.type === type).length;
     const knows = (id: string) => id === '' || t.known[TECH_INDEX.get(id)!] === 1;
+    // Metal only comes from mines: don't start what can never be finished.
+    const hasMine = blds.some((b) => b.type === BType.Mine && b.complete);
     const can = (type: BType) => {
       const d = BUILDINGS[type];
+      if (d.cost[Res.Metal] > 0 && !hasMine && s.stock[Res.Metal] < d.cost[Res.Metal]) return false;
       return knows(d.tech) && s.tier >= d.tier && count(type) < d.max;
     };
     let pick: BType | -1 = -1;

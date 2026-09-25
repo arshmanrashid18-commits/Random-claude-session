@@ -356,6 +356,13 @@ export class PostChain {
     this.ldrRT = rt(1, 1, false);
   }
 
+  /** Depth of field focus distance (world units) and strength. */
+  setFocus(distance: number, aperture = 1): void {
+    const u = this.dofMat.uniforms;
+    u.uFocus.value += (distance - u.uFocus.value) * 0.15;
+    u.uAperture.value = aperture;
+  }
+
   resize(w: number, h: number): void {
     this.w = w;
     this.h = h;

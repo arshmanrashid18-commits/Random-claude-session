@@ -35,7 +35,7 @@ export interface RiverPath {
 }
 
 /** Binary min-heap of (key, value) pairs using typed arrays. */
-class MinHeap {
+export class MinHeap {
   private keys: Float64Array;
   private vals: Int32Array;
   size = 0;

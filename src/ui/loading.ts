@@ -10,6 +10,7 @@ const STAGE_WEIGHTS: Record<string, [number, number]> = {
   'Carving rivers': [0.78, 0.86],
   'Seeding life': [0.86, 0.92],
   'Lighting the sky': [0.95, 1.0],
+  'Awakening the world': [0.0, 0.95],
 };
 
 const FLAVOR = [
