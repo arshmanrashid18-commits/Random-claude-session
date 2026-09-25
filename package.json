@@ -1,0 +1,31 @@
+{
+  "name": "genesis",
+  "private": true,
+  "version": "0.1.0",
+  "description": "GENESIS — a procedural 3D god-game on a living planet",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:soak": "vitest run --config vitest.soak.config.ts",
+    "shots": "node scripts/shots.mjs",
+    "monkey": "node scripts/monkey.mjs"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/pngjs": "^6.0.5",
+    "@types/three": "^0.186.0",
+    "playwright": "1.56.1",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
+  }
+}

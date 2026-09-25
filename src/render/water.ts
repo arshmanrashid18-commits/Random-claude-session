@@ -1,0 +1,232 @@
+/**
+ * Inland water: lakes (flat surfaces at their spill level) and rivers
+ * (ribbons following the simulated drainage network, flowing downstream).
+ */
+import * as THREE from 'three';
+import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_HEIGHT, GLSL_NOISE, GLSL_REGION } from './glsl/common';
+import { GLSL_SKYLIGHT } from './glsl/surface';
+import { OCEAN_SHADING, type SharedUniforms } from './planet/terrain';
+import { faceABToDir } from '../sim/planet/cubesphere';
+import { PLANET_RADIUS } from '../sim/constants';
+import type { StaticWorldData } from '../worker/protocol';
+import type { PlanetData } from './planet/planetData';
+
+const LAKE_VS = /* glsl */ `
+in float aLevel;
+out vec3 vWorld;
+out float vLevel;
+out float vDist;
+uniform vec3 uCamPos;
+void main() {
+  vWorld = position;
+  vLevel = aLevel;
+  vDist = distance(position, uCamPos);
+  gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
+}
+`;
+
+const WATER_FS_HEAD = /* glsl */ `
+precision highp float;
+layout(location = 0) out highp vec4 outColor;
+precision highp sampler2DArray;
+${GLSL_CONSTANTS}
+${GLSL_CUBESPHERE}
+${GLSL_HEIGHT}
+${GLSL_REGION}
+${GLSL_NOISE}
+${GLSL_ATMOSPHERE}
+${GLSL_SKYLIGHT}
+uniform vec3 uCamPos;
+uniform float uTime;
+${OCEAN_SHADING}
+`;
+
+const LAKE_FS = /* glsl */ `
+${WATER_FS_HEAD}
+in vec3 vWorld;
+in float vLevel;
+in float vDist;
+void main() {
+  vec3 dir = normalize(vWorld);
+  float ground = heightAtDir(dir);
+  float depth = vLevel - ground;
+  if (depth < -0.02) discard;
+  vec4 c = shadeWater(vWorld, dir, max(depth, 0.0) * 1.6, vDist, 1.0);
+  outColor = c;
+}
+`;
+
+const RIVER_VS = /* glsl */ `
+in vec2 aRiver; // x: across (-1..1), y: distance along (world units)
+in float aWidth;
+out vec3 vWorld;
+out vec2 vRiver;
+out float vWidth;
+out float vDist;
+uniform vec3 uCamPos;
+void main() {
+  vWorld = position;
+  vRiver = aRiver;
+  vWidth = aWidth;
+  vDist = distance(position, uCamPos);
+  gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
+}
+`;
+
+const RIVER_FS = /* glsl */ `
+${WATER_FS_HEAD}
+in vec3 vWorld;
+in vec2 vRiver;
+in float vWidth;
+in float vDist;
+void main() {
+  vec3 dir = normalize(vWorld);
+  float across = abs(vRiver.x);
+  float depth = (1.0 - across * across) * (0.6 + vWidth * 0.25);
+  vec4 c = shadeWater(vWorld, dir, depth, vDist, 1.0);
+  // Flow streaks moving downstream.
+  float streak = snoise(vec3(vRiver.y * 0.35 - uTime * 1.4, vRiver.x * 2.5, 0.0));
+  streak = smoothstep(0.55, 0.9, streak) * (1.0 - smoothstep(150.0, 600.0, vDist));
+  vec3 L = uSunDir;
+  float lit = max(dot(dir, L), 0.0) * 0.5 + 0.05;
+  c.rgb += vec3(0.8, 0.9, 1.0) * streak * 0.25 * lit * uSunIntensity * 0.1;
+  float edge = 1.0 - smoothstep(0.75, 1.0, across);
+  c *= edge;
+  outColor = c;
+}
+`;
+
+export class WaterBodies {
+  readonly group = new THREE.Group();
+  private lakeMat: THREE.ShaderMaterial;
+  private riverMat: THREE.ShaderMaterial;
+  private lakeMesh: THREE.Mesh | null = null;
+  private riverMesh: THREE.Mesh | null = null;
+
+  constructor(shared: SharedUniforms, world: StaticWorldData, data: PlanetData) {
+    const common = {
+      glslVersion: THREE.GLSL3,
+      transparent: true,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    } as const;
+    this.lakeMat = new THREE.ShaderMaterial({ ...common, vertexShader: LAKE_VS, fragmentShader: LAKE_FS, uniforms: { ...shared } });
+    this.riverMat = new THREE.ShaderMaterial({
+      ...common,
+      vertexShader: RIVER_VS,
+      fragmentShader: RIVER_FS,
+      uniforms: { ...shared },
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    this.rebuild(world, data);
+  }
+
+  rebuild(world: StaticWorldData, data: PlanetData): void {
+    if (this.lakeMesh) { this.group.remove(this.lakeMesh); this.lakeMesh.geometry.dispose(); }
+    if (this.riverMesh) { this.group.remove(this.riverMesh); this.riverMesh.geometry.dispose(); }
+    this.lakeMesh = this.buildLakes(world);
+    this.riverMesh = this.buildRivers(world, data);
+    if (this.lakeMesh) this.group.add(this.lakeMesh);
+    if (this.riverMesh) this.group.add(this.riverMesh);
+  }
+
+  private buildLakes(world: StaticWorldData): THREE.Mesh | null {
+    const { cells, levels } = world.lakes;
+    if (cells.length === 0) return null;
+    const n = world.hydroN;
+    const fs = n * n;
+    const pos = new Float32Array(cells.length * 4 * 3);
+    const lvl = new Float32Array(cells.length * 4);
+    const idx: number[] = [];
+    const d = [0, 0, 0];
+    const half = (1 / n) * 1.45;
+    for (let k = 0; k < cells.length; k++) {
+      const c = cells[k];
+      const f = Math.floor(c / fs);
+      const rem = c - f * fs;
+      const j = Math.floor(rem / n), i = rem - j * n;
+      const ca = -1 + (2 * i + 1) / n, cb = -1 + (2 * j + 1) / n;
+      const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+      const r = PLANET_RADIUS + levels[k];
+      for (let q = 0; q < 4; q++) {
+        faceABToDir(f, ca + corners[q][0] * half, cb + corners[q][1] * half, d, 0);
+        pos[(k * 4 + q) * 3] = d[0] * r;
+        pos[(k * 4 + q) * 3 + 1] = d[1] * r;
+        pos[(k * 4 + q) * 3 + 2] = d[2] * r;
+        lvl[k * 4 + q] = levels[k];
+      }
+      const b = k * 4;
+      idx.push(b, b + 1, b + 3, b, b + 3, b + 2);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aLevel', new THREE.BufferAttribute(lvl, 1));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, this.lakeMat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 11;
+    return mesh;
+  }
+
+  private buildRivers(world: StaticWorldData, data: PlanetData): THREE.Mesh | null {
+    const { points, width, level, offsets } = world.rivers;
+    const nr = offsets.length - 1;
+    if (nr <= 0) return null;
+    const pos: number[] = [];
+    const riv: number[] = [];
+    const wid: number[] = [];
+    const idx: number[] = [];
+    for (let r = 0; r < nr; r++) {
+      const s = offsets[r], e = offsets[r + 1];
+      if (e - s < 2) continue;
+      let along = 0;
+      const base = pos.length / 3;
+      for (let k = s; k < e; k++) {
+        const x = points[k * 3], y = points[k * 3 + 1], z = points[k * 3 + 2];
+        const kp = Math.max(s, k - 1), kn = Math.min(e - 1, k + 1);
+        let tx = points[kn * 3] - points[kp * 3], ty = points[kn * 3 + 1] - points[kp * 3 + 1], tz = points[kn * 3 + 2] - points[kp * 3 + 2];
+        const tl = Math.hypot(tx, ty, tz) || 1;
+        tx /= tl; ty /= tl; tz /= tl;
+        // side = p × t
+        let sx = y * tz - z * ty, sy = z * tx - x * tz, sz = x * ty - y * tx;
+        const sl = Math.hypot(sx, sy, sz) || 1;
+        sx /= sl; sy /= sl; sz /= sl;
+        if (k > s) {
+          const px = points[(k - 1) * 3], py = points[(k - 1) * 3 + 1], pz = points[(k - 1) * 3 + 2];
+          along += Math.hypot(x - px, y - py, z - pz) * PLANET_RADIUS;
+        }
+        const w = width[k] * 0.5 * 1.25 / PLANET_RADIUS;
+        // Keep water at least slightly above the local ground.
+        const ground = data.heightAt(x, y, z);
+        const lv = Math.max(level[k], ground + 0.12);
+        const rr = PLANET_RADIUS + lv;
+        for (const side of [-1, 1]) {
+          let vx = x + sx * w * side, vy = y + sy * w * side, vz = z + sz * w * side;
+          const vl = Math.hypot(vx, vy, vz);
+          vx /= vl; vy /= vl; vz /= vl;
+          pos.push(vx * rr, vy * rr, vz * rr);
+          riv.push(side, along);
+          wid.push(width[k]);
+        }
+        if (k < e - 1) {
+          const a = base + (k - s) * 2;
+          idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+        }
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('aRiver', new THREE.Float32BufferAttribute(riv, 2));
+    geo.setAttribute('aWidth', new THREE.Float32BufferAttribute(wid, 1));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, this.riverMat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 12;
+    return mesh;
+  }
+}
