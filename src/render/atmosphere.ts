@@ -236,6 +236,12 @@ void main() {
       if (hitsPlanet) background = vec3(0.0);
       else background += sunDiscRadiance(rd);
     }
+    // Starlight is lost in a bright sky: attenuate by the in-scattered luminance.
+    if (sky) {
+      float skyLum = dot(inscatter * uSunIntensity, vec3(0.2126, 0.7152, 0.0722));
+      vec3 sun = tg.x < 1e8 && tg.y > 0.0 ? vec3(0.0) : sunDiscRadiance(rd);
+      background = (background - sun) / (1.0 + skyLum * 60.0) + sun;
+    }
     vec3 behind = background * Tfull + aur;
     if (cloudDepth > 0.0) {
       // Front-to-back: air in front of the cloud, the cloud itself, then

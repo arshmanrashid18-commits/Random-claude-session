@@ -132,9 +132,9 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
         const c = climateAt(r, d);
         const v = vegAt(r, d);
         // An open meadow with a few trees around, not a dense forest.
-        return v.grass * 4 - Math.abs(v.trees - 0.35) * 3 + relief(r, d, 0.03) * 0.15 - Math.abs(c.temp - 17) * 0.15;
+        return v.grass * 4 - Math.abs(v.trees - 0.35) * 3 - relief(r, d, 0.008) * 0.6 + relief(r, d, 0.04) * 0.1 - Math.abs(c.temp - 17) * 0.15;
       });
-      return { focus: f, distance: 24, heading: 0.9, tiltOffset: 0.05, localTime: 0.36 };
+      return { focus: f, distance: 30, heading: 0.9, tiltOffset: -0.12, localTime: 0.36 };
     }
     case 'night': {
       const f = findBest(r, (d, h) => (h > 0 ? 1 : 0) - Math.abs(d.y) * 0.5 + relief(r, d, 0.1) * 0.01, 1500);
@@ -149,7 +149,7 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
       return { focus: f, distance: 1100, heading: 0.2, tiltOffset: 0.1, localTime: 0.45 };
     }
     case 'wildlife': {
-      const f = r.creatures.densestSpot() ?? findBest(r, (d, h) => (h > 2 ? 1 : 0), 400);
+      const f = r.creatures.densestSpot() ?? findBest(r, (_d, h) => (h > 2 ? 1 : 0), 400);
       return { focus: f, distance: 34, heading: 1.8, tiltOffset: 0.0, localTime: 0.4 };
     }
     case 'village':

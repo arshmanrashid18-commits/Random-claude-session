@@ -69,7 +69,7 @@ export class Animals {
   uid: Uint32Array;
   generation: Uint16Array;
   nextUid = 1;
-  private free: number[] = [];
+  free: number[] = [];
 
   defs: SpeciesDef[];
   /** Founder gene means per species (speed,size,fert,cold,heat). */

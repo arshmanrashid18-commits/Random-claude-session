@@ -14,6 +14,7 @@ import { Plants } from './ecology/plants';
 import { Fires } from './ecology/fire';
 import { Animals } from './ecology/animals';
 import { EventLog } from './events';
+import { Civ } from './civ/civ';
 import { TICKS_PER_YEAR } from './constants';
 
 export interface WorldOptions {
@@ -33,6 +34,7 @@ export class World {
   plants: Plants;
   fires: Fires;
   animals: Animals;
+  civ: Civ;
   events = new EventLog();
 
   constructor(opts: WorldOptions, progress: ProgressFn = () => {}) {
@@ -55,6 +57,9 @@ export class World {
     this.animals = new Animals(p.region.count, p.region);
     this.animals.computeWater(p.region, p.terrain);
     this.animals.populate(this.rng, p.climate, p.terrain);
+    progress('Seeding life', 0.85);
+    this.civ = new Civ(p);
+    this.civ.seedTribes(this.rng, 0, p, this.animals, this.geo, this.events);
     progress('Seeding life', 1);
   }
 
@@ -75,6 +80,7 @@ export class World {
     this.fires.tick(t, this.rng, cl, this.plants, p.terrain, this.events, this.geo);
     this.plants.tick(cl, p.terrain);
     this.animals.tick(t, this.rng, cl, this.plants, p.terrain, this.events, this.geo, this.fires);
+    this.civ.tick(t, this.rng, p, this.plants, this.animals, this.fires, this.events, this.geo);
     if (t % TICKS_PER_YEAR === TICKS_PER_YEAR - 1) {
       p.refreshFlow();
       this.animals.computeWater(p.region, p.terrain);
@@ -104,6 +110,10 @@ export class World {
     mix(this.fires.intensity);
     mix(a.x); mix(a.y); mix(a.z); mix(a.alive); mix(a.hunger); mix(a.health);
     mix(this.weather.storms.flatMap((s) => [s.x, s.y, s.z, s.intensity]));
+    const P = this.civ.people;
+    mix(P.x); mix(P.y); mix(P.z); mix(P.alive); mix(P.hunger); mix(P.job);
+    mix(this.civ.settlements.flatMap((s) => s.stock));
+    mix(this.civ.buildings.map((b) => b.progress));
     return h >>> 0;
   }
 }

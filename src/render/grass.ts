@@ -15,9 +15,9 @@ import { DEPTH_FS, type SharedUniforms } from './planet/terrain';
 import { dirToFaceAB } from '../sim/planet/cubesphere';
 import { PLANET_RADIUS } from '../sim/constants';
 
-const BLADES = 4;
+const BLADES = 6;
 /** Lattice spacing in heightmap-param units: 1/6 of a heightmap cell. */
-const SUBDIV = 6;
+const SUBDIV = 9;
 
 function clumpGeometry(): THREE.BufferGeometry {
   const pos: number[] = [];
@@ -92,7 +92,7 @@ void main() {
   vec3 N = normalize(texture(uNormalTex, vec3(nuv, float(nf))).xyz);
   float slope = 1.0 - dot(N, dir);
   float patchy = 0.55 + 0.45 * snoise(dir * 900.0);
-  float density = veg.r * 1.4 * patchy * (1.0 - smoothstep(0.28, 0.42, slope)) * (1.0 - smoothstep(0.2, 0.5, clim.b)) * smoothstep(0.35, 0.9, h);
+  float density = min(1.0, veg.r * 2.2 + veg.g * 0.5) * patchy * (1.0 - smoothstep(0.28, 0.42, slope)) * (1.0 - smoothstep(0.2, 0.5, clim.b)) * smoothstep(0.35, 0.9, h);
   float fade = 1.0 - smoothstep(uGrassRadius * 0.6, uGrassRadius, dist);
   float alive = step(hs.z, density) * fade;
   float scale = alive * (0.55 + hs.x * 0.6) * mix(0.6, 1.2, veg.r);
