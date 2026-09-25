@@ -179,10 +179,25 @@ export class CellGrid {
   /** Approximate arc length between neighbouring centres on a unit sphere. */
   readonly spacing: number;
 
+  /** Cell boundaries in gnomonic coordinate u = tan(a·π/4) (n+1 values). */
+  private bounds: Float64Array;
+  /** Coarse u → cell index guess (8 buckets per cell). */
+  private lut: Int32Array;
+  private lutScale: number;
+
   constructor(n: number) {
     this.n = n;
     this.faceSize = n * n;
     this.count = 6 * n * n;
+    this.bounds = new Float64Array(n + 1);
+    for (let k = 0; k <= n; k++) this.bounds[k] = Math.tan((-1 + (2 * k) / n) * QPI);
+    const L = n * 8;
+    this.lut = new Int32Array(L + 1);
+    this.lutScale = L / 2;
+    for (let q = 0; q <= L; q++) {
+      const u = -1 + (2 * q) / L;
+      this.lut[q] = Math.min(n - 1, Math.max(0, Math.floor((Math.atan(u) * INV_QPI + 1) * 0.5 * n)));
+    }
     this.centers = new Float32Array(this.count * 3);
     this.lat = new Float32Array(this.count);
     this.area = new Float32Array(this.count);
@@ -232,14 +247,28 @@ export class CellGrid {
     }
   }
 
+  /** Cell containing a direction. Hot path: no trigonometry (boundary table). */
   cellOf(x: number, y: number, z: number): number {
-    const f = dirToFaceAB(x, y, z);
-    const n = this.n;
-    let i = Math.floor((f.a + 1) * 0.5 * n);
-    let j = Math.floor((f.b + 1) * 0.5 * n);
-    if (i < 0) i = 0; else if (i >= n) i = n - 1;
-    if (j < 0) j = 0; else if (j >= n) j = n - 1;
-    return f.face * this.faceSize + j * n + i;
+    const ax = x < 0 ? -x : x, ay = y < 0 ? -y : y, az = z < 0 ? -z : z;
+    let face: number, u: number, v: number;
+    if (ax >= ay && ax >= az) {
+      if (x > 0) { face = 0; u = -z / x; v = y / x; } else { face = 1; u = z / ax; v = y / ax; }
+    } else if (ay >= az) {
+      if (y > 0) { face = 2; u = x / y; v = -z / y; } else { face = 3; u = x / ay; v = z / ay; }
+    } else {
+      if (z > 0) { face = 4; u = x / z; v = y / z; } else { face = 5; u = -x / az; v = y / az; }
+    }
+    return face * this.faceSize + this.index1(v) * this.n + this.index1(u);
+  }
+
+  private index1(u: number): number {
+    const n = this.n, B = this.bounds;
+    let q = Math.floor((u + 1) * this.lutScale);
+    if (q < 0) q = 0; else if (q >= this.lut.length) q = this.lut.length - 1;
+    let i = this.lut[q];
+    while (i < n - 1 && u >= B[i + 1]) i++;
+    while (i > 0 && u < B[i]) i--;
+    return i;
   }
 
   /**

@@ -140,6 +140,7 @@ export class Society {
   private daily(civ: Civ, tick: number, rng: Rng, planet: Planet, events: EventLog, geo: Geography): void {
     const T = civ.tribes;
     const n = T.length;
+    for (const w of this.wars) if (w.end < 0) { T[w.a].stats.warDays++; T[w.b].stats.warDays++; }
     // Territory friction: count adjacent cells owned by different tribes.
     const friction: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
     const g = planet.region;

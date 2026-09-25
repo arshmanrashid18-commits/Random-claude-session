@@ -53,6 +53,7 @@ export class GameRenderer {
   precip = new Precipitation();
   /** Divine effects from the latest frame (for VFX). */
   effects: EffectData[] = [];
+  private rainbow = 0;
   /** Current simulation speed multiplier (VFX timing). */
   simSpeed = 1;
   private world: StaticWorldData | null = null;
@@ -301,7 +302,7 @@ export class GameRenderer {
     this.lastRenderTick = this.renderTick;
     this.creatures.update(cam, this.renderTick, dTick, this.data, dt);
     this.people.update(cam, this.renderTick, dTick, this.data, dt, this.shared.uSunDir.value as THREE.Vector3);
-    this.vfx.update({ camera: cam, data: this.data, renderTick: this.renderTick, dt, effects: this.effects, speed: this.simSpeed });
+    this.vfx.update({ camera: cam, data: this.data, renderTick: this.renderTick, dt, effects: this.effects, speed: this.simSpeed, sunDir: this.shared.uSunDir.value as THREE.Vector3, civ: this.buildings.latest });
     let extraRain = 0;
     for (const e of this.effects) {
       if (e.power !== 'rain' || this.renderTick > e.end) continue;
@@ -310,6 +311,15 @@ export class GameRenderer {
     }
     this.precip.update(cam, this.data, dt, this.shared.uSunDir.value as THREE.Vector3, this.shared.uSunIntensity.value as number, extraRain);
     (this.shared.uTsunamiAmp.value as number[]).splice(0, 4, ...this.vfx.tsunamiAmp);
+    // A rainbow when it rains near a low camera with the sun low behind it.
+    {
+      const up = cam.position.clone().normalize();
+      const sunEl = up.dot(this.shared.uSunDir.value as THREE.Vector3);
+      const alt = this.camera.altitude;
+      const want = this.precip.intensity > 0.12 && sunEl > 0.05 && sunEl < 0.6 && alt < 350 ? Math.min(1, this.precip.intensity * 2) * (1 - this.precip.snow) : 0;
+      this.rainbow += (want - this.rainbow) * Math.min(1, dt * 0.5);
+      this.atmosphere.material.uniforms.uRainbow.value = this.rainbow;
+    }
     const fin = this.post.final.uniforms;
     fin.uCA.value = Math.min(1, this.vfx.aberration);
     fin.uFade.value = Math.min(0.85, this.vfx.flash * 0.8);

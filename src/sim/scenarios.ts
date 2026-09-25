@@ -227,7 +227,7 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'Green the Desert',
     tagline: 'Make the wasteland bloom.',
     brief: 'Dune is dying of thirst. Shape the land, call the rain, paint the climate — turn the sand to grass and forest.',
-    objective: 'Turn a fifth more of the land green (grass, shrubs, forests) within 20 years.',
+    objective: 'Turn a quarter more of the land green (grass, shrubs, forests) within 20 years.',
     difficulty: 2,
     seed: 4040,
     preset: 'arid',
@@ -235,8 +235,8 @@ export const SCENARIOS: ScenarioDef[] = [
     setup(w, s) { w.civ.devotion = 600; s.memo.cover0 = greenCover(w); },
     check(w, s) {
       const cover = greenCover(w);
-      const target = s.memo.cover0 + 0.2;
-      s.progress = Math.min(1, Math.max(0, (cover - s.memo.cover0) / 0.2));
+      const target = s.memo.cover0 + 0.25;
+      s.progress = Math.min(1, Math.max(0, (cover - s.memo.cover0) / 0.25));
       s.detail = `green land ${(cover * 100).toFixed(0)}% (goal ${(target * 100).toFixed(0)}%) · ${Math.max(0, 20 - years(w, s)).toFixed(1)} years left`;
       if (cover >= target) { s.outcome = 'Where there was sand, there are meadows. The desert remembers it was once a garden.'; return 'won'; }
       if (years(w, s) >= 20) { s.outcome = 'The dunes still march. The garden will have to wait.'; return 'lost'; }

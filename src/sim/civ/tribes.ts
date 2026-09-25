@@ -100,7 +100,7 @@ function hsvToHex(h: number, s: number, v: number): number {
   return (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
 }
 
-export function createTribe(id: number, rng: Rng, tick: number, hueSlot: number, climateHint: { temp: number; coastal: boolean }): Tribe {
+export function createTribe(id: number, rng: Rng, tick: number, hueSlot: number, climateHint: { temp: number; coastal: boolean; rain?: number }): Tribe {
   const lang = new Language(rng.next());
   const name = lang.nameFor(id * 7 + 1, 'tribe');
   const hue = (hueSlot * 0.61803398875 + rng.range(-0.04, 0.04) + 1) % 1;
@@ -159,12 +159,27 @@ export function createTribe(id: number, rng: Rng, tick: number, hueSlot: number,
     population: 0,
     soldiers: 0,
     stats: { births: 0, deaths: 0, famineDays: 0, warDays: 0, plagueDays: 0, kills: 0 },
-    style: rng.int(0, 4),
+    style: architectureFor(climateHint, rng),
     needs: new Array(FIELD_COUNT).fill(0),
     inspired: 0,
   };
   void CONCEPTS;
   return tribe;
+}
+
+/**
+ * Roof style follows the land a culture grew up in: steep pitched roofs where
+ * snow falls, flat roofs where rain is rare, round thatch in the wet tropics,
+ * tiered roofs in temperate monsoon lands — with some cultural freedom.
+ */
+function architectureFor(h: { temp: number; rain?: number }, rng: Rng): number {
+  const rain = h.rain ?? 1.2;
+  if (rng.chance(0.2)) return rng.int(0, 4);
+  if (h.temp < 6) return 0;
+  if (rain < 0.7) return 1;
+  if (h.temp > 21 && rain > 1.8) return 2;
+  if (rain > 1.4) return 3;
+  return 0;
 }
 
 function capitalizeWord(w: string): string {

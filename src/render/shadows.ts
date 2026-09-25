@@ -39,6 +39,7 @@ export class ShadowSystem {
   readonly matrix = new THREE.Matrix4();
   size: number;
   enabled = true;
+  private initialized = false;
   /** Mesh → depth-only material. */
   private casters = new Map<THREE.Mesh, THREE.Material>();
   private swap = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
@@ -58,6 +59,7 @@ export class ShadowSystem {
     if (size === this.size) return;
     this.size = size;
     this.rt.setSize(size, size);
+    this.initialized = false;
   }
 
   register(mesh: THREE.Mesh, depthMat: THREE.Material): void {
@@ -74,6 +76,15 @@ export class ShadowSystem {
     const sunUp = sunDir.dot(up);
     const on = this.enabled && sunUp > -0.05;
     uniforms.uShadowOn.value = on ? 1 : 0;
+    // The depth texture must exist even when unused: shaders declare a
+    // sampler2DShadow, and an uninitialised texture binds as the wrong type.
+    if (!this.initialized) {
+      const prev = renderer.getRenderTarget();
+      renderer.setRenderTarget(this.rt);
+      renderer.clear(true, true, false);
+      renderer.setRenderTarget(prev);
+      this.initialized = true;
+    }
     if (!on) return;
     const cam = this.camera;
     const center = up.clone().multiplyScalar(PLANET_RADIUS + focusHeight);

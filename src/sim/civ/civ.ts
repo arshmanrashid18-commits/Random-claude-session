@@ -128,7 +128,9 @@ export class Civ {
   roads: RoadSeg[] = [];
   people = new People();
   ledger: Ledger = { created: [0, 0, 0, 0], consumed: [0, 0, 0, 0], used: [0, 0, 0, 0], destroyed: [0, 0, 0, 0] };
+  /** Recent divine acts as remembered (bounded; indices are absolute via godMemoryBase). */
   godMemories: GodMemory[] = [];
+  godMemoryBase = 0;
   paths: Pathfinder;
   hash: SpatialHash;
   /** Region cell → owning settlement id (-1 none). */
@@ -213,7 +215,7 @@ export class Civ {
       if (ok) chosen.push(c);
     }
     chosen.forEach((c, k) => {
-      const t = createTribe(this.tribes.length, rng, tick, k, { temp: planet.climate.meanTemp[c], coastal: planet.terrain.coastal[c] === 1 });
+      const t = createTribe(this.tribes.length, rng, tick, k, { temp: planet.climate.meanTemp[c], coastal: planet.terrain.coastal[c] === 1, rain: planet.climate.meanRain[c] });
       this.tribes.push(t);
       const s = this.foundSettlement(t.id, c, planet, tick, events, geo, true);
       // A band of families.
@@ -1261,6 +1263,12 @@ export class Civ {
       b.ruin = true;
       this.version++;
     }
+    // Walled once most of the ring stands.
+    {
+      let wallN = 0;
+      for (const id of s.buildings) { const b = this.buildings[id]; if (b.type === BType.Wall && b.complete && !b.ruin) wallN++; }
+      s.walls = wallN >= Math.max(8, Math.round((2 * Math.PI * s.radius * 0.92) / 6.2) * 0.6);
+    }
     // Cleared, trampled, watched ground around the settlement resists fire.
     if (fireRef) {
       const fb = Math.min(0.92, 0.45 + s.pop / 90 + s.tier * 0.1);
@@ -1349,7 +1357,14 @@ export class Civ {
     }
     // Happiness and faith averages.
     let hap = 0, faith = 0;
-    for (const i of members) { hap += P.happiness[i]; faith += P.love[i] + P.fear[i] * 0.7; P.happiness[i] += (0.55 - P.happiness[i]) * 0.02; }
+    for (const i of members) {
+      hap += P.happiness[i];
+      faith += P.love[i] + P.fear[i] * 0.7;
+      P.happiness[i] += (0.55 - P.happiness[i]) * 0.02;
+      // Without new signs, awe fades: fear quickly, love slowly.
+      P.fear[i] *= 0.998;
+      P.love[i] *= 0.9996;
+    }
     s.happiness = hap / members.length;
     s.faith = faith / members.length;
     // Matchmaking: single adults of the settlement pair up over time.
@@ -1453,6 +1468,7 @@ export class Civ {
     else if (can(BType.Hall) && s.id === t.capital) pick = BType.Hall;
     else if (can(BType.Observatory)) pick = BType.Observatory;
     else if (can(BType.Tower) && count(BType.Tower) < 4 && (t.stats.warDays > 0 || t.traits.aggression > 0.6)) pick = BType.Tower;
+    else if (can(BType.Wall) && s.tier >= 2 && (t.stats.warDays > 0 || t.traits.aggression > 0.55 || this.society.enemies(t.id).length > 0) && this.placeWall(s, planet, tick)) return;
     else if (can(BType.Monument) && s.id === t.capital) pick = BType.Monument;
     else if (s.housing < s.pop + 12 && can(BType.House)) pick = BType.House;
     else if (can(BType.Farm) && count(BType.Farm) < Math.ceil(s.pop / 7)) pick = BType.Farm;
@@ -1461,6 +1477,44 @@ export class Civ {
     const site = this.findSite(type, s, planet, rng);
     if (!site) return;
     this.addBuilding(type, s, site[0], site[1], site[2], site[3] + Math.PI / 2, tick);
+  }
+
+  /** Next segment of a ring wall around the settlement. Returns true if one was started. */
+  private placeWall(s: Settlement, planet: Planet, tick: number): boolean {
+    const R = s.radius * 0.92;
+    const N = Math.max(12, Math.round((2 * Math.PI * R) / 6.2));
+    const taken = new Set<number>();
+    // Local frame around the settlement for angle bookkeeping.
+    let ex = s.z, ez = -s.x;
+    const el = Math.hypot(ex, ez) || 1;
+    ex /= el; ez /= el;
+    const nx = s.y * ez, ny = s.z * ex - s.x * ez, nz = -s.y * ex;
+    for (const id of s.buildings) {
+      const b = this.buildings[id];
+      if (b.type !== BType.Wall || b.ruin) continue;
+      const a = Math.atan2(b.x * nx + b.y * ny + b.z * nz, b.x * ex + b.z * ez);
+      taken.add(((Math.round((a / (Math.PI * 2)) * N) % N) + N) % N);
+    }
+    for (let k = 0; k < N; k++) {
+      if (taken.has(k)) continue;
+      const a = (k / N) * Math.PI * 2;
+      offsetDir(s.x, s.y, s.z, Math.cos(a) * R * INV_R, Math.sin(a) * R * INV_R, this.scratch);
+      const [x, y, z] = this.scratch;
+      const h = planet.heightAt(x, y, z);
+      if (h < 0.4) { taken.add(k); continue; }
+      // Leave room for other buildings (gates where houses already stand).
+      let blocked = false;
+      for (const id of s.buildings) {
+        const o = this.buildings[id];
+        if (o.ruin || o.type === BType.Wall || o.type === BType.Farm) continue;
+        const d = Math.acos(Math.min(1, o.x * x + o.y * y + o.z * z)) * PLANET_RADIUS;
+        if (d < BUILDINGS[o.type].radius + 3.4) { blocked = true; break; }
+      }
+      if (blocked) continue;
+      this.addBuilding(BType.Wall, s, x, y, z, a + Math.PI / 2, tick);
+      return true;
+    }
+    return false;
   }
 
   private colonise(s: Settlement, members: number[], tick: number, rng: Rng, planet: Planet, animals: Animals, events: EventLog, geo: Geography): void {
@@ -1755,7 +1809,7 @@ export class Civ {
     const cosR = Math.cos(radius * INV_R);
     let n = 0;
     const settlementsHit = new Set<number>();
-    const mem = this.godMemories.length;
+    const mem = this.godMemoryBase + this.godMemories.length;
     for (let i = 0; i < P.count; i++) {
       if (!P.alive[i]) continue;
       const dot = P.x[i] * x + P.y[i] * y + P.z[i] * z;
@@ -1773,6 +1827,7 @@ export class Civ {
       const settlementName = settlementsHit.size ? this.settlements[[...settlementsHit][0]].name : '';
       const m: GodMemory = { kind, tick, place, deaths, settlement: settlementName };
       this.godMemories.push(m);
+      if (this.godMemories.length > 3000) { this.godMemories.splice(0, 1000); this.godMemoryBase += 1000; }
       const tribesHit = new Set<number>();
       for (const sid of settlementsHit) tribesHit.add(this.settlements[sid].tribe);
       for (const tid of tribesHit) {
@@ -1935,6 +1990,11 @@ export class Civ {
       }
     }
     this.version++;
+  }
+
+  /** The memory a person refers to (undefined if forgotten long ago). */
+  memoryAt(idx: number): GodMemory | undefined {
+    return idx >= this.godMemoryBase ? this.godMemories[idx - this.godMemoryBase] : undefined;
   }
 
 }

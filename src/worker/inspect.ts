@@ -40,8 +40,8 @@ export function inspect(w: World, target: InspectTarget): InspectInfo | null {
       const t = P.tribe[i] >= 0 ? civ.tribes[P.tribe[i]] : null;
       const s = P.settle[i] >= 0 ? civ.settlements[P.settle[i]] : null;
       const sp = P.slot(P.spouse[i]);
-      const worst = P.worstMem[i] >= 0 ? civ.godMemories[P.worstMem[i]] : undefined;
-      const best = P.bestMem[i] >= 0 ? civ.godMemories[P.bestMem[i]] : undefined;
+      const worst = P.worstMem[i] >= 0 ? civ.memoryAt(P.worstMem[i]) : undefined;
+      const best = P.bestMem[i] >= 0 ? civ.memoryAt(P.bestMem[i]) : undefined;
       const mem = P.love[i] >= P.fear[i] ? memoryText(best, yearNow) || memoryText(worst, yearNow) : memoryText(worst, yearNow) || memoryText(best, yearNow);
       return {
         kind: 'person', uid: target.uid, name: civ.personName(i), age: P.age[i], sex: P.sex[i],

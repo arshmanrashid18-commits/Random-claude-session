@@ -22,6 +22,7 @@ import { scenarioDef } from './sim/scenarios';
 import { saveSettings } from './ui/panels';
 import { TICKS_PER_YEAR } from './sim/constants';
 import { AudioEngine } from './audio/audio';
+import { detectQuality } from './render/quality';
 import { dirToFaceAB } from './sim/planet/cubesphere';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
@@ -34,6 +35,11 @@ const resuming = params.get('resume') === '1';
 
 const renderer = new GameRenderer(canvas);
 if (params.get('quality')) renderer.setQuality(params.get('quality') as 'low' | 'medium' | 'high' | 'ultra');
+else {
+  // Settings choice, or a guess from the GPU (the governor refines it).
+  const q = (() => { try { return JSON.parse(localStorage.getItem('genesis.settings') ?? '{}').quality as string | undefined; } catch { return undefined; } })();
+  renderer.setQuality(q && q !== 'auto' ? (q as 'low' | 'medium' | 'high' | 'ultra') : detectQuality(renderer.renderer.getContext()));
+}
 const sim = new SimClient();
 const loading = new LoadingScreen(uiRoot);
 const game = new Game(renderer, sim, uiRoot);

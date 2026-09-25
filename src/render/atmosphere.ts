@@ -85,6 +85,27 @@ uniform float uExposureHint;
 in vec2 vUv;
 
 uniform float uEclipse;
+uniform float uRainbow;
+// Primary (42°) and faint secondary (51°) bows around the antisolar point.
+vec3 rainbow(vec3 rd) {
+  float a = acos(clamp(dot(rd, -uSunDir), -1.0, 1.0));
+  vec3 col = vec3(0.0);
+  float t1 = (a - 0.712) / (0.742 - 0.712);
+  if (t1 > -0.3 && t1 < 1.3) {
+    float h = clamp(t1, 0.0, 1.0);
+    vec3 spec = clamp(abs(fract(vec3(0.8 - h * 0.8) + vec3(0.0, 0.667, 0.333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+    col += spec * smoothstep(-0.3, 0.2, t1) * (1.0 - smoothstep(0.8, 1.3, t1));
+  }
+  float t2 = (a - 0.875) / (0.915 - 0.875);
+  if (t2 > -0.3 && t2 < 1.3) {
+    float h = clamp(t2, 0.0, 1.0);
+    vec3 spec = clamp(abs(fract(vec3(h * 0.8) + vec3(0.0, 0.667, 0.333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+    col += spec * 0.35 * smoothstep(-0.3, 0.2, t2) * (1.0 - smoothstep(0.8, 1.3, t2));
+  }
+  // Brighter sky inside the primary bow.
+  col += vec3(0.08) * (1.0 - smoothstep(0.62, 0.72, a));
+  return col;
+}
 vec3 sunDiscRadiance(vec3 rd) {
   float c = dot(rd, uSunDir);
   float ang = acos(clamp(c, -1.0, 1.0));
@@ -269,6 +290,10 @@ void main() {
       result = inscatter * uSunIntensity + behind;
     }
   }
+  if (uRainbow > 0.001 && rd.y * 0.0 + dot(rd, uSunDir) < 0.0) {
+    float reach = sky ? 1.0 : clamp(sceneDist / 180.0, 0.0, 1.0);
+    result += rainbow(rd) * uRainbow * reach * uSunIntensity * 0.035;
+  }
   outColor = vec4(result, 1.0);
 }
 `;
@@ -304,6 +329,7 @@ export class AtmospherePass {
         uAurora: { value: 1 },
         uCloudsOn: { value: 1 },
         uSunDiscScale: { value: 1 },
+        uRainbow: { value: 0 },
         uExposureHint: { value: 1 },
       },
       depthTest: false,

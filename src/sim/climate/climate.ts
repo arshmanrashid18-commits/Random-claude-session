@@ -24,6 +24,27 @@ import { solarDeclination, TICKS_PER_YEAR } from '../constants';
 import { Biome, classifyBiome } from './biomes';
 
 export const CLIMATE_PHASES = 8;
+
+/** Latitude-shaped circulation terms, tabulated over shifted latitude ∈ [−2, 2] rad. */
+const LAT_LUT_N = 4096;
+const LAT_S6 = new Float64Array(LAT_LUT_N + 1);
+const LAT_FRONT = new Float64Array(LAT_LUT_N + 1);
+const LAT_SUBS = new Float64Array(LAT_LUT_N + 1);
+const LAT_ITCZ = new Float64Array(LAT_LUT_N + 1);
+for (let k = 0; k <= LAT_LUT_N; k++) {
+  const latS = -2 + (4 * k) / LAT_LUT_N;
+  const al = Math.abs(latS);
+  LAT_S6[k] = Math.sin(6 * al);
+  LAT_FRONT[k] = Math.exp(-((al - 0.95) * (al - 0.95)) / 0.06);
+  LAT_SUBS[k] = Math.exp(-((al - 0.47) * (al - 0.47)) / 0.014);
+  LAT_ITCZ[k] = Math.exp(-(latS * latS) / 0.035);
+}
+function latLut(table: Float64Array, latS: number): number {
+  const f = (latS + 2) * (LAT_LUT_N / 4);
+  const i = f <= 0 ? 0 : f >= LAT_LUT_N ? LAT_LUT_N - 1 : Math.floor(f);
+  const t = f - i;
+  return table[i] + (table[i + 1] - table[i]) * (t < 0 ? 0 : t > 1 ? 1 : t);
+}
 const QTABLE_N = 256;
 /** Climate steps per year (each step spans CLIMATE_PHASES ticks). */
 export const CLIMATE_STEPS_PER_YEAR = TICKS_PER_YEAR / CLIMATE_PHASES;
@@ -300,7 +321,7 @@ export class Climate {
       const latS = lat - dec * 0.55;
       const al = Math.abs(latS);
       const band = al < 0.5236 ? 6 : al < 1.0472 ? 8 : 3.5;
-      const s6 = Math.sin(6 * al);
+      const s6 = latLut(LAT_S6, latS);
       let we = -s6 * band;
       let wn = -Math.sign(latS) * s6 * 1.8;
       // storm vortices
@@ -375,7 +396,7 @@ export class Climate {
       t -= stormCold * 0.4;
       if (ocean && t < -2.5) t = -2.5;
 
-      const itcz = Math.exp(-(latS * latS) / 0.035) * Math.min(1, Math.max(0, (t - 10) / 12));
+      const itcz = latLut(LAT_ITCZ, latS) * Math.min(1, Math.max(0, (t - 10) / 12));
       // --- evaporation
       const sat = saturation(t);
       const water = ocean ? 1 : Math.max(terr.lakeFrac[c], Math.min(0.35, terr.river[c] * 0.02));
@@ -391,8 +412,8 @@ export class Climate {
       // Lifting (ITCZ convection, fronts, orography, storms) lowers the
       // threshold; subtropical subsidence raises it.
       const rh = h / sat;
-      const front = Math.exp(-((al - 0.95) * (al - 0.95)) / 0.06);
-      const subs = Math.exp(-((al - 0.47) * (al - 0.47)) / 0.014);
+      const front = latLut(LAT_FRONT, latS);
+      const subs = latLut(LAT_SUBS, latS);
       let rhCrit = 0.86 - 0.4 * itcz - 0.16 * front + 0.2 * subs - Math.min(0.22, lift * 0.003) - Math.min(0.4, stormRain * 0.25);
       if (rhCrit < 0.35) rhCrit = 0.35;
       let p = rh > rhCrit ? (h - rhCrit * sat) * 0.35 : 0;

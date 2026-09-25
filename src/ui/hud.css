@@ -461,3 +461,31 @@ canvas.chart { width: 100%; height: 180px; display: block; }
 .tu-hint { font-size: 12px; color: var(--text-dim); margin: 6px 0 8px; }
 .tutorial .btn { height: 26px; font-size: 11px; }
 .hud-hidden .tutorial { opacity: 0; }
+
+/* ---------------------------------------------------------------- map labels */
+.labels { position: fixed; inset: 0; pointer-events: none !important; overflow: hidden; transition: opacity 0.4s; }
+.hud-hidden .labels, .title-mode .labels { opacity: 0; }
+.maplabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 5px;
+  border-radius: 99px;
+  background: rgba(8, 11, 20, 0.55);
+  border: 1px solid rgba(255, 226, 168, 0.16);
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  transform-origin: 50% 100%;
+  will-change: transform, opacity;
+}
+.maplabel .flag-svg { border-radius: 2px; }
+.maplabel .nm { font-family: var(--font-display); font-size: 14px; color: var(--text); }
+.maplabel .pp { font-size: 10px; color: var(--text-dim); letter-spacing: 0.04em; }
+.maplabel:hover, .maplabel.sel { border-color: var(--gold); background: rgba(20, 24, 36, 0.8); }
+.maplabel.storm { background: rgba(20, 28, 44, 0.45); border-color: rgba(143, 198, 255, 0.35); }
+.maplabel.storm .nm { color: #cfe6ff; font-style: italic; }

@@ -55,7 +55,38 @@ simulation is deterministic regardless of the speed the player picks.
 | `planet/planet.ts` | orchestrates world generation + hydrology rebuilds |
 | `climate/climate.ts` | insolation with axial tilt, 3-cell circulation with seasonal ITCZ shift, upwind moisture/heat advection, evaporation, RH-threshold precipitation (convection, fronts, orographic lift, subsidence), snow, soil moisture, 1-year means; double-buffered and amortised over 8 ticks |
 | `climate/biomes.ts` | Whittaker classification from simulated means |
-| `world.ts` | World root: rng, tick, systems, hash |
+| `climate/weather.ts` | storm systems (fronts, hurricanes with names and landfall, blizzards), lightning strikes, drought tracking per continent |
+| `ecology/plants.ts` | 8 plant functional types per region cell: suitability from climate, growth, competition, spread, grazing, logging, seasonal dieback, bloom |
+| `ecology/fire.ts` | wildfire spread by fuel, dryness and wind; burn-out, scars, settlement firebreaks |
+| `ecology/animals.ts` | SoA animals (cap 12 000): needs, genetics-lite (speed, size, fertility, cold/heat), herding, migration, scent fields for predators, carrion, small game, disease, reproduction, speciation and extinction records, population history |
+| `civ/civ.ts` | tribes, settlements, people (SoA, cap 9 000) with needs, skills, personality, families, jobs and intents; conserving resource ledger; construction planner; colonisation; disease; graves; divine interface (witness, damage, flood, resurrect) |
+| `civ/society.ts` | contact, opinion, pacts, alliances, betrayals, wars with mustered armies, person-to-person combat, sieges, conquest, refugees; trade routes with caravans and ships; prophets, pilgrims, tenets, epithets, scripture, conversion, schism/secession |
+| `civ/tech.ts` | 52 technologies in 8 fields, ages Stone → Steam; need-driven research |
+| `civ/pathfind.ts` | A* on the region grid (land/sea modes, road bonus, cache) |
+| `powers/defs.ts`, `powers/divine.ts` | 20 divine powers, costs, cooldowns, combos; lingering effects (rain, drought, volcano growth and lava flow, tsunami front, meteor fall, locust drift, ice age forcing, eclipse) |
+| `planet/terraform.ts` | brush strokes and disaster deformations with incremental region/hydrology rebuilds |
+| `scenarios.ts` | 8 scenarios: setup, objectives and win/lose evaluation inside the sim |
+| `serialize.ts` | generic identity-preserving save format (object graph + typed-array blob, gzip) |
+| `events.ts` | typed event log feeding feed, chronicle, director, audio |
+| `world.ts` | World root: rng, tick, ordered systems, player commands, hash |
+
+## Main thread (`src/game.ts`, `src/ui`, `src/audio`)
+
+* `game.ts` – orchestrates renderer + sim client + UI: selection and follow, powers and
+  brushes, time controls, time-lapse, auto-director, photo mode, events → feed/chronicle/
+  banners/shake, per-frame HUD, quality governor, perf overlay.
+* `ui/input.ts` – grab-and-spin globe (sphere-hit drag), orbit/tilt, zoom to cursor,
+  double-click fly, touch pinch/twist, click to select or cast, drag to paint.
+* `ui/components.ts` – HUD, power bar with devotion orb and cooldown sweeps, event feed,
+  inspector, hint, banner, tooltips, power wheel, perf overlay, flags.
+* `ui/panels.ts` – Chronicle, Ecology dashboard (population curves, living biome map),
+  Peoples, Settings (quality, volumes, colour vision, reduced motion, UI scale, key
+  rebinding), Help, Save/Load. `ui/title.ts` – title screen, objective tracker, end
+  cards, tutorial. `ui/narrate.ts` – event → prose.
+* `saves.ts` – IndexedDB slots, export/import files, resume-by-reload handshake.
+* `audio/audio.ts` – generative score (mood-driven modes, pads, plucks, bells, drums),
+  ambience beds (wind, ocean, rain, fire, town, birds, crickets), spatial effects,
+  UI sounds; limiter on the master bus.
 
 ## Rendering pipeline (`src/render`)
 
@@ -79,6 +110,13 @@ simulation is deterministic regardless of the speed the player picks.
    (Rayleigh, Mie, ozone) along each view ray to the depth-buffer hit; raymarched cloud
    shell driven by simulated cloud cover + storm systems (hurricane spirals); aurora
    curtains; sun disc.
+   * `people.ts`, `creatures.ts`, `buildings.ts` – instanced procedural models with
+     vertex-shader animation (gaits, work poses, boats), construction-order reveal,
+     fields with crop growth, roads, scaffolding.
+   * `vfx.ts` – GPU particles with analytic motion (flames, smoke, sparks, petals,
+     swarms), lightning ribbons, ground-hugging reticles and shockwaves, light pillars,
+     fire over burning cells, meteor fall and impact, volcano plumes, eclipse amount,
+     tsunami rings for the ocean shader. `precip.ts` – rain/snow around the camera.
 4. **Post** (`post.ts`) – bloom mip chain, god rays, analytic lens flare, DOF (photo
    mode), ACES filmic, grading/filters, colour-blind daltonisation, vignette, grain,
    chromatic aberration (impacts only), FXAA.

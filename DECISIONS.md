@@ -30,3 +30,42 @@ Each entry: decision — why.
     in parallel with world generation in the worker; no asset files.
 11. **Vegetation as instanced procedural archetypes placed on a hashed lattice.**
     World-stable (no swimming), budgeted per quality preset, fades in/out by shrinking.
+12. **Divine powers act on simulation state only; visuals are derived.** Every power writes
+    to climate fields, plants, animals, people, buildings or terrain inside the worker; the
+    renderer reads the resulting fields (fire, lava, flood, ash) and a small effect list.
+    This keeps powers deterministic, saveable and testable.
+13. **Mortals witness acts, not the player.** Faith (love/fear) rises for people within a
+    radius, weighted by piety; memories are per person (indices into a bounded memory
+    list with an absolute base) and per tribe (scripture, epithets, sacred sites).
+14. **Society as one module (diplomacy, war, trade, religion).** They share the same
+    inter-settlement machinery (paths, agents with intents), so they live together in
+    `sim/civ/society.ts`, driven by the civ tick.
+15. **Armies are ordinary people with an army id.** Marching, fighting, fleeing and
+    conquest emerge from people-level behaviour and combat rolls; no abstract battles.
+16. **Generic identity-preserving save format.** The whole object graph is walked with a
+    class registry (names are not trusted after minification); typed arrays go in a
+    binary blob; gzip via CompressionStream. Loading restarts the page into the saved
+    world, which guarantees a clean renderer state.
+17. **Scenario objectives live in the simulation.** Status is computed deterministically
+    and saved with the world; `tests/support/strategies.ts` plays scripted winning and
+    losing strategies for every scenario in the soak suite.
+18. **Aerial perspective compressed near the camera, clouds part around it.** The
+    atmosphere is physically scaled for the planet; at village range it read as fog, so
+    haze ramps in with distance (full strength by ~1100 u) and clouds fade within a
+    distance proportional to camera altitude.
+19. **Animal needs updated every other tick at double rate.** Halves the dominant cost
+    of the animal loop with no visible change; movement stays per tick so interpolated
+    motion is smooth.
+20. **Planner only starts what can be finished.** Metal-using buildings wait for a mine;
+    untouched sites are cancelled after two years with materials refunded. This removed
+    a deadlock that froze settlement growth.
+21. **Fire has firebreaks and burns out.** Settlements clear and watch their ground,
+    cells burn out within dozens of ticks and people flee toward burnt ground. Before,
+    single fires wiped out whole villages.
+22. **Faith fades without signs.** Fear decays ~5%/year, love ~1%/year, so devotion is an
+    ongoing relationship rather than a one-off purchase.
+23. **Presentation randomness is allowed on the main thread.** The auto-director and
+    particle jitter use their own RNG or `Math.random`; they never touch the simulation.
+24. **Procedural audio starts on the first user gesture.** Browsers block autoplay;
+    the score, ambience and effects are synthesised with WebAudio nodes and a
+    generated reverb impulse, mixed through a limiter.

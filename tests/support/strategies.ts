@@ -6,6 +6,7 @@
 import type { World } from '../../src/sim/world';
 import { TICKS_PER_DAY, TICKS_PER_YEAR } from '../../src/sim/constants';
 import { powerDef, type PowerId } from '../../src/sim/powers/defs';
+import { habitat } from '../../src/sim/ecology/species';
 
 export type Strategy = (w: World, day: number) => void;
 
@@ -40,20 +41,26 @@ export const WIN: Record<string, Strategy> = {
     }
   },
   ark: (w, day) => {
-    // Gather the rarest species with a beacon and feed the land around it.
+    // Lead the rarest original species to the best ground its members can
+    // reach with a beacon, and feed that refuge when devotion allows.
     const A = w.animals;
+    const memo = w.scenario!.memo;
     let rare = -1, n = Infinity;
-    for (let sp = 0; sp < A.defs.length; sp++) if (A.pop[sp] > 0 && A.pop[sp] < n) { n = A.pop[sp]; rare = sp; }
+    for (let sp = 0; sp < A.defs.length; sp++) if (memo[`sp${sp}`] && A.pop[sp] > 0 && A.pop[sp] < n) { n = A.pop[sp]; rare = sp; }
     if (rare < 0 || n > 80) return;
-    let cx = 0, cy = 0, cz = 0;
-    for (let i = 0; i < A.count; i++) if (A.alive[i] && A.species[i] === rare) { cx += A.x[i]; cy += A.y[i]; cz += A.z[i]; }
-    const l = Math.hypot(cx, cy, cz) || 1;
-    // The centroid can fall in the sea; use the member nearest to it.
-    let best = -1, bd = -2;
-    for (let i = 0; i < A.count; i++) if (A.alive[i] && A.species[i] === rare) { const d = (A.x[i] * cx + A.y[i] * cy + A.z[i] * cz) / l; if (d > bd) { bd = d; best = i; } }
+    const cl = w.planet.climate, g = w.planet.region;
+    let best = -1, bt = -Infinity;
+    for (let i = 0; i < A.count; i++) {
+      if (!A.alive[i] || A.species[i] !== rare) continue;
+      const c = g.cellOf(A.x[i], A.y[i], A.z[i]);
+      if (w.planet.terrain.oceanFrac[c] > 0.3) continue;
+      const h = habitat(A.defs[rare], cl.biome[c], cl.temp[c], A.gCold[i], A.gHeat[i]);
+      if (h > bt) { bt = h; best = i; }
+    }
+    if (best < 0) return;
     const p = { x: A.x[best], y: A.y[best], z: A.z[best] };
     if (day % 3 === 0) cast(w, 'beacon', p);
-    cast(w, 'bloom', p);
+    if (w.civ.devotion >= powerDef('bloom').cost + powerDef('beacon').cost) cast(w, 'bloom', p);
   },
   'holy-war': (w) => {
     const sc = w.scenario!;
@@ -96,20 +103,29 @@ export const WIN: Record<string, Strategy> = {
       cast(w, 'bloom', p);
     }
   },
-  forgotten: (w, day) => {
-    // Wonders where the people are, and an eclipse when it can be afforded.
-    if (day % 20 === 5) cast(w, 'eclipse', { x: 0, y: 1, z: 0 });
-    for (const s of live(w)) {
-      if (day % 2 === 0) cast(w, 'blessing', s);
-      else cast(w, 'rain', s);
-      if (day % 3 === 0) cast(w, 'lightning', { x: s.x + 0.006, y: s.y, z: s.z });
-    }
+  forgotten: (w, step) => {
+    // Acting every few ticks: terrify with cheap lightning beside each village,
+    // then awe them with wonders as their faith pays for more.
+    const sets = live(w);
+    if (!sets.length) return;
+    const s = sets[step % sets.length];
+    cast(w, 'lightning', { x: s.x + 0.006, y: s.y, z: s.z });
+    if (w.civ.devotion > 260) cast(w, 'eclipse', { x: 0, y: 1, z: 0 });
+    if (w.civ.devotion > 80) cast(w, 'blessing', s);
   },
 };
 
 export const LOSE: Record<string, Strategy> = {
   'first-flame': DESTROY_ALL,
-  'long-drought': (w) => { w.divine.boundless = true; for (const s of live(w)) cast(w, 'plague', s); },
+  'long-drought': (w, day) => {
+    // The cruel god: deepen the drought and set the dry land burning.
+    w.divine.boundless = true;
+    for (const s of live(w)) {
+      if (day % 6 === 0) cast(w, 'drought', s);
+      if (day % 6 === 3) cast(w, 'wildfire', s);
+      if (day % 12 === 1) cast(w, 'plague', s);
+    }
+  },
   ark: (w, day) => {
     // Hunt the rarest species to extinction with fire from the sky.
     w.divine.boundless = true;
@@ -132,12 +148,16 @@ export const LOSE: Record<string, Strategy> = {
   forgotten: DESTROY_ALL,
 };
 
+/** How often (ticks) a strategy acts; attentive players act many times a day. */
+export const CADENCE: Record<string, number> = { forgotten: 8 };
+
 /** Run a scenario world with a strategy until it resolves or times out. */
 export function play(w: World, strat: Strategy, maxYears: number): 'active' | 'won' | 'lost' {
   const end = w.tick + maxYears * TICKS_PER_YEAR + TICKS_PER_DAY;
+  const every = (w.scenario && CADENCE[w.scenario.id]) || TICKS_PER_DAY;
   let day = 0;
   while (w.tick < end) {
-    if (w.tick % TICKS_PER_DAY === 0) strat(w, day++);
+    if (w.tick % every === 0) strat(w, day++);
     w.step();
     if (w.scenario && w.scenario.status !== 'active') return w.scenario.status;
   }

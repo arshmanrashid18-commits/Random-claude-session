@@ -394,7 +394,7 @@ export class Animals {
     this.slopeRef = terrain.slope;
     const g = climate.grid;
     this.hash.rebuild(this.count, this.alive, this.x, this.y, this.z);
-    if (tick % 96 === 0) this.updatePreyFields(g);
+    if (tick % 160 === 0) this.updatePreyFields(g);
     if (tick % 8 === 0) for (let c = 0; c < this.carrion.length; c++) if (this.carrion[c] > 0) this.carrion[c] = this.carrion[c] < 0.01 ? 0 : this.carrion[c] * 0.93;
     const night = dayFrac(tick);
     const isNight = night < 0.22 || night > 0.78;
@@ -405,7 +405,9 @@ export class Animals {
       const d = this.defs[sp];
       const c = this.hash.bucketOf[i];
       if (c < 0) continue;
-      // ---------------- needs & health
+      // ---------------- needs & health (every other tick, at double rate)
+      if (((i + tick) & 1) === 0) {
+      const K = 2;
       const temp = climate.temp[c];
       const lo = d.tMin - this.gCold[i] * 12, hi = d.tMax + this.gHeat[i] * 12;
       const stress = temp < lo ? (lo - temp) / 15 : temp > hi ? (temp - hi) / 15 : 0;
@@ -413,35 +415,38 @@ export class Animals {
       const resting = st === AState.Rest || st === AState.Hibernate;
       let meta = d.metabolism * Math.pow(this.gSize[i], 0.75) * (1 + stress * 0.6) * (resting ? (st === AState.Hibernate ? 0.15 : 0.6) : 1) * (this.age[i] < d.adultAge ? 0.55 : 1);
       if (this.pregnant[i] > 0) meta *= 1.3;
-      this.hunger[i] += meta;
-      this.thirst[i] += (d.body === 'camel' ? 0.0005 : 0.0014) * (1 + Math.max(0, temp - 25) / 15) * (st === AState.Hibernate ? 0.1 : 1);
+      this.hunger[i] += meta * K;
+      this.thirst[i] += (d.body === 'camel' ? 0.0005 : 0.0014) * (1 + Math.max(0, temp - 25) / 15) * (st === AState.Hibernate ? 0.1 : 1) * K;
       // Puddles after rain, snow and dew-soaked forage all quench thirst a little.
-      if (climate.rain[c] > 0.04 || climate.snow[c] > 0.25) this.thirst[i] = Math.max(0, this.thirst[i] - 0.004);
+      if (climate.rain[c] > 0.04 || climate.snow[c] > 0.25) this.thirst[i] = Math.max(0, this.thirst[i] - 0.004 * K);
       let hp = this.health[i];
-      if (this.hunger[i] > 1) { hp -= d.diet === 'herbivore' ? 0.006 : 0.0025; this.hunger[i] = 1; }
-      if (this.thirst[i] > 1) { hp -= 0.01; this.thirst[i] = 1; }
-      hp -= stress * 0.004;
+      if (this.hunger[i] > 1) { hp -= (d.diet === 'herbivore' ? 0.006 : 0.0025) * K; this.hunger[i] = 1; }
+      if (this.thirst[i] > 1) { hp -= 0.01 * K; this.thirst[i] = 1; }
+      hp -= stress * 0.004 * K;
       if (this.infected[i] === 1) {
-        hp -= 0.0022;
-        if (--this.infTimer[i] <= 0) { this.infected[i] = 2; this.infTimer[i] = yearTick; }
-      } else if (this.infected[i] === 2 && --this.infTimer[i] <= 0) {
-        this.infected[i] = 0;
+        hp -= 0.0022 * K;
+        this.infTimer[i] -= K;
+        if (this.infTimer[i] <= 0) { this.infected[i] = 2; this.infTimer[i] = yearTick; }
+      } else if (this.infected[i] === 2) {
+        this.infTimer[i] -= K;
+        if (this.infTimer[i] <= 0) this.infected[i] = 0;
       }
-      if (fires.intensity[c] > 0.3) hp -= fires.intensity[c] * 0.02;
-      if (this.hunger[i] < 0.3 && this.thirst[i] < 0.4 && this.infected[i] !== 1) hp = Math.min(1, hp + 0.002);
+      if (fires.intensity[c] > 0.3) hp -= fires.intensity[c] * 0.02 * K;
+      if (this.hunger[i] < 0.3 && this.thirst[i] < 0.4 && this.infected[i] !== 1) hp = Math.min(1, hp + 0.002 * K);
       this.health[i] = hp;
-      this.age[i] += 1 / yearTick;
-      if (hp <= 0 || (this.age[i] > d.maxAge * (0.75 + this.gSize[i] * 0.2) && rng.chance(0.0015))) {
+      this.age[i] += K / yearTick;
+      if (hp <= 0 || (this.age[i] > d.maxAge * (0.75 + this.gSize[i] * 0.2) && rng.chance(0.003))) {
         const cause = hp > 0 ? 2 : this.hunger[i] >= 1 ? 0 : this.thirst[i] >= 1 ? 1 : this.infected[i] === 1 ? 4 : fires.intensity[c] > 0.3 ? 5 : stress > 0 ? 6 : 7;
         this.deaths[sp * 8 + cause]++;
         if (cause !== 5) this.carrion[c] += d.meat * this.gSize[i];
         this.kill(i);
         continue;
       }
-      if (this.cooldown[i] > 0) this.cooldown[i]--;
+      if (this.cooldown[i] > 0) this.cooldown[i] -= K;
       if (this.pregnant[i] > 0) {
-        this.pregnant[i]--;
+        this.pregnant[i] -= K;
         if (this.pregnant[i] <= 0) this.giveBirth(i, rng);
+      }
       }
       // ---------------- brain (staggered)
       if ((i + tick) % BRAIN_INTERVAL === 0) this.think(i, tick, rng, climate, plants, terrain, isNight, fires);

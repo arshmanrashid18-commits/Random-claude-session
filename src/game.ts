@@ -18,6 +18,7 @@ import { PLANET_RADIUS, TICKS_PER_DAY, TICKS_PER_SECOND_1X } from './sim/constan
 import { PlanetCamera, MIN_DISTANCE, MAX_DISTANCE } from './render/camera';
 import { QualityGovernor, QUALITY_ORDER, type QualityId } from './render/quality';
 import { dayFracForLocalTime } from './render/viewpoints';
+import { MapLabels } from './ui/labels';
 
 const SPEEDS = [1, 10, 100];
 
@@ -37,6 +38,7 @@ export class Game {
   banner!: Banner;
   wheel!: Wheel;
   perf!: PerfOverlay;
+  labels!: MapLabels;
   chronicle!: ChroniclePanel;
   ecology!: EcologyPanel;
   tribesPanel!: TribesPanel;
@@ -95,6 +97,8 @@ export class Game {
   /** Build the HUD once the world exists. */
   buildUi(): void {
     const ui = this.ui;
+    this.labels = new MapLabels(ui);
+    this.labels.onSettlement = (id) => { this.onUi('select'); this.select({ kind: 'settlement', id }); };
     new Tooltip(ui);
     this.hud = new Hud(ui, {
       onSpeed: (s, p) => { this.onUi('click'); if (p) this.togglePause(); else this.setSpeed(s); },
@@ -504,14 +508,14 @@ export class Game {
         if (d.target === 'ocean' && hh >= 0) valid = false;
         if (f && !f.boundless && this.devotion < d.cost) valid = false;
       }
-      vfx.setReticle(this.hover, Math.min(radius, 420), valid ? color : 0xff5040);
+      vfx.setReticle(this.hover, Math.min(radius, 420), valid ? color : 0xff5040, r.data);
     } else vfx.setReticle(null, 0, 0);
     // Selection ring.
     const sel = this.selection;
     let selPos: THREE.Vector3 | null = null;
     if (sel && sel.kind === 'person') selPos = r.people.lastPositions.get(sel.uid) ?? null;
     else if (sel && sel.kind === 'animal') selPos = r.creatures.lastPositions.get(sel.uid) ?? null;
-    vfx.setSelection(selPos, sel && sel.kind === 'animal' ? 1.6 : 1.1);
+    vfx.setSelection(selPos, sel && sel.kind === 'animal' ? 1.6 : 1.1, r.data);
     // Quality governor.
     if (this.governor.enabled && !this.photo) {
       const cur: QualityId = r.qualityId;
@@ -521,6 +525,9 @@ export class Game {
         if (idx >= 0 && idx < QUALITY_ORDER.length) r.setQuality(QUALITY_ORDER[idx]);
       }
     }
+    // Map labels.
+    const selId = this.selection && this.selection.kind === 'settlement' ? this.selection.id : -1;
+    this.labels.update(cam.camera, this.civ, f ? f.storms : [], r.canvas.clientWidth, r.canvas.clientHeight, selId);
     // Perf overlay.
     {
       const st = r.stats;

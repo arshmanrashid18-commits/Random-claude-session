@@ -68,3 +68,23 @@ export class QualityGovernor {
     return 0;
   }
 }
+
+/**
+ * Initial quality guess from the GPU and device: software renderers and
+ * phones start low, integrated GPUs medium, discrete GPUs high. The governor
+ * refines it from measured frame times.
+ */
+export function detectQuality(gl: WebGL2RenderingContext | WebGLRenderingContext): QualityId {
+  let renderer = '';
+  try {
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    renderer = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).toLowerCase();
+  } catch { /* unavailable */ }
+  const mobile = /android|iphone|ipad|mobile/i.test(navigator.userAgent);
+  const mem = (navigator as { deviceMemory?: number }).deviceMemory ?? 8;
+  if (/swiftshader|llvmpipe|software|basic render/.test(renderer)) return 'low';
+  if (mobile || mem <= 2) return 'low';
+  if (/nvidia|geforce|rtx|gtx|radeon rx|radeon pro|amd radeon(?!.*graphics)|quadro/.test(renderer)) return 'high';
+  if (/apple m[1-9] (pro|max|ultra)/.test(renderer)) return 'high';
+  return 'medium';
+}

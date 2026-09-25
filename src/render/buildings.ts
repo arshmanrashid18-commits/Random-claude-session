@@ -152,8 +152,15 @@ function buildModel(type: number, g: number, style: number): THREE.BufferGeometr
       break;
     }
     case BType.Wall: {
-      b.box(3.2, 3.2, 1.2, V(0, -0.8, 0), P.p({ color: g >= 2 ? stone : wood, jitter: 0.1 }));
-      for (let k = 0; k < 3; k++) b.box(0.6, 0.5, 1.2, V(-1.1 + k * 1.1, 2.4, 0), P.p({ color: g >= 2 ? stone : wood }));
+      if (g <= 1) {
+        // Palisade of sharpened stakes.
+        for (let k = 0; k < 13; k++) b.cylinder(0.14, 0.2, 3.4, 5, V(-3.0 + k * 0.5, -0.8, 0), P.p({ color: wood, jitter: 0.2 }));
+        for (let k = 0; k < 13; k++) b.cone(0.16, 0.4, 5, V(-3.0 + k * 0.5, 2.6, 0), P.p({ color: wood }));
+      } else {
+        b.box(6.4, 3.4, 1.3, V(0, -0.8, 0), P.p({ color: stone, jitter: 0.1, ao: 0.3 }));
+        b.box(6.4, 0.25, 1.6, V(0, 2.6, 0), P.p({ color: stone }));
+        for (let k = 0; k < 6; k++) b.box(0.6, 0.55, 1.4, V(-2.75 + k * 1.1, 3.0, 0), P.p({ color: stone }));
+      }
       break;
     }
     case BType.Tower: {

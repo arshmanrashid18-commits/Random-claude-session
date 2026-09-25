@@ -66,7 +66,7 @@ export const BUILDINGS: BuildingDef[] = [
   { id: BType.Library, name: 'Library', cost: [0, 20, 20, 4], work: 90, radius: 3.2, tech: 'writing', tier: 2, housing: 0, storage: 0, jobs: 3, job: Job.Scholar, site: 'center', max: 2 },
   { id: BType.Market, name: 'Market', cost: [0, 22, 10, 2], work: 60, radius: 4.0, tech: 'trade', tier: 2, housing: 0, storage: 60, jobs: 2, job: Job.Merchant, site: 'center', max: 1 },
   { id: BType.Barracks, name: 'Barracks', cost: [0, 20, 16, 8], work: 70, radius: 3.4, tech: 'warfare', tier: 1, housing: 6, storage: 0, jobs: 6, job: Job.Soldier, site: 'edge', max: 2 },
-  { id: BType.Wall, name: 'Wall', cost: [0, 4, 10, 0], work: 18, radius: 1.6, tech: 'fortification', tier: 2, housing: 0, storage: 0, jobs: 0, job: Job.None, site: 'edge', max: 80 },
+  { id: BType.Wall, name: 'Wall', cost: [0, 6, 14, 0], work: 26, radius: 3.2, tech: 'fortification', tier: 2, housing: 0, storage: 0, jobs: 0, job: Job.None, site: 'edge', max: 80 },
   { id: BType.Tower, name: 'Watchtower', cost: [0, 8, 14, 2], work: 40, radius: 1.8, tech: 'fortification', tier: 2, housing: 0, storage: 0, jobs: 1, job: Job.Soldier, site: 'edge', max: 8 },
   { id: BType.Harbor, name: 'Harbor', cost: [0, 30, 10, 4], work: 70, radius: 3.6, tech: 'sailing', tier: 1, housing: 0, storage: 40, jobs: 3, job: Job.Fisher, site: 'shore', max: 1 },
   { id: BType.Monument, name: 'Monument', cost: [0, 30, 90, 10], work: 260, radius: 4.5, tech: 'monuments', tier: 3, housing: 0, storage: 0, jobs: 0, job: Job.None, site: 'hill', max: 1 },

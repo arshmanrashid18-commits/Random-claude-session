@@ -9,7 +9,7 @@
  */
 import * as THREE from 'three';
 import { PLANET_RADIUS, TICKS_PER_SECOND_1X, CLOUD_BASE } from '../sim/constants';
-import type { EffectData } from '../worker/protocol';
+import type { CivData, EffectData } from '../worker/protocol';
 import type { PlanetData } from './planet/planetData';
 import { groundHeight } from './groundHeight';
 import { dirToFaceAB } from '../sim/planet/cubesphere';
@@ -411,6 +411,9 @@ export interface VfxContext {
   dt: number;
   effects: EffectData[];
   speed: number;
+  sunDir: THREE.Vector3;
+  /** Latest civ snapshot (chimneys, campfires, festivals). */
+  civ: CivData | null;
 }
 
 export class Vfx {
@@ -844,6 +847,116 @@ export class Vfx {
     }
   }
 
+  // ------------------------------------------------------------------ ambient life
+  private nextFlock = 0;
+  private nextStar = 0;
+  private nextSplash = 0;
+
+  /** Small signs of life and weather around the camera. */
+  private ambient(c: VfxContext, dt: number): void {
+    const data = c.data;
+    const cam = c.camera.position;
+    const camR = cam.length();
+    const alt = camR - PLANET_RADIUS;
+    const up = cam.clone().divideScalar(camR);
+    const f = dirToFaceAB(up.x, up.y, up.z);
+    const sun = up.dot(c.sunDir);
+    const day = sun > 0.05, night = sun < -0.08;
+    const trees = data.sampleRegion(data.vegACPU, f.face, f.a, f.b, 2) + data.sampleRegion(data.vegACPU, f.face, f.a, f.b, 3) + data.sampleRegion(data.vegBCPU, f.face, f.a, f.b, 0);
+    const grass = data.sampleRegion(data.vegACPU, f.face, f.a, f.b, 0);
+    const temp = data.sampleRegion(data.climateCPU, f.face, f.a, f.b, 0) * 80 - 40;
+    const q = this.quality;
+    // Bird flocks wheel over green land by day.
+    if (day && alt < 500 && alt > 12 && (trees + grass) > 0.25 && this.time > this.nextFlock) {
+      this.nextFlock = this.time + 4 + this.rand() * 9;
+      const centre = this.around(up, Math.min(300, alt * 1.5 + 40), data, 14 + this.rand() * 20);
+      const east = new V(centre.y, -centre.x, 0).normalize();
+      const nrm = centre.clone().normalize();
+      const dir = east.clone().applyAxisAngle(nrm, this.rand() * 6.28);
+      dir.addScaledVector(nrm, -dir.dot(nrm)).normalize().multiplyScalar(5 + this.rand() * 4);
+      const n = 8 + Math.floor(this.rand() * 14);
+      for (let i = 0; i < n; i++) {
+        const o = new V(this.sym(), this.sym(), this.sym()).multiplyScalar(3);
+        this.alpha.emit(this.time, centre.x + o.x, centre.y + o.y, centre.z + o.z, dir.x, dir.y, dir.z, 14 + this.rand() * 6, 0.35, 0.35, 0, 0, 0.05, 0.05, 0.06, 0.9, Shape.Swarm, this.rand());
+      }
+    }
+    // Fireflies over meadows on warm nights.
+    if (night && alt < 140 && temp > 10 && (grass + trees) > 0.3) {
+      const n = dt * 18 * q;
+      for (let i = 0; i < n; i++) {
+        const p = this.around(up, Math.min(80, alt + 30), data, 0.4 + this.rand() * 2.5);
+        const v = new V(this.sym(), this.sym(), this.sym()).multiplyScalar(0.3);
+        this.add.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 2.5 + this.rand() * 3, 0.1, 0.05, 0, 0.2, 2.2, 3.2, 0.6, 1, Shape.Glow, this.rand());
+      }
+    }
+    // Autumn leaves drift down in cooling forests.
+    if (day && alt < 120 && trees > 0.35 && temp > 2 && temp < 13) {
+      const n = dt * 10 * q * trees;
+      for (let i = 0; i < n; i++) {
+        const p = this.around(up, Math.min(70, alt + 20), data, 5 + this.rand() * 5);
+        const v = new V(this.sym(), this.sym(), this.sym()).multiplyScalar(0.6);
+        const hue = this.rand();
+        this.alpha.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 6 + this.rand() * 3, 0.14, 0.12, 1.2, 1.4, 0.75 + hue * 0.2, 0.35 + hue * 0.3, 0.08, 0.95, Shape.Petal, this.rand());
+      }
+    }
+    // Shooting stars on clear nights.
+    if (night && this.time > this.nextStar) {
+      this.nextStar = this.time + 6 + this.rand() * 14;
+      const p = this.around(up, Math.min(900, alt + 200), data, 70 + this.rand() * 20);
+      const dir = new V(this.sym(), this.sym(), this.sym()).normalize();
+      dir.addScaledVector(p.clone().normalize(), -dir.dot(p.clone().normalize())).normalize().multiplyScalar(160);
+      this.add.emit(this.time, p.x, p.y, p.z, dir.x, dir.y, dir.z, 0.6, 1.2, 0.4, 0, 0, 6, 6, 7, 1, Shape.Streak, this.rand());
+    }
+    // Whales and leaping fish in coastal seas.
+    if (day && alt < 260 && this.time > this.nextSplash) {
+      this.nextSplash = this.time + 3 + this.rand() * 6;
+      const p = this.around(up, Math.min(200, alt + 60), data, 0);
+      const d = p.clone().normalize();
+      if (data.heightAt(d.x, d.y, d.z) < -2) {
+        const s0 = d.clone().multiplyScalar(PLANET_RADIUS + 0.1);
+        const big = this.rand() < 0.3;
+        for (let i = 0; i < (big ? 40 : 14); i++) {
+          const v = d.clone().multiplyScalar(2 + this.rand() * (big ? 6 : 3)).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(big ? 1.6 : 0.8));
+          this.alpha.emit(this.time, s0.x, s0.y, s0.z, v.x, v.y, v.z, 1.1 + this.rand() * 0.6, big ? 0.35 : 0.15, 0.05, 9, 0.5, 0.9, 0.95, 1, 0.9, Shape.Glow, this.rand());
+        }
+      }
+    }
+    // Hearth smoke and campfires in settlements near the camera.
+    const civ = c.civ;
+    if (civ && alt < 450) {
+      const evening = sun < 0.25;
+      for (const s of civ.settlements) {
+        if (!s.alive) continue;
+        const sp = new V(s.x, s.y, s.z);
+        const dist = sp.clone().multiplyScalar(PLANET_RADIUS).distanceTo(cam);
+        if (dist > 600) continue;
+        // Campfire at the heart of the settlement after dusk.
+        if (evening) {
+          const g = Math.max(0, groundHeight(data.heights, data.n, s.x, s.y, s.z));
+          const p = sp.clone().multiplyScalar(PLANET_RADIUS + g + 0.2);
+          if (this.rand() < dt * 20 * q) {
+            const v = sp.clone().multiplyScalar(1.4 + this.rand());
+            this.add.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 0.7, 0.9, 0.25, 0, 0.6, 4, 1.7, 0.45, 0.9, Shape.Flame, this.rand());
+          }
+          if (this.rand() < dt * 3) this.add.emit(this.time, p.x, p.y, p.z, 0, 0, 0, 0.5, 5, 6, 0, 0, 1.4, 0.6, 0.15, 0.5, Shape.Glow, 0);
+        }
+        // Chimney smoke from a few houses (more when it is cold).
+        const rate = dt * (temp < 10 ? 1.5 : 0.5) * q * Math.min(8, s.pop / 5);
+        if (this.rand() < rate) {
+          const houses = civ.buildings.filter((b) => b.settle === s.id && b.complete && !b.ruin && b.type === 0);
+          if (houses.length) {
+            const b = houses[Math.floor(this.rand() * houses.length)];
+            const bd = new V(b.x, b.y, b.z);
+            const g = Math.max(0, groundHeight(data.heights, data.n, b.x, b.y, b.z));
+            const p = bd.clone().multiplyScalar(PLANET_RADIUS + g + 3.2);
+            const v = bd.clone().multiplyScalar(0.9).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(0.2));
+            this.alpha.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 7 + this.rand() * 4, 0.4, 3, -0.02, 0.1, 0.55, 0.55, 0.57, 0.35, Shape.Smoke, this.rand());
+          }
+        }
+      }
+    }
+  }
+
   // ------------------------------------------------------------------ frame
   update(c: VfxContext): void {
     const dt = c.dt;
@@ -883,6 +996,7 @@ export class Vfx {
     this.eclipse += (eclipse - this.eclipse) * Math.min(1, dt * 3);
     for (const id of [...this.seen.keys()]) if (!live.has(id)) this.seen.delete(id);
     this.fires(c, dt);
+    if (c.speed > 0 || c.dt > 0) this.ambient(c, dt);
     // Bolts flicker and fade.
     for (const b of this.bolts) {
       const k = (this.time - b.born) / b.life;

@@ -366,7 +366,8 @@ function loop(): void {
   if (world && !paused) {
     const rate = TICKS_PER_SECOND_1X * speed;
     acc += dt * rate;
-    const deadline = now + 28;
+    // Spend most of each ~32 ms slice simulating; frames and textures are cheap.
+    const deadline = now + 29;
     while (acc >= 1 && performance.now() < deadline) {
       stepWorld(1);
       acc -= 1;
@@ -385,7 +386,7 @@ function loop(): void {
     sendFrame(now);
     if (texDirty && spareTextures.length > 0 && now - lastTexTime > 200) sendTextures();
   }
-  setTimeout(loop, 8);
+  setTimeout(loop, 2);
 }
 
 function sendTextures(): void {
