@@ -16,7 +16,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
 const minutes = Number(args.minutes ?? 5);
 const seed = Number(args.seed ?? 1337);
 
-const server = await createServer({ server: { port: 0, host: '127.0.0.1' }, logLevel: 'error' });
+const server = await createServer({ server: { port: 0, host: '127.0.0.1', hmr: false, watch: { ignored: ['**/*'] } }, logLevel: 'error' });
 await server.listen();
 const url = `http://127.0.0.1:${server.httpServer.address().port}/?play=1&seed=20260925&quality=low`;
 const browser = await chromium.launch({

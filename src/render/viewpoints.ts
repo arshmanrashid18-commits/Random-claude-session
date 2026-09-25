@@ -106,25 +106,30 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
       return { focus: f, distance: 2600, heading: 0.6, tiltOffset: 0.15, localTime: 0.745 };
     }
     case 'coast': {
+      // A green, sheltered shore with some relief, under a clear sky.
       const f = findBest(r, (d, h) => {
         if (Math.abs(h) > 3) return -1e9;
         const rel = relief(r, d, 0.012);
         const c = climateAt(r, d);
-        return rel * 0.6 - Math.abs(c.temp - 20) * 0.05 - Math.abs(d.y) * 2;
+        const v = vegAt(r, d);
+        return Math.min(rel, 14) * 0.25 + v.trees * 1.5 + v.grass - c.cloud * 3 - Math.abs(c.temp - 22) * 0.05 - Math.abs(d.y) * 2;
       });
-      return { focus: f, distance: 70, heading: 1.2, tiltOffset: 0.0, localTime: 0.66 };
+      return { focus: f, distance: 70, heading: 1.2, tiltOffset: 0.0, localTime: 0.64 };
     }
     case 'mountains': {
-      const f = findBest(r, (d, h) => h + relief(r, d, 0.02) * 0.8 - Math.abs(d.y) * 10);
-      return { focus: f, distance: 230, heading: 2.2, tiltOffset: -0.05, localTime: 0.7 };
+      // High, rugged, clear-skied and not too far toward the poles.
+      const f = findBest(r, (d, h) => h + relief(r, d, 0.02) * 0.8 - Math.abs(d.y) * 16 - climateAt(r, d).cloud * 12);
+      return { focus: f, distance: 190, heading: 2.2, tiltOffset: 0.7, localTime: 0.6 };
     }
     case 'forest': {
+      // The densest woodland on gentle ground.
       const f = findBest(r, (d, h) => {
-        if (h < 1.5) return -1e9;
+        if (h < 1.5 || h > 26) return -1e9;
         const c = climateAt(r, d);
-        return c.moist * 2 - Math.abs(c.temp - 16) * 0.2 + relief(r, d, 0.015) * 0.1;
+        const v = vegAt(r, d);
+        return v.trees * 6 - Math.min(relief(r, d, 0.01), 10) * 0.15 - c.cloud * 2 - Math.abs(d.y) * 0.5;
       });
-      return { focus: f, distance: 60, heading: 0.4, tiltOffset: 0.0, localTime: 0.38 };
+      return { focus: f, distance: 55, heading: 0.4, tiltOffset: -0.05, localTime: 0.38 };
     }
     case 'ground': {
       const f = findBest(r, (d, h) => {
@@ -145,6 +150,9 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
       return { focus: f, distance: 1250, heading: Math.PI, tiltOffset: 0.35, localTime: 0.0 };
     }
     case 'storm': {
+      // The strongest hurricane if one is spinning, else the cloudiest band.
+      const hur = r.storms.filter((st) => st.type === 1).sort((a, b) => b.intensity - a.intensity)[0];
+      if (hur) return { focus: new THREE.Vector3(hur.x, hur.y, hur.z).normalize(), distance: 900, heading: 0.2, tiltOffset: 0.1, localTime: 0.55 };
       const f = findBest(r, (d) => climateAt(r, d).cloud * 3 - Math.abs(Math.abs(d.y) - 0.3), 2000);
       return { focus: f, distance: 1100, heading: 0.2, tiltOffset: 0.1, localTime: 0.45 };
     }
@@ -162,7 +170,13 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
       const f = findBest(r, (d, h) => (h > 2 ? 1 : 0) - Math.abs(d.y), 800);
       return { focus: f, distance: 120, heading: 0.5, tiltOffset: 0, localTime: 0.4 };
     }
-    case 'volcano':
+    case 'volcano': {
+      // An erupting volcano (divine or otherwise), framed at dusk for the glow.
+      const v = r.effects.find((e) => e.power === 'volcano');
+      if (v) return { focus: new THREE.Vector3(v.x, v.y, v.z).normalize(), distance: 150, heading: 2.6, tiltOffset: 0.02, localTime: 0.76 };
+      const f = findBest(r, (d, h) => (h > 2 ? 1 : 0) - Math.abs(d.y), 800);
+      return { focus: f, distance: 120, heading: 0.5, tiltOffset: 0, localTime: 0.4 };
+    }
     default: {
       const f = findBest(r, (d, h) => (h > 2 ? 1 : 0) - Math.abs(d.y), 800);
       return { focus: f, distance: 120, heading: 0.5, tiltOffset: 0, localTime: 0.4 };
@@ -172,6 +186,8 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
 
 export function applyViewpoint(r: GameRenderer, vp: Viewpoint): void {
   r.camera.cutTo({ focus: vp.focus, distance: vp.distance, heading: vp.heading, tiltOffset: vp.tiltOffset });
+  // A cut is instant: re-place the vegetation around the new focus right away.
+  r.vegetation.invalidate();
   if (vp.localTime !== null) {
     r.timeOfDayOverride = dayFracForLocalTime(vp.focus, vp.localTime);
   } else {

@@ -5,7 +5,7 @@
  * docs/screenshots. Any console error or warning fails the run.
  *
  * Usage: npm run shots [-- --only=orbit,coast] [--quality=high] [--seed=N]
- *        [--width=1280] [--height=720] [--out=docs/screenshots]
+ *        [--width=1280] [--height=720] [--out=docs/screenshots] [--hud]
  */
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
@@ -31,16 +31,16 @@ const DEFAULT_SHOTS = [
   { name: 'ground', view: 'ground' },
   { name: 'night', view: 'night' },
   { name: 'aurora', view: 'aurora' },
-  { name: 'storm', view: 'storm' },
   { name: 'wildlife', view: 'wildlife', advance: 60 },
-  { name: 'village', view: 'village', advance: 2880 },
-  { name: 'volcano', view: 'volcano' },
+  { name: 'village', view: 'village', advance: 9600 },
+  { name: 'storm', view: 'storm', waitFor: 'hurricane' },
+  { name: 'volcano', view: 'volcano', erupt: true },
 ];
 const only = args.only ? args.only.split(',') : null;
 const shots = DEFAULT_SHOTS.filter((s) => !only || only.includes(s.name));
 
 mkdirSync(outDir, { recursive: true });
-const server = await createServer({ server: { port: 0, host: '127.0.0.1' }, logLevel: 'error' });
+const server = await createServer({ server: { port: 0, host: '127.0.0.1', hmr: false, watch: { ignored: ['**/*'] } }, logLevel: 'error' });
 await server.listen();
 const addr = server.httpServer.address();
 const url = `http://127.0.0.1:${addr.port}/?harness=1&seed=${seed}&quality=${quality}`;
@@ -69,6 +69,8 @@ await page.goto(url);
 await page.waitForFunction(() => window.__genesis !== undefined, null, { timeout: 180_000 });
 await page.evaluate(() => window.__genesis.ready);
 console.log(`world ready in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+// Cinematic viewpoints hide the HUD unless --hud is given.
+await page.evaluate((show) => window.__genesis.hud(show), args.hud === 'true');
 // Warm up: let textures and shaders settle.
 if (args.advance) await page.evaluate((n) => window.__genesis.advance(n), Number(args.advance));
 await page.evaluate(() => window.__genesis.renderFrames(3));
@@ -76,6 +78,27 @@ await page.evaluate(() => window.__genesis.renderFrames(3));
 for (const s of shots) {
   const ts = Date.now();
   if (s.advance) await page.evaluate((n) => window.__genesis.advance(n), s.advance);
+  if (s.waitFor === 'hurricane') {
+    // Hurricanes are seasonal: let the weather run until one spins up.
+    for (let k = 0; k < 24; k++) {
+      const found = await page.evaluate(() => window.__genesis.game.renderer.storms.some((st) => st.type === 1 && st.intensity > 0.45));
+      if (found) break;
+      await page.evaluate(() => window.__genesis.advance(80));
+      await page.evaluate(() => window.__genesis.renderFrames(1));
+    }
+  }
+  if (s.erupt) {
+    // Raise a volcano in the mountains and let it erupt.
+    await page.evaluate(async () => {
+      const g = window.__genesis;
+      g.view('mountains');
+      const f = g.game.renderer.camera.current.focus;
+      await g.command({ kind: 'boundless', on: true });
+      await g.command({ kind: 'power', power: 'volcano', x: f.x, y: f.y, z: f.z });
+    });
+    await page.evaluate(() => window.__genesis.advance(70));
+    await page.evaluate(() => window.__genesis.renderFrames(2));
+  }
   await page.evaluate((v) => { window.__genesis.view(v); window.__genesis.setTime(12.5); }, s.view);
   await page.evaluate(() => window.__genesis.renderFrames(4));
   await page.evaluate(() => window.__genesis.setTime(12.5));

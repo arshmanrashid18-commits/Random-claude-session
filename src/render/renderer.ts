@@ -53,6 +53,8 @@ export class GameRenderer {
   precip = new Precipitation();
   /** Divine effects from the latest frame (for VFX). */
   effects: EffectData[] = [];
+  /** Strongest active weather systems (for viewpoints and labels). */
+  storms: StormData[] = [];
   private rainbow = 0;
   /** Current simulation speed multiplier (VFX timing). */
   simSpeed = 1;
@@ -181,6 +183,7 @@ export class GameRenderer {
     this.water = new WaterBodies(s, world, this.data);
     this.scene.add(this.water.group);
     this.vegetation = new Vegetation(s, world.seed);
+    this.vegetation.setLakes(world.lakes.cells, world.lakes.levels, world.hydroN);
     this.scene.add(this.vegetation.group);
     for (const m of this.vegetation.meshes) this.shadows.register(m, this.vegetation.depthMaterial);
     this.grass = new Grass(s, this.data.normalRT.texture);
@@ -347,7 +350,12 @@ export class GameRenderer {
     const behind = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion).dot(sunDir) < 0;
     this.sunUv.set(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5);
     const margin = Math.max(Math.abs(sp.x), Math.abs(sp.y));
-    const visible = behind ? 0 : 1 - Math.min(1, Math.max(0, (margin - 1.0) / 0.3));
+    // The planet itself hides the sun: closest approach of the view ray to the core.
+    const cp = cam.position;
+    const along = cp.dot(sunDir);
+    const miss = along >= 0 ? Infinity : Math.sqrt(Math.max(0, cp.lengthSq() - along * along));
+    const planetK = Math.min(1, Math.max(0, (miss - PLANET_RADIUS) / 45));
+    const visible = behind ? 0 : (1 - Math.min(1, Math.max(0, (margin - 1.0) / 0.3))) * planetK;
     this.post.render(r, this.compRT.texture, this.hdrRT.depthTexture!, { uv: this.sunUv, visible }, cam.projectionMatrixInverse, this.time);
     this.stats.drawCalls = r.info.render.calls;
     this.stats.triangles = r.info.render.triangles;
@@ -358,6 +366,7 @@ export class GameRenderer {
   /** Feed the active storm systems to the cloud shader (up to 8, strongest first). */
   setStorms(storms: StormData[]): void {
     const list = [...storms].sort((a, b) => b.intensity - a.intensity).slice(0, 8);
+    this.storms = list;
     const S = this.shared.uStorms.value as THREE.Vector4[];
     const P = this.shared.uStormParams.value as THREE.Vector4[];
     list.forEach((st, i) => {
@@ -380,6 +389,7 @@ export class GameRenderer {
     if (!this.ready || !this.world) return;
     this.world = { ...this.world, rivers, lakes };
     this.water.rebuild(this.world, this.data);
+    this.vegetation.setLakes(lakes.cells, lakes.levels, this.world.hydroN);
   }
 
   setTribes(tribes: TribeData[]): void {

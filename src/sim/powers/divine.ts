@@ -103,7 +103,7 @@ export class Divine {
   }
 
   /** Is (x,y,z) inside an active effect of this power? */
-  private within(power: PowerId, x: number, y: number, z: number, tick: number, pad = 0): DivineEffect | null {
+  within(power: PowerId, x: number, y: number, z: number, tick: number, pad = 0): DivineEffect | null {
     for (const e of this.effects) {
       if (e.power !== power || e.end <= tick) continue;
       if (dist(e.x, e.y, e.z, x, y, z) < e.radius + pad) return e;

@@ -283,6 +283,24 @@ export class Vegetation {
     this.invalid = true;
   }
 
+  /** Lake surface level per hydro cell (NaN where there is no lake). */
+  private lakeLevel: Float32Array | null = null;
+  private hydroN = 0;
+  setLakes(cells: Int32Array, levels: Float32Array, hydroN: number): void {
+    this.hydroN = hydroN;
+    this.lakeLevel = new Float32Array(6 * hydroN * hydroN).fill(NaN);
+    for (let k = 0; k < cells.length; k++) this.lakeLevel[cells[k]] = levels[k];
+    this.invalid = true;
+  }
+
+  private lakeAt(face: number, a: number, b: number): number {
+    if (!this.lakeLevel) return NaN;
+    const n = this.hydroN;
+    const i = Math.min(n - 1, Math.max(0, Math.floor((a + 1) * 0.5 * n)));
+    const j = Math.min(n - 1, Math.max(0, Math.floor((b + 1) * 0.5 * n)));
+    return this.lakeLevel[face * n * n + j * n + i];
+  }
+
   update(focus: THREE.Vector3, camDistance: number, data: PlanetData, now: number, force = false): void {
     if (this.invalid) { force = true; this.invalid = false; }
     if (!this.enabled || camDistance > 1100) {
@@ -295,7 +313,7 @@ export class Vegetation {
     const moved = focus.angleTo(this.lastFocus) * PLANET_RADIUS;
     const needs = force || moved > radius * 0.12 || Math.abs(radius - this.lastRadius) > this.lastRadius * 0.25 ||
       (data.regionVersion !== this.lastVersion && now - this.lastBuild > 3000);
-    if (!needs || now - this.lastBuild < 250) return;
+    if (!needs || (!force && now - this.lastBuild < 250)) return;
     this.lastBuild = now;
     this.lastFocus.copy(focus);
     this.lastRadius = radius;
@@ -384,7 +402,7 @@ export class Vegetation {
       broad * 0.62 * cluster,          // broadleaf
       conifer * 0.72 * cluster,        // conifer
       tropical * 0.7 * cluster,        // palm
-      xeric * 0.05,                    // cactus
+      xeric * xeric * 0.12 * Math.max(0, 1 - grass * 1.6), // cactus (true desert only)
       shrub * 0.12 + grass * 0.02,     // bush
       moss * 0.05 + conifer * 0.02,    // snag
       0.012 + xeric * 0.03,            // rock
@@ -412,6 +430,9 @@ export class Vegetation {
     const x = d[0], y = d[1], z = d[2];
     const h = groundHeight(heights, data.n, x, y, z);
     if (h < -0.2 && type !== 7 && type !== 6) return;
+    // Nothing grows under a lake; only reeds stand in its shallows.
+    const lake = this.lakeAt(face, a, b);
+    if (lake === lake && h < lake + 0.4 && !(type === 7 && h > lake - 0.6)) return;
     // Slope from neighbouring bilinear samples: trees avoid cliffs, rocks like them.
     const e = 0.004;
     const hx = data.grid.sample(heights, x + e, y, z) - hb;

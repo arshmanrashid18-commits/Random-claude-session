@@ -30,6 +30,12 @@ export const TICKS_PER_DAY = 160;
 /** Days per year: a year is 4 minutes at 1×, 2.4 s at 100×. */
 export const DAYS_PER_YEAR = 6;
 export const TICKS_PER_YEAR = TICKS_PER_DAY * DAYS_PER_YEAR;
+/**
+ * Human years lived per world year. A world year is one seasonal cycle; people
+ * live two years of their lives in each, so generations turn over within a
+ * play session (a village becomes a town in about twenty world years).
+ */
+export const LIFE_YEARS_PER_YEAR = 2;
 /** Moon orbital period in ticks (≈3.3 days, gives visible tidal rhythm). */
 export const TICKS_PER_MOON = 530;
 /** Axial tilt in radians (gives real seasons). */

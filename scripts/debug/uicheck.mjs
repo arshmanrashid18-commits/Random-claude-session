@@ -4,7 +4,7 @@ import { createServer } from 'vite';
 import { mkdirSync } from 'node:fs';
 const out = process.argv[2] ?? '/tmp/claude-0/ui';
 mkdirSync(out, { recursive: true });
-const server = await createServer({ server: { port: 0, host: '127.0.0.1' }, logLevel: 'error' });
+const server = await createServer({ server: { port: 0, host: '127.0.0.1', hmr: false, watch: { ignored: ['**/*'] } }, logLevel: 'error' });
 await server.listen();
 const url = `http://127.0.0.1:${server.httpServer.address().port}/?harness=1&seed=20260925&quality=high`;
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-gl=angle', '--disable-gpu-sandbox'] });

@@ -14,7 +14,7 @@ import { Pathfinder } from './pathfind';
 import { TECHS, TECH_INDEX, FIELD_COUNT, TechField, ageOf } from './tech';
 import { stepToward, offsetDir } from '../move';
 import { SpatialHash } from '../spatial';
-import { PLANET_RADIUS, TICKS_PER_DAY, TICKS_PER_YEAR, dayFrac } from '../constants';
+import { PLANET_RADIUS, TICKS_PER_DAY, TICKS_PER_YEAR, LIFE_YEARS_PER_YEAR, dayFrac } from '../constants';
 import type { Planet } from '../planet/planet';
 import type { Plants } from '../ecology/plants';
 import type { Animals } from '../ecology/animals';
@@ -90,6 +90,9 @@ export interface Settlement {
   capturedFrom: number;
   /** Tick until which the settlement is blessed (work, health, births). */
   blessed: number;
+  /** Where the current sickness came from: settlement id (-1 none) and carrier kind. */
+  plagueFrom?: number;
+  plagueVia?: 'traders' | 'pilgrims' | 'refugees' | 'crowding';
 }
 
 /** A remembered death: enough to bring the person back (Resurrection). */
@@ -158,6 +161,8 @@ export class Civ {
   private lastTick = 0;
   /** RNG of the running world (set every tick; used by helpers without an rng parameter). */
   rngRef: Rng | null = null;
+  /** The planet this civilisation lives on (set each tick; not saved state). */
+  planetRef: Planet | null = null;
   readonly region: import('../planet/cubesphere').CellGrid;
   society = new Society();
 
@@ -460,6 +465,7 @@ export class Civ {
     const P = this.people;
     this.lastTick = tick;
     this.rngRef = rng;
+    this.planetRef = planet;
     this.hash.rebuild(P.count, P.alive, P.x, P.y, P.z);
     const night = dayFrac(tick);
     const isNight = night < 0.23 || night > 0.8;
@@ -503,7 +509,9 @@ export class Civ {
       const fert = Math.min(1.6, 0.35 + cl.soil[c] * 0.8 + Math.min(0.5, planet.terrain.river[c] * 0.08) + (t.known[TECH_INDEX.get('irrigation')!] ? 0.25 : 0));
       const warm = Math.exp(-(((temp - 20) / 14) ** 2));
       const blessed = this.settlements[b.settle]?.blessed > this.lastTick ? 1.4 : 1;
-      b.growth += 0.017 * fert * warm * (0.4 + Math.min(3, b.workers) * 0.25) * blessed;
+      // Crops wither when the rains fail (drought pushes the rain bias negative).
+      const parched = 1 - 0.8 * Math.min(1, Math.max(0, -cl.rainBias[c]));
+      b.growth += 0.017 * fert * warm * (0.4 + Math.min(3, b.workers) * 0.25) * blessed * parched;
     }
   }
 
@@ -529,17 +537,27 @@ export class Civ {
     P.hunger[i] += (st === PState.Sleep ? 0.0025 : 0.0045) * (P.age[i] < 12 ? 0.6 : 1);
     P.energy[i] += st === PState.Sleep ? 0.006 : -0.0012;
     if (P.energy[i] < 0) P.energy[i] = 0; else if (P.energy[i] > 1) P.energy[i] = 1;
-    P.age[i] += 1 / TICKS_PER_YEAR;
+    P.age[i] += LIFE_YEARS_PER_YEAR / TICKS_PER_YEAR;
     let hp = P.health[i];
     if (P.hunger[i] >= 1) { P.hunger[i] = 1; hp -= 0.0022; }
     const c = this.hash.bucketOf[i];
+    // Armies on the march live off the land.
+    if (P.army[i] >= 0 && st === PState.March && P.hunger[i] > 0.6 && c >= 0 && (i + tick) % 8 === 0) {
+      const f = plants.forage(c);
+      if (f > 0.04) {
+        const meal = Math.min(0.5, f + 0.1) * 0.6;
+        this.produce(Res.Food, meal);
+        this.consume(Res.Food, meal);
+        P.hunger[i] = Math.max(0, P.hunger[i] - meal);
+      }
+    }
     if (c >= 0 && fires.intensity[c] > 0.35) hp -= fires.intensity[c] * 0.007;
     if (P.sick[i] > 0) hp = this.diseaseStep(i, tick, rng, hp);
     if (P.hunger[i] < 0.5 && hp < 1) hp = Math.min(1, hp + 0.0015);
     P.health[i] = hp;
     // Death: health, or old age.
     const age = P.age[i];
-    const oldAge = age > 48 ? 0.00012 * Math.exp((age - 48) / 9) : age < 3 ? 0.000012 : 0.000004;
+    const oldAge = (age > 48 ? 0.00012 * Math.exp((age - 48) / 9) : age < 3 ? 0.000012 : 0.000004) * LIFE_YEARS_PER_YEAR;
     if (hp <= 0 || rng.chance(oldAge)) {
       this.personDies(i, tick, hp <= 0 ? (P.hunger[i] >= 1 ? 'starvation' : c >= 0 && fires.intensity[c] > 0.35 ? 'fire' : P.sick[i] > 0 ? 'plague' : 'hardship') : 'old age', events);
       return;
@@ -564,7 +582,7 @@ export class Civ {
     }
     // Movement.
     if (s2 === PState.Walk || s2 === PState.Carry || s2 === PState.Travel || s2 === PState.Flee || s2 === PState.March) {
-      const speed = WALK * (s2 === PState.Flee ? 1.8 : s2 === PState.Carry ? 0.85 : 1) * (age < 12 ? 0.8 : age > 60 ? 0.75 : 1) * (P.vessel[i] ? 2.6 : 1);
+      const speed = WALK * (s2 === PState.Flee ? 1.8 : s2 === PState.Carry ? 0.85 : s2 === PState.March ? 1.5 : 1) * (age < 12 ? 0.8 : age > 60 ? 0.75 : 1) * (P.vessel[i] ? 2.6 : 1);
       const ox = P.x[i], oy = P.y[i], oz = P.z[i];
       const rem = stepToward(P.x, P.y, P.z, P.tx, P.ty, P.tz, i, speed);
       if ((i + tick) % 2 === 0 && P.vessel[i] === 0 && planet.heightAt(P.x[i], P.y[i], P.z[i]) < 0.12 && planet.heightAt(P.x[i], P.y[i], P.z[i]) < planet.heightAt(ox, oy, oz)) {
@@ -623,16 +641,19 @@ export class Civ {
     // Busy with timed activity or long journeys: don't interrupt.
     if ((st === PState.Work || st === PState.Build || st === PState.Eat || st === PState.Pray) && P.timer[i] > 0) return;
     if (st === PState.Travel || P.intent[i] === Intent.Settle) return;
-    // Soldiers on campaign follow their army's orders.
-    if (P.army[i] >= 0 && (P.intent[i] === Intent.March || st === PState.Fight || st === PState.March)) return;
+    // Soldiers on campaign follow their army's orders (and rejoin it after a scare).
+    if (P.army[i] >= 0) {
+      if (P.intent[i] === Intent.March || st === PState.Fight || st === PState.March) return;
+      if (st !== PState.Flee && this.society.resumeMarch(this, i, planet, rng)) return;
+    }
     if (!s) { this.wander(i, rng, 8); return; }
     // Starving: eat before anything else.
     if (P.hunger[i] > 0.8 && s.stock[Res.Food] >= 1 && P.intent[i] !== Intent.Eat) {
       this.goTo(i, s.x, s.y, s.z, 5, PState.Walk, Intent.Eat, s.id, rng);
       return;
     }
-    // Carrying: deliver first.
-    if (P.carryRes[i] >= 0 && P.carryAmt[i] > 0 && P.intent[i] !== Intent.Deliver && P.intent[i] !== Intent.Build) {
+    // Carrying: deliver first (unless already on the way to a meal).
+    if (P.carryRes[i] >= 0 && P.carryAmt[i] > 0 && P.intent[i] !== Intent.Deliver && P.intent[i] !== Intent.Build && P.intent[i] !== Intent.Eat) {
       this.goDeliver(i, s, rng);
       return;
     }
@@ -1155,6 +1176,42 @@ export class Civ {
     }
   }
 
+  /** Betroth a woman to a single man of another settlement of her people; he travels to her. */
+  private fetchSuitor(w: number, s: Settlement, rng: Rng, planet: Planet): void {
+    const P = this.people;
+    const t = this.tribes[s.tribe];
+    let best = -1, bestD = Infinity;
+    for (let j = 0; j < P.count; j++) {
+      if (!P.alive[j] || P.sex[j] !== 1 || P.spouse[j] >= 0 || P.tribe[j] !== s.tribe || P.settle[j] === s.id || P.settle[j] < 0) continue;
+      if (P.age[j] < 17 || Math.abs(P.age[j] - P.age[w]) >= 14 || P.role[j] !== 0 || P.army[j] >= 0) continue;
+      if (P.intent[j] === Intent.Settle || P.state[j] === PState.Travel) continue;
+      if (!t.settlements.includes(P.settle[j])) continue;
+      const o = this.settlements[P.settle[j]];
+      const d = (o.x - s.x) ** 2 + (o.y - s.y) ** 2 + (o.z - s.z) ** 2;
+      if (d < bestD) { bestD = d; best = j; }
+    }
+    if (best < 0) return;
+    const from = this.settlements[P.settle[best]];
+    const path = this.paths.find(from.cell, s.cell, 'land', 4000);
+    if (!path) return;
+    P.spouse[w] = P.uid[best];
+    P.spouse[best] = P.uid[w];
+    this.dropCarryAt(best, from);
+    P.intent[best] = Intent.Settle;
+    P.intentArg[best] = s.cell;
+    P.state[best] = PState.Travel;
+    P.pathId[best] = this.registerPath(path);
+    P.pathPos[best] = 0;
+    P.job[best] = Job.None;
+    this.nextWaypoint(best, planet, rng);
+  }
+
+  private dropCarryAt(i: number, s: Settlement): void {
+    const P = this.people;
+    if (P.carryRes[i] >= 0 && P.carryAmt[i] > 0) s.stock[P.carryRes[i]] += P.carryAmt[i];
+    P.carryRes[i] = -1; P.carryAmt[i] = 0;
+  }
+
   private maybeMarry(i: number, tick: number, rng: Rng, events: EventLog): void {
     const P = this.people;
     if (P.spouse[i] >= 0 || P.age[i] < 17 || P.age[i] > 50) return;
@@ -1370,15 +1427,19 @@ export class Civ {
     // Matchmaking: single adults of the settlement pair up over time.
     const singles = members.filter((i) => P.spouse[i] < 0 && P.age[i] >= 17 && P.age[i] <= 48);
     const men = singles.filter((i) => P.sex[i] === 1), women = singles.filter((i) => P.sex[i] === 0);
+    const related = (a: number, b: number) => (P.mother[a] >= 0 && P.mother[a] === P.mother[b]) || P.uid[a] === P.mother[b] || P.uid[b] === P.mother[a];
+    let unmatched = -1;
     for (const w of women) {
       if (!rng.chance(0.18 + P.social[w] * 0.2)) continue;
-      const m = men.find((mm) => P.spouse[mm] < 0 && P.mother[mm] !== P.mother[w] && P.uid[mm] !== P.mother[w] && Math.abs(P.age[mm] - P.age[w]) < 14);
-      if (m === undefined) continue;
+      const m = men.find((mm) => P.spouse[mm] < 0 && !related(mm, w) && Math.abs(P.age[mm] - P.age[w]) < 14);
+      if (m === undefined) { if (P.age[w] < 40) unmatched = w; continue; }
       P.spouse[w] = P.uid[m];
       P.spouse[m] = P.uid[w];
       P.happiness[w] = Math.min(1, P.happiness[w] + 0.2);
       P.happiness[m] = Math.min(1, P.happiness[m] + 0.2);
     }
+    // No match at home: a suitor comes from a sister settlement.
+    if (unmatched >= 0 && t.settlements.length > 1 && rng.chance(0.35)) this.fetchSuitor(unmatched, s, rng, planet);
     // Births: couples, housing and food permitting.
     const roomy = s.pop < s.housing + 4 + (s.housing < 10 ? 14 : 0);
     const fed = s.stock[Res.Food] > s.pop * 1.2;
@@ -1386,19 +1447,32 @@ export class Civ {
       for (const i of members) {
         if (P.sex[i] !== 0 || P.pregnant[i] > 0 || P.age[i] < 17 || P.age[i] > 42 || P.spouse[i] < 0) continue;
         if (P.children[i] >= 6) continue;
-        if (rng.chance(s.blessed > tick ? 0.11 : 0.05)) P.pregnant[i] = 300;
+        if (rng.chance(s.blessed > tick ? 0.14 : 0.07)) P.pregnant[i] = 300;
       }
     }
     // Disease burden (drives medicine research and the chronicle).
     let sick = 0;
     for (const i of members) if (P.sick[i] > 0) sick++;
+    // Crowded towns breed sickness; trade brings strangers and their fevers.
+    if (sick === 0 && s.pop >= 35) {
+      const kn = (name: string) => (t.known[TECH_INDEX.get(name)!] ? 1 : 0);
+      const crowd = Math.max(1, s.pop / Math.max(1, s.housing));
+      const trade = this.society.routes.reduce((n, r) => n + (r.a === s.id || r.b === s.id ? 1 : 0), 0);
+      const chance = 0.0022 * (s.pop / 35) * crowd * (1 + trade * 0.4) * (1 - 0.6 * kn('sanitation')) * (1 - 0.8 * kn('vaccination'));
+      if (rng.chance(chance)) {
+        const zero = members[rng.int(0, members.length)];
+        if (P.age[zero] > 5 && !P.immune[zero]) { P.sick[zero] = 0.001; sick = 1; s.plagueFrom = s.id; s.plagueVia = 'crowding'; }
+      }
+    }
     const wasSick = s.disease;
     s.disease = sick / members.length;
     if (s.disease > 0.05) {
-      const t = this.tribes[s.tribe];
       t.needs[TechField.Medicine] += s.disease * 2;
-      if (wasSick <= 0.05 && s.disease > 0.15) events.emit(tick, 'plague', s, 0.6, { settlement: s.name, tribe: t.name, sick });
-    }
+      if (wasSick <= 0.05 && s.disease > 0.15) {
+        const from = s.plagueFrom !== undefined && s.plagueFrom >= 0 && s.plagueFrom !== s.id ? this.settlements[s.plagueFrom] : null;
+        events.emit(tick, 'plague', s, 0.6, { settlement: s.name, tribe: t.name, sick, from: from ? from.name : '', via: s.plagueVia ?? '' });
+      }
+    } else if (sick === 0) { s.plagueFrom = -1; s.plagueVia = undefined; }
   }
 
   private jobTargets(s: Settlement, adults: number, planet: Planet, plants: Plants, animals: Animals): number[] {
@@ -1571,7 +1645,7 @@ export class Civ {
       P.pathPos[i] = 0;
       this.nextWaypoint(i, planet, rng);
       // Carry provisions.
-      if (P.carryRes[i] < 0 && s.stock[Res.Food] > 4) { s.stock[Res.Food] -= 4; P.carryRes[i] = Res.Food; P.carryAmt[i] = 4; }
+      if (P.carryRes[i] < 0 && s.stock[Res.Food] > 8) { s.stock[Res.Food] -= 7; P.carryRes[i] = Res.Food; P.carryAmt[i] = 7; }
     }
     events.emit(tick, 'migration', s, 0.3, { settlement: s.name, tribe: this.tribes[s.tribe].name, count: group.length, to: geo.describe(best) });
   }
@@ -1682,7 +1756,8 @@ export class Civ {
     for (const t of this.tribes) {
       if (!t.alive) continue;
       const pt = perTribe[t.id];
-      const base = pt.adults * 0.012 * (0.6 + t.traits.curiosity) * (t.inspired > tick ? 2 : 1);
+      // Ideas grow with people, but less than linearly (they share them).
+      const base = 0.035 * Math.pow(pt.adults, 0.75) * (0.6 + t.traits.curiosity) * (t.inspired > tick ? 2 : 1);
       for (let f = 0; f < FIELD_COUNT; f++) {
         t.research[f] += base * (f === TechField.Seafaring ? (pt.coastal ? 1 : 0.1) : 1) + t.needs[f];
         t.needs[f] *= 0.97;
@@ -1700,7 +1775,7 @@ export class Civ {
         }
         if (cheapest >= 0 && t.research[f] >= cost) {
           t.known[cheapest] = 1;
-          t.research[f] -= cost * 0.6;
+          t.research[f] -= cost * 0.85;
           const tech = TECHS[cheapest];
           const cap = this.settlements[t.capital];
           events.emit(tick, 'tech', cap ?? null, tech.age !== undefined ? 0.5 : 0.3, { tribe: t.name, tech: tech.name, desc: tech.desc });
@@ -1760,6 +1835,13 @@ export class Civ {
       P.immune[i] = 1;
     }
     return hp;
+  }
+
+  /** A sick traveller arriving at a healthy settlement seeds its next outbreak. */
+  carrierArrives(i: number, s: Settlement, from: Settlement | null, via: 'traders' | 'pilgrims' | 'refugees'): void {
+    if (this.people.sick[i] <= 0 || s.disease > 0.02 || !from || from.id === s.id) return;
+    s.plagueFrom = from.id;
+    s.plagueVia = via;
   }
 
   /** Infect people within `radius` of a point (plague power, trade routes). */

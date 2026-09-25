@@ -183,40 +183,58 @@ export class WaterBodies {
     const riv: number[] = [];
     const wid: number[] = [];
     const idx: number[] = [];
+    // Rivers are traced on the coarse hydrology grid; subdivide each span so
+    // the ribbon drapes over the terrain instead of bridging hills.
+    const SUB = 4;
+    const px: number[] = [], lv: number[] = [], wv: number[] = [];
     for (let r = 0; r < nr; r++) {
       const s = offsets[r], e = offsets[r + 1];
       if (e - s < 2) continue;
+      px.length = 0; lv.length = 0; wv.length = 0;
+      for (let k = s; k < e; k++) {
+        const last = k === e - 1;
+        for (let q = 0; q < (last ? 1 : SUB); q++) {
+          const t = q / SUB;
+          const k2 = last ? k : k + 1;
+          let x = points[k * 3] + (points[k2 * 3] - points[k * 3]) * t;
+          let y = points[k * 3 + 1] + (points[k2 * 3 + 1] - points[k * 3 + 1]) * t;
+          let z = points[k * 3 + 2] + (points[k2 * 3 + 2] - points[k * 3 + 2]) * t;
+          const l = Math.hypot(x, y, z) || 1;
+          x /= l; y /= l; z /= l;
+          px.push(x, y, z);
+          lv.push(level[k] + (level[k2] - level[k]) * t);
+          wv.push(width[k] + (width[k2] - width[k]) * t);
+        }
+      }
+      const m = px.length / 3;
       let along = 0;
       const base = pos.length / 3;
-      for (let k = s; k < e; k++) {
-        const x = points[k * 3], y = points[k * 3 + 1], z = points[k * 3 + 2];
-        const kp = Math.max(s, k - 1), kn = Math.min(e - 1, k + 1);
-        let tx = points[kn * 3] - points[kp * 3], ty = points[kn * 3 + 1] - points[kp * 3 + 1], tz = points[kn * 3 + 2] - points[kp * 3 + 2];
+      for (let k = 0; k < m; k++) {
+        const x = px[k * 3], y = px[k * 3 + 1], z = px[k * 3 + 2];
+        const kp = Math.max(0, k - 1), kn = Math.min(m - 1, k + 1);
+        let tx = px[kn * 3] - px[kp * 3], ty = px[kn * 3 + 1] - px[kp * 3 + 1], tz = px[kn * 3 + 2] - px[kp * 3 + 2];
         const tl = Math.hypot(tx, ty, tz) || 1;
         tx /= tl; ty /= tl; tz /= tl;
         // side = p × t
         let sx = y * tz - z * ty, sy = z * tx - x * tz, sz = x * ty - y * tx;
         const sl = Math.hypot(sx, sy, sz) || 1;
         sx /= sl; sy /= sl; sz /= sl;
-        if (k > s) {
-          const px = points[(k - 1) * 3], py = points[(k - 1) * 3 + 1], pz = points[(k - 1) * 3 + 2];
-          along += Math.hypot(x - px, y - py, z - pz) * PLANET_RADIUS;
-        }
-        const w = width[k] * 0.5 * 1.25 / PLANET_RADIUS;
-        // Keep water at least slightly above the local ground.
+        if (k > 0) along += Math.hypot(x - px[(k - 1) * 3], y - px[(k - 1) * 3 + 1], z - px[(k - 1) * 3 + 2]) * PLANET_RADIUS;
+        const w = wv[k] * 0.5 * 1.25 / PLANET_RADIUS;
+        // Keep water slightly above the local ground (and never float far above it).
         const ground = data.heightAt(x, y, z);
-        const lv = Math.max(level[k], ground + 0.12);
-        const rr = PLANET_RADIUS + lv;
+        const l2 = Math.min(Math.max(lv[k], ground + 0.12), ground + 0.6);
+        const rr = PLANET_RADIUS + l2;
         for (const side of [-1, 1]) {
           let vx = x + sx * w * side, vy = y + sy * w * side, vz = z + sz * w * side;
           const vl = Math.hypot(vx, vy, vz);
           vx /= vl; vy /= vl; vz /= vl;
           pos.push(vx * rr, vy * rr, vz * rr);
           riv.push(side, along);
-          wid.push(width[k]);
+          wid.push(wv[k]);
         }
-        if (k < e - 1) {
-          const a = base + (k - s) * 2;
+        if (k < m - 1) {
+          const a = base + k * 2;
           idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
         }
       }

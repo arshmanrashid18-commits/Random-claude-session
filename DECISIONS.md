@@ -69,3 +69,14 @@ Each entry: decision — why.
 24. **Procedural audio starts on the first user gesture.** Browsers block autoplay;
     the score, ambience and effects are synthesised with WebAudio nodes and a
     generated reverb impulse, mixed through a limiter.
+25. **Big cats eat less often.** Lions and jaguars starved slowly even while their prey
+    boomed (hunting is opportunistic and rainforest prey is sparse). Their metabolism was
+    lowered ~15–20% and jaguars may also take gazelles at the savanna edge; over 12
+    unattended years every predator now persists with boom/bust cycles.
+26. **Phase tags are local.** Every phase is tagged (`phase-1` … `phase-9`) in the local
+    repository; the session's git remote only accepts the development branch (tag pushes
+    return HTTP 403), so the tags are not on the remote.
+27. **Monkey test tolerates intentional reloads.** Loading a save reloads the page (the
+    world is rebuilt from the save before the worker starts); the monkey harness waits for
+    the new page instead of counting the navigation as a failure. Console errors on either
+    page still fail it.

@@ -82,7 +82,12 @@ export function narrate(e: GameEvent): Narration {
       : { title: 'A new chief', text: `${s(d.name)} becomes chief of the ${s(d.tribe)}.`, icon: 'crown', tone: 'neutral' };
     case 'death-notable': return { title: 'A great one dies', text: `${s(d.name)} of the ${s(d.tribe)} dies${d.cause && d.cause !== 'old age' ? ` of ${s(d.cause)}` : ' of old age'} at ${n(d.age)}.`, icon: 'skull', tone: 'neutral' };
     case 'famine': return { title: 'Famine', text: `Hunger stalks ${s(d.settlement)}.`, icon: 'skull', tone: 'bad' };
-    case 'plague': return { title: 'Plague', text: `Sickness spreads through ${s(d.settlement)} of the ${s(d.tribe)}${d.divine ? ', sent by your hand' : ''}.`, icon: 'plague', tone: 'bad' };
+    case 'plague': {
+      const how = d.divine ? ', sent by your hand'
+        : d.from ? `, carried by ${s(d.via)} from ${s(d.from)}`
+        : d.via === 'crowding' ? ', bred in its crowded lanes' : '';
+      return { title: 'Plague', text: `Sickness spreads through ${s(d.settlement)} of the ${s(d.tribe)}${how}.`, icon: 'plague', tone: 'bad' };
+    }
     case 'trade-route':
       if (d.pact) return { title: 'Trade pact', text: `The ${s(d.a)} and the ${s(d.b)} agree to trade.`, icon: 'scroll', tone: 'good' };
       if (d.sea) return { title: 'Sea route', text: `Ships begin sailing between ${s(d.a)} and ${s(d.b)}.`, icon: 'wave', tone: 'good' };

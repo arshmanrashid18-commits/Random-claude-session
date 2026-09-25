@@ -39,13 +39,18 @@ void main() {
   vec3 base = uAnchor + uEast * xz.x + uNorth * xz.y + uUp * (y - uHeight * 0.35);
   vec3 toCam = uCamPos - base;
   vec3 fall = normalize(-uUp * speed + (uEast * uWind.x + uNorth * uWind.y) * mix(0.5, 1.0, uSnow));
-  vec3 side = normalize(cross(fall, toCam));
+  // Seen end-on (looking straight down the fall line) a streak degenerates:
+  // pick a stable side vector and fade those drops out.
+  vec3 viewDir = normalize(toCam);
+  float endOn = abs(dot(fall, viewDir));
+  vec3 sc = cross(fall, viewDir);
+  vec3 side = dot(sc, sc) > 1e-6 ? normalize(sc) : uEast;
   float len = mix(0.9, 0.1, uSnow) * (0.8 + aSeed.w * 0.5);
   float wid = mix(0.012, 0.07, uSnow) * (0.8 + aSeed.w * 0.5);
   vec3 p = base + side * position.x * wid + (uSnow > 0.5 ? cross(side, normalize(toCam)) * position.y * wid : fall * position.y * len);
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
   float d = length(toCam);
-  vAlpha = smoothstep(uRadius, uRadius * 0.4, length(xz)) * smoothstep(0.5, 3.0, d);
+  vAlpha = smoothstep(uRadius, uRadius * 0.4, length(xz)) * smoothstep(0.5, 3.0, d) * mix(1.0 - smoothstep(0.7, 0.93, endOn), 1.0, uSnow);
   vUv = position.xy;
   vSnow = uSnow;
 }
@@ -62,7 +67,7 @@ void main() {
   float a;
   if (vSnow > 0.5) a = smoothstep(1.0, 0.3, length(vUv));
   else a = (1.0 - abs(vUv.x)) * smoothstep(1.0, 0.2, abs(vUv.y));
-  a *= vAlpha * mix(0.35, 0.9, vSnow) * uIntensity;
+  a *= vAlpha * mix(0.2, 0.85, vSnow) * uIntensity;
   if (a < 0.004) discard;
   outColor = vec4(uLight * a, a);
 }
@@ -150,7 +155,7 @@ export class Precipitation {
     u.uSnow.value = this.snow;
     u.uIntensity.value = Math.min(1, visible * 1.4);
     const day = Math.max(0, up.dot(sunDir));
-    const light = (0.02 + day * 0.9) * sunIntensity * 0.06;
+    const light = (0.02 + day * 0.9) * sunIntensity * 0.045;
     (u.uLight.value as THREE.Vector3).set(light * 0.9, light * 0.95, light);
     (u.uWind.value as THREE.Vector2).set(Math.sin(this.time * 0.1) * 0.3 + 0.4, 0.2);
   }

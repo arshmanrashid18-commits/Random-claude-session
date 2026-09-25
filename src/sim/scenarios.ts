@@ -51,19 +51,19 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'The First Flame',
     tagline: 'From stone to bronze.',
     brief: 'Five small bands huddle around their fires. They do not know you yet. Teach them — gently or terribly — and carry one people out of the Stone Age.',
-    objective: 'A people reaches the Bronze Age within 30 years.',
+    objective: 'A people reaches the Bronze Age within 12 years.',
     difficulty: 1,
     seed: 20260925,
     preset: 'earthlike',
-    years: 30,
+    years: 12,
     setup(w) { w.civ.devotion = 150; },
     check(w, s) {
       const best = Math.max(...w.civ.tribes.filter((t) => t.alive).map((t) => t.known.reduce((a, b) => a + b, 0)), 0);
       s.progress = Math.min(1, best / 16);
-      s.detail = `${best} discoveries · ${Math.max(0, 30 - years(w, s)).toFixed(1)} years left`;
+      s.detail = `${best} discoveries · ${Math.max(0, 12 - years(w, s)).toFixed(1)} years left`;
       if (w.civ.tribes.some((t) => t.alive && t.age >= Age.Bronze)) { s.outcome = 'Bronze is poured for the first time. Your people will never again be only hunters.'; return 'won'; }
       if (aliveTribes(w) === 0) { s.outcome = 'The last fire has gone out.'; return 'lost'; }
-      if (years(w, s) >= 30) { s.outcome = 'Thirty years pass, and still they work only in stone.'; return 'lost'; }
+      if (years(w, s) >= 12) { s.outcome = 'Twelve years pass, and still they work only in stone.'; return 'lost'; }
       return 'active';
     },
   },
@@ -72,7 +72,7 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'The Long Drought',
     tagline: 'Water is life.',
     brief: 'On a world of sand and shrinking seas the rains have failed. The peoples of Dune will not survive the decade alone.',
-    objective: 'Keep at least 120 people alive after 20 years. Fewer than 30 and all is lost.',
+    objective: 'The rains fail every year. After 20 years at least 200 people must live; fewer than 30 and all is lost.',
     difficulty: 2,
     seed: 7117,
     preset: 'arid',
@@ -88,12 +88,23 @@ export const SCENARIOS: ScenarioDef[] = [
       }
     },
     check(w, s) {
+      // The rains keep failing: each year the drought returns over every
+      // settlement that is not already parched. Only rain can break it.
+      if (w.tick - (s.memo.dry ?? s.startTick) >= TICKS_PER_YEAR) {
+        s.memo.dry = w.tick;
+        const was = w.divine.boundless;
+        w.divine.boundless = true;
+        for (const st of w.civ.settlements) {
+          if (st.alive && !w.divine.within('drought', st.x, st.y, st.z, w.tick, 60)) w.divine.cast(w, { power: 'drought', x: st.x, y: st.y, z: st.z });
+        }
+        w.divine.boundless = was;
+      }
       const pop = alivePeople(w);
-      s.progress = Math.min(1, years(w, s) / 20) * (pop >= 120 ? 1 : pop / 120);
+      s.progress = Math.min(1, years(w, s) / 20) * (pop >= 200 ? 1 : pop / 200);
       s.detail = `${pop} people · ${Math.max(0, 20 - years(w, s)).toFixed(1)} years left`;
       if (pop < 30) { s.outcome = 'The last wells are dry. The sand keeps their bones.'; return 'lost'; }
       if (years(w, s) >= 20) {
-        if (pop >= 120) { s.outcome = 'The rains came because you willed them. They will sing of it for a thousand years.'; return 'won'; }
+        if (pop >= 200) { s.outcome = 'The rains came because you willed them. They will sing of it for a thousand years.'; return 'won'; }
         s.outcome = 'They survived — barely. Too few remain to call this a victory.';
         return 'lost';
       }
@@ -134,7 +145,7 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'Two Faiths',
     tagline: 'Blessed are the peacemakers.',
     brief: 'Two neighbouring peoples have come to hate each other in your name. Their war will end with one of them erased — unless you intervene.',
-    objective: 'End the war and keep both peoples alive for 12 years.',
+    objective: 'Impose a lasting truce and keep both peoples alive for 12 years. Left alone, their peace never holds.',
     difficulty: 2,
     seed: 20260925,
     preset: 'earthlike',
@@ -166,12 +177,22 @@ export const SCENARIOS: ScenarioDef[] = [
     check(w, s) {
       const a = s.memo.a, b = s.memo.b;
       const ta = w.civ.tribes[a], tb = w.civ.tribes[b];
-      const war = w.civ.society.atWar(a, b);
-      s.progress = Math.min(1, years(w, s) / 12) * (war ? 0.5 : 1);
+      const so = w.civ.society;
+      let war = so.atWar(a, b);
+      // A holy war's peace does not hold: unless the god imposes a truce,
+      // the priests call the faithful back to arms within months.
+      let last = null as (typeof so.wars)[number] | null;
+      for (const x of so.wars) if ((x.a === a && x.b === b) || (x.a === b && x.b === a)) last = x;
+      if (!war && last && last.how !== 'truce' && ta.alive && tb.alive && w.tick - last.end > TICKS_PER_YEAR * 0.4) {
+        war = so.declareWar(w.civ, a, b, 'holy', w.tick, w.events);
+        last = war;
+      }
+      const truce = !war && !!last && last.how === 'truce';
+      s.progress = Math.min(1, years(w, s) / 12) * (truce ? 1 : 0.5);
       s.detail = `${ta.name} ${ta.population} · ${tb.name} ${tb.population} · ${war ? 'at war' : 'at peace'}`;
       if (!ta.alive || !tb.alive) { s.outcome = `The ${(ta.alive ? tb : ta).name} are no more. Their faith is ash.`; return 'lost'; }
       if (years(w, s) >= 12) {
-        if (!war) { s.outcome = 'The spears are hung above the hearths. Their children will trade, not fight.'; return 'won'; }
+        if (truce) { s.outcome = 'The spears are hung above the hearths. Their children will trade, not fight.'; return 'won'; }
         s.outcome = 'Twelve years of war, and no end in sight.';
         return 'lost';
       }
@@ -183,19 +204,19 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'The Chosen People',
     tagline: 'A city on a hill.',
     brief: 'Choose a people and raise them above all others. Great cities are built on full granaries, safe walls and bold ideas.',
-    objective: 'Any settlement grows to 70 people within 30 years.',
+    objective: 'Any settlement grows to 100 people within 25 years.',
     difficulty: 3,
     seed: 3141,
     preset: 'earthlike',
-    years: 30,
+    years: 25,
     setup(w) { w.civ.devotion = 300; },
     check(w, s) {
       const best = Math.max(0, ...w.civ.settlements.filter((x) => x.alive).map((x) => x.pop));
-      s.progress = Math.min(1, best / 70);
-      s.detail = `largest settlement ${best} · ${Math.max(0, 30 - years(w, s)).toFixed(1)} years left`;
-      if (best >= 70) { s.outcome = 'Streets, fields to the horizon, a temple on the hill: your chosen people flourish.'; return 'won'; }
+      s.progress = Math.min(1, best / 100);
+      s.detail = `largest settlement ${best} · ${Math.max(0, 25 - years(w, s)).toFixed(1)} years left`;
+      if (best >= 100) { s.outcome = 'Streets, fields to the horizon, a temple on the hill: your chosen people flourish.'; return 'won'; }
       if (aliveTribes(w) === 0) { s.outcome = 'No one is left to build anything.'; return 'lost'; }
-      if (years(w, s) >= 30) { s.outcome = 'Thirty years, and still only villages.'; return 'lost'; }
+      if (years(w, s) >= 25) { s.outcome = 'A generation passes, and still only villages.'; return 'lost'; }
       return 'active';
     },
   },

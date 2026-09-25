@@ -58,11 +58,15 @@ float cloudDensity(vec3 p, float lod) {
   // Large-scale weather systems: low-frequency noise sculpts cloud fields
   // into fronts and cells; the climate cover decides where they can exist.
   vec3 qw = dir * 1.9 + uCloudWind * uTime * 0.35;
-  float wx = texture(uCloudNoise, qw * 0.5).a * 0.55 + texture(uCloudNoise, qw * 1.4 + 0.37).a * 0.3 + texture(uCloudNoise, qw * 3.1 + 0.71).a * 0.15;
+  float a0 = texture(uCloudNoise, qw * 0.5).a, a1 = texture(uCloudNoise, qw * 1.4 + 0.37).a, a2 = texture(uCloudNoise, qw * 3.1 + 0.71).a;
+  float wx = a0 * 0.55 + a1 * 0.3 + a2 * 0.15;
   cov = smoothstep(0.12, 0.75, cov);
   cov = clamp(cov * smoothstep(0.34, 0.66, wx) * 1.5, 0.0, 1.0);
   if (cov < 0.04) return 0.0;
-  vec3 q = p * 0.0048 + uCloudWind * uTime;
+  // Domain warp by the weather-scale field turns uniform cells into swirls
+  // and streaks, and a zonal stretch lays them along the winds.
+  vec3 warp = vec3(a0 - 0.5, a1 - 0.5, a2 - a0) * (0.7 + swirl * 0.8);
+  vec3 q = vec3(p.x, p.y * 1.7, p.z) * 0.0044 + warp + uCloudWind * uTime;
   vec4 n = texture(uCloudNoise, q);
   float base = n.r * 0.65 + n.g * 0.35;
   // Height profile: flat-ish bases, rounded tops; storms tower.
@@ -90,16 +94,21 @@ float cloudShadow(vec3 wp, vec3 sunDir) {
 `;
 
 export const GLSL_SKYLIGHT = /* glsl */ `
+uniform vec3 uMoonDir;
 // Approximate sky irradiance on a surface with normal N at up direction 'up'.
+// At night a cool moonlight (brightest at full moon) keeps the land legible.
 vec3 skyAmbient(vec3 up, vec3 N, vec3 sunDir) {
   float sunH = dot(up, sunDir);
   float day = smoothstep(-0.18, 0.25, sunH);
   vec3 dayCol = vec3(0.30, 0.45, 0.75) * 0.9;
   vec3 duskCol = vec3(0.55, 0.32, 0.30) * 0.5;
-  vec3 nightCol = vec3(0.012, 0.018, 0.035);
+  vec3 nightCol = vec3(0.014, 0.02, 0.04);
   vec3 sky = mix(nightCol, mix(duskCol, dayCol, smoothstep(0.0, 0.35, sunH)), day);
   float hemi = 0.55 + 0.45 * dot(N, up);
-  return sky * hemi;
+  float phase = 0.5 - 0.5 * dot(sunDir, uMoonDir);
+  float moonUp = smoothstep(-0.08, 0.25, dot(up, uMoonDir));
+  vec3 moon = vec3(0.07, 0.095, 0.17) * (0.3 + 0.7 * phase) * moonUp * (1.0 - day) * (0.3 + 1.5 * max(dot(N, uMoonDir), 0.0));
+  return sky * hemi + moon;
 }
 `;
 
@@ -157,7 +166,9 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
     float pebble = smoothstep(0.62, 0.8, snoise(pp * 3.3)) * closeK;
     desert = mix(desert, desert * 0.7, pebble * 0.5);
   }
-  vec3 ground = mix(desert, grass, wetness);
+  // Dry and cold is steppe and bare soil, not sand; living grass wins where the plant sim grows it.
+  desert = mix(mix(tundra, soil, 0.4), desert, smoothstep(2.0, 14.0, temp + macro * 3.0));
+  vec3 ground = mix(desert, grass, max(wetness, clamp(vA.r * 0.9, 0.0, 1.0)));
   ground = mix(ground, tundra, 1.0 - smoothstep(-6.0, 3.0, temp + macro * 2.0));
   ground *= 0.9 + macro * 0.18 + micro * 0.08;
 

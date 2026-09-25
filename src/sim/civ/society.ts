@@ -26,7 +26,7 @@ import { Intent } from './people';
 import { TECH_INDEX } from './tech';
 import { PLANET_RADIUS, TICKS_PER_DAY, TICKS_PER_YEAR } from '../constants';
 import { offsetDir } from '../move';
-import { createTribe } from './tribes';
+import { createTribe, type Tribe } from './tribes';
 
 const INV_R = 1 / PLANET_RADIUS;
 
@@ -41,6 +41,8 @@ export interface War {
   cause: WarCause;
   deaths: [number, number];
   conquests: [number, number];
+  /** How it ended (set when it ends). */
+  how?: 'peace' | 'truce' | 'destroyed';
 }
 
 export interface Army {
@@ -54,6 +56,8 @@ export interface Army {
   start: number;
   pathId: number;
   stageTick: number;
+  /** Carried by ships (seafaring peoples across water). */
+  naval?: boolean;
 }
 
 export interface TradeRoute {
@@ -99,6 +103,8 @@ export class Society {
   pact: number[][] = [];
   /** Lingering resentment from past wars (decays). */
   grudge: number[][] = [];
+  /** Cultural affinity of each pair, fixed at first contact (-0.4..0.4). */
+  affinity: number[][] = [];
   wars: War[] = [];
   armies: Army[] = [];
   routes: TradeRoute[] = [];
@@ -114,6 +120,8 @@ export class Society {
     grow(this.contact, false);
     grow(this.pact, 0);
     grow(this.grudge, 0);
+    if (!this.affinity) this.affinity = [];
+    grow(this.affinity, 0);
   }
 
   atWar(a: number, b: number): War | null {
@@ -163,8 +171,12 @@ export class Society {
         // First contact.
         if (!this.contact[a][b]) {
           const d = this.tribeDistance(civ, a, b);
-          if (d < 700) {
+          // Seafarers meet peoples beyond the horizon.
+          const sea = (t: Tribe) => (t.known[TECH_INDEX.get('navigation')!] ? 2 : t.known[TECH_INDEX.get('sailing')!] ? 1 : 0);
+          const reach = 700 + Math.max(sea(T[a]), sea(T[b])) * 350;
+          if (d < reach) {
             this.contact[a][b] = this.contact[b][a] = true;
+            this.affinity[a][b] = this.affinity[b][a] = rng.range(-0.4, 0.4);
             const sa = civ.settlements[T[a].capital];
             events.emit(tick, 'first-contact', sa ?? null, 0.6, { a: T[a].name, b: T[b].name });
             this.rel[a][b] = this.rel[b][a] = (T[a].traits.honor + T[b].traits.honor) * 0.2 - (T[a].traits.aggression + T[b].traits.aggression) * 0.15;
@@ -177,7 +189,8 @@ export class Society {
           + (this.pact[a][b] === 1 ? 0.3 : this.pact[a][b] === 2 ? 0.5 : 0)
           + (sameFaith ? 0.25 : -0.15 - fervor * 0.35)
           - Math.min(0.5, (friction[a][b] + friction[b][a]) * 0.012)
-          - this.grudge[a][b];
+          - this.grudge[a][b]
+          + this.affinity[a][b];
         const r = this.rel[a][b] + (target - this.rel[a][b]) * 0.04 + rng.range(-0.03, 0.03);
         this.rel[a][b] = this.rel[b][a] = Math.max(-1, Math.min(1, r));
         this.grudge[a][b] = this.grudge[b][a] = this.grudge[a][b] * 0.995;
@@ -254,7 +267,7 @@ export class Society {
     for (const [x, y, sx, sy] of [[a, b, sa, sb], [b, a, sb, sa]] as const) {
       const tx = T[x];
       const ratio = sx / Math.max(1, sy);
-      const p = 0.012 * tx.traits.aggression * Math.min(2.5, ratio) * (-this.rel[x][y]);
+      const p = 0.045 * tx.traits.aggression * Math.min(2.5, ratio) * (-this.rel[x][y]);
       if (ratio < 0.7 || !rng.chance(p)) continue;
       // Why?
       let cause: WarCause = 'border';
@@ -301,6 +314,7 @@ export class Society {
   endWar(civ: Civ, w: War, tick: number, events: EventLog, how: 'peace' | 'truce' | 'destroyed'): void {
     if (w.end >= 0) return;
     w.end = tick;
+    w.how = how;
     const T = civ.tribes;
     this.grudge[w.a][w.b] = this.grudge[w.b][w.a] = Math.min(0.8, this.grudge[w.a][w.b] + 0.1 + (w.deaths[0] + w.deaths[1]) * 0.005);
     this.rel[w.a][w.b] = this.rel[w.b][w.a] = Math.max(this.rel[w.a][w.b], how === 'truce' ? 0.1 : -0.15);
@@ -351,17 +365,21 @@ export class Society {
           P.state[i] = PState.March;
           P.pathId[i] = ar.pathId;
           P.pathPos[i] = 0;
+          P.vessel[i] = ar.naval ? 1 : 0;
           civ.nextWaypoint(i, planet, rng);
         }
         events.emit(tick, 'battle', civ.settlements[ar.from] ?? null, 0.45, { stage: 'march', a: civ.tribes[ar.tribe].name, target: target.name, size: members.length });
       } else if (ar.stage === 1 || ar.stage === 2) {
         if (!target.alive || target.tribe === ar.tribe) { this.sendHome(civ, ar, tick); continue; }
+        // A campaign that cannot reach its goal is abandoned.
+        if (ar.stage === 1 && tick - ar.stageTick > TICKS_PER_YEAR * 2.5) { this.sendHome(civ, ar, tick); continue; }
         // Arrived when most members are near the target.
         let near = 0;
         for (const i of members) if (this.distTo(P.x[i], P.y[i], P.z[i], target) < target.radius + 20) near++;
         if (ar.stage === 1 && near >= members.length * 0.5) {
           ar.stage = 2;
           ar.stageTick = tick;
+          for (const i of members) P.vessel[i] = 0;
           events.emit(tick, target.walls ? 'siege' : 'battle', target, 0.75, { a: civ.tribes[ar.tribe].name, b: civ.tribes[target.tribe].name, settlement: target.name, size: members.length, where: geo.describe(target.cell) });
         }
         if (ar.stage === 2) {
@@ -392,20 +410,29 @@ export class Society {
 
   private raiseArmy(civ: Civ, w: War, att: number, def: number, tick: number, rng: Rng, planet: Planet, events: EventLog): void {
     const T = civ.tribes;
-    // Nearest pair of settlements.
-    let from: Settlement | null = null, to: Settlement | null = null, best = Infinity;
+    // Muster in a strong town near the enemy; strike their nearest settlement.
+    let from: Settlement | null = null, to: Settlement | null = null, best = Infinity, bestScore = 0;
     for (const ia of T[att].settlements) {
       const sa = civ.settlements[ia];
       if (!sa.alive || sa.pop < 10) continue;
+      let near: Settlement | null = null, nd = Infinity;
       for (const ib of T[def].settlements) {
         const sb = civ.settlements[ib];
         if (!sb.alive) continue;
         const d = this.distTo(sa.x, sa.y, sa.z, sb);
-        if (d < best) { best = d; from = sa; to = sb; }
+        if (d < nd) { nd = d; near = sb; }
       }
+      const score = sa.pop * Math.exp(-nd / 450);
+      if (near && nd <= 1600 && score > bestScore) { bestScore = score; best = nd; from = sa; to = near; }
     }
-    if (!from || !to || best > 1100) return;
-    const path = civ.paths.find(from.cell, to.cell, 'land', 8000);
+    if (!from || !to || best > 1600) return;
+    let path = best <= 1100 ? civ.paths.find(from.cell, to.cell, 'land', 8000) : null;
+    // Seafarers cross the water when there is no road over land.
+    let naval = false;
+    if ((!path || path.length > 90) && T[att].known[TECH_INDEX.get('sailing')!] && from.coastal && to.coastal) {
+      const sea = civ.paths.find(from.cell, to.cell, 'sea', 12000);
+      if (sea) { path = sea; naval = true; }
+    }
     if (!path) return;
     const P = civ.people;
     const members: number[] = [];
@@ -417,17 +444,46 @@ export class Society {
       else if (P.sex[i] === 1 && (P.job[i] === Job.Hunter || P.brave[i] > 0.5)) militia.push(i);
     }
     members.push(...soldiers);
-    for (const i of militia) { if (members.length >= Math.max(6, soldiers.length + from.pop * 0.18)) break; members.push(i); }
+    for (const i of militia) { if (members.length >= Math.max(6, soldiers.length + from.pop * 0.25)) break; members.push(i); }
+    // An army marches on its stomach: only as many as the stores can feed.
+    const fed = Math.floor(Math.max(0, from.stock[Res.Food] - from.pop) / 8);
+    if (members.length > fed) members.length = Math.max(0, fed);
     if (members.length < 4) return;
-    const ar: Army = { id: this.nextId++, tribe: att, war: w.id, from: from.id, target: to.id, members: members.map((i) => P.uid[i]), stage: 0, start: tick, pathId: civ.registerPath(path), stageTick: tick };
+    const ar: Army = { id: this.nextId++, tribe: att, war: w.id, from: from.id, target: to.id, members: members.map((i) => P.uid[i]), stage: 0, start: tick, pathId: civ.registerPath(path), stageTick: tick, naval };
     this.armies.push(ar);
     for (const i of members) {
       P.army[i] = ar.id;
       P.carryRes[i] >= 0 && this.dropCarry(civ, i, from);
+      // Provisions for the road.
+      from.stock[Res.Food] -= 8; P.carryRes[i] = Res.Food; P.carryAmt[i] = 8;
       civ.goTo(i, from.x, from.y, from.z, 4, PState.Walk, Intent.March, -1, rng);
     }
-    events.emit(tick, 'battle', from, 0.5, { stage: 'muster', a: T[att].name, b: T[def].name, target: to.name, size: members.length });
+    events.emit(tick, 'battle', from, 0.5, { stage: 'muster', a: T[att].name, b: T[def].name, target: to.name, size: members.length, naval: naval ? 1 : 0 });
     void planet;
+  }
+
+  /** Put a straggler back on the march with their army. False if the army is gone. */
+  resumeMarch(civ: Civ, i: number, planet: Planet, rng: Rng): boolean {
+    const P = civ.people;
+    const ar = this.armies.find((a) => a.id === P.army[i]);
+    if (!ar || ar.stage === 3) { P.army[i] = -1; return false; }
+    P.intent[i] = Intent.March;
+    if (ar.stage === 0) {
+      const from = civ.settlements[ar.from];
+      civ.goTo(i, from.x, from.y, from.z, 4, PState.Walk, Intent.March, -1, rng);
+      return true;
+    }
+    P.state[i] = PState.March;
+    if (ar.stage === 1 && civ.pathTable[ar.pathId]) {
+      P.pathId[i] = ar.pathId;
+      if (P.pathPos[i] <= 0) P.pathPos[i] = 0;
+      P.vessel[i] = ar.naval ? 1 : 0;
+      if (civ.nextWaypoint(i, planet, rng)) return true;
+    }
+    const t = civ.settlements[ar.target];
+    P.pathId[i] = -1;
+    P.tx[i] = t.x; P.ty[i] = t.y; P.tz[i] = t.z;
+    return true;
   }
 
   private dropCarry(civ: Civ, i: number, s: Settlement): void {
@@ -436,6 +492,7 @@ export class Society {
   }
 
   private sendHome(civ: Civ, ar: Army, tick: number): void {
+    const planet = civ.planetRef;
     ar.stage = 3;
     ar.stageTick = tick;
     const P = civ.people;
@@ -445,10 +502,22 @@ export class Society {
       if (i < 0) continue;
       P.army[i] = -1;
       P.pathId[i] = -1;
-      if (home && home.alive && P.tribe[i] === home.tribe) {
+      const outward = ar.naval && planet ? civ.pathTable[ar.pathId] : undefined;
+      if (home && home.alive && P.tribe[i] === home.tribe && outward) {
+        // Back to the ships and home over the water.
         P.settle[i] = home.id;
+        P.pathId[i] = civ.registerPath(outward.slice().reverse());
+        P.pathPos[i] = 0;
+        P.intent[i] = Intent.Deliver;
+        P.state[i] = PState.Travel;
+        P.vessel[i] = 1;
+        civ.nextWaypoint(i, planet!, civ.rngRef!);
+      } else if (home && home.alive && P.tribe[i] === home.tribe) {
+        P.settle[i] = home.id;
+        P.vessel[i] = 0;
         civ.goTo(i, home.x, home.y, home.z, 6, PState.Walk, Intent.Wander, -1, civ.rngRef!);
       } else {
+        P.vessel[i] = 0;
         P.state[i] = PState.Idle; P.intent[i] = 0;
       }
     }
@@ -526,6 +595,7 @@ export class Society {
       if (!P.alive[i] || P.settle[i] !== s.id || P.tribe[i] !== loser) continue;
       if (refuge && pathId >= 0 && (P.job[i] === Job.Soldier || rng.chance(0.45))) {
         this.dropCarry(civ, i, s);
+        civ.carrierArrives(i, refuge, s, 'refugees');
         P.intent[i] = Intent.Settle;
         P.intentArg[i] = refuge.cell;
         P.state[i] = PState.Travel;
@@ -788,6 +858,7 @@ export class Society {
         civ.tribes[tb].research[3] += 0.4;
       }
       dest.happiness = Math.min(1, dest.happiness + 0.02);
+      civ.carrierArrives(i, dest, home, 'traders');
     }
     // Head home along the reversed path.
     const pid = civ.routePaths.get(r.id);
@@ -1014,6 +1085,7 @@ export class Society {
           this.rel[mine.id][theirs.id] = this.rel[theirs.id][mine.id] = Math.min(1, this.rel[mine.id][theirs.id] + 0.35);
         }
       }
+      if (s && s.alive) civ.carrierArrives(i, s, P.settle[i] >= 0 ? civ.settlements[P.settle[i]] : null, 'pilgrims');
       if (s && s.alive && s.tribe === P.tribe[i]) P.settle[i] = s.id;
     } else {
       // Pilgrim at a sacred site: pray, then go home.

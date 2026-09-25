@@ -201,6 +201,9 @@ void main() {
           vec3 p = ro + rd * t;
           float dens = cloudDensity(p, lod);
           if (camAlt < 700.0) dens *= smoothstep(nearFade * 0.35, nearFade, t);
+          // From low altitude the far cloud deck is seen edge-on and would be
+          // badly undersampled: let it dissolve into the haze instead.
+          if (camAlt < 260.0) dens *= 1.0 - smoothstep(camAlt * 2.5 + 120.0, camAlt * 5.0 + 260.0, t);
           if (dens > 0.001) {
             float r = length(p);
             vec3 up = p / r;
@@ -273,6 +276,16 @@ void main() {
       bool hitsPlanet = tg.x < 1e8 && tg.y > 0.0;
       if (hitsPlanet) background = vec3(0.0);
       else background += sunDiscRadiance(rd);
+    }
+    // The shell is only ~90 u thick, so seen from the ground the zenith sky
+    // would read as dusk: deepen the scattering for upward rays near the surface.
+    if (sky) {
+      float camAltA = length(ro) - PLANET_R;
+      float lowK = 1.0 - smoothstep(40.0, 320.0, camAltA);
+      float elev = max(dot(rd, normalize(ro)), 0.0);
+      float boost = 1.0 + lowK * 3.2 * sqrt(elev);
+      inscatter *= boost;
+      inscatterToCloud *= boost;
     }
     // Starlight is lost in a bright sky: attenuate by the in-scattered luminance.
     if (sky) {
