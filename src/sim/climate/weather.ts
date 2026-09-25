@@ -162,8 +162,10 @@ export class Weather {
       s.x = px; s.y = py; s.z = pz;
       const overLand = terr.oceanFrac[c] < 0.4;
       if (s.type === StormType.Hurricane) {
-        const warm = climate.temp[c] > 26 && !overLand;
-        s.intensity += warm ? 0.0022 : overLand ? -0.006 : -0.002;
+        // Warm water (the same threshold they form over) feeds them; cooler
+        // seas wear them down slowly, land quickly.
+        const warm = climate.temp[c] > 24.5 && !overLand;
+        s.intensity += warm ? 0.0022 : overLand ? -0.006 : -0.0009;
         s.intensity = Math.min(1.6, s.intensity);
         if (overLand && !s.overLand && s.intensity > 0.55) {
           s.landfalls++;

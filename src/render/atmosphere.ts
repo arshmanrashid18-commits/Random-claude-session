@@ -300,10 +300,20 @@ void main() {
     if (sky) {
       float camAltA = length(ro) - PLANET_R;
       float lowK = 1.0 - smoothstep(40.0, 320.0, camAltA);
-      float elev = max(dot(rd, normalize(ro)), 0.0);
-      float boost = 1.0 + lowK * 3.2 * sqrt(elev);
-      inscatter *= boost;
-      inscatterToCloud *= boost;
+      if (lowK > 0.0) {
+        vec3 up0 = normalize(ro);
+        float elev = max(dot(rd, up0), 0.0);
+        float sunH = dot(up0, uSunDir);
+        float dayK = smoothstep(-0.12, 0.2, sunH);
+        // A sky dome for observers near the ground: blue overhead, pale at the
+        // horizon, warm toward a low sun.
+        vec3 dome = mix(vec3(0.62, 0.74, 0.90), vec3(0.12, 0.27, 0.62), pow(elev, 0.55));
+        float sunSide = pow(max(dot(rd, uSunDir), 0.0), 3.0);
+        dome = mix(dome, vec3(1.0, 0.62, 0.36), (1.0 - smoothstep(0.02, 0.35, sunH)) * sunSide * (1.0 - elev) * 0.8);
+        vec3 add = dome * dayK * lowK * 0.06;
+        inscatter += add;
+        inscatterToCloud += add;
+      }
     }
     // Starlight is lost in a bright sky: attenuate by the in-scattered luminance.
     if (sky) {
@@ -322,7 +332,7 @@ void main() {
     }
   }
   // Rainbows belong to observers inside the rain, never to the view from orbit.
-  float rbAlt = 1.0 - smoothstep(160.0, 320.0, length(uCamPos) - PLANET_R);
+  float rbAlt = 1.0 - smoothstep(60.0, 140.0, length(uCamPos) - PLANET_R);
   if (uRainbow * rbAlt > 0.001 && dot(rd, uSunDir) < 0.0) {
     // Against the open sky only from near the ground (never against space).
     float camAltR = length(uCamPos) - PLANET_R;

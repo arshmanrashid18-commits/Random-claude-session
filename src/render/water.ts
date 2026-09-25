@@ -137,35 +137,15 @@ export class WaterBodies {
     if (this.riverMesh) this.group.add(this.riverMesh);
   }
 
-  private buildLakes(world: StaticWorldData, data: PlanetData): THREE.Mesh | null {
+  private buildLakes(world: StaticWorldData, _data: PlanetData): THREE.Mesh | null {
     const { cells, levels } = world.lakes;
     if (cells.length === 0) return null;
     const n = world.hydroN;
     const fs = n * n;
-    // Edge-exact quads (no overlap, so no double blending) plus a rim of one
-    // cell around each lake at its level: hidden under higher ground, it
-    // fills the gaps where the shore dips between coarse cells.
-    const level = new Map<number, number>();
-    for (let k = 0; k < cells.length; k++) level.set(cells[k], levels[k]);
-    const rim = new Map<number, number>();
-    const dr = [0, 0, 0];
-    for (let k = 0; k < cells.length; k++) {
-      const c = cells[k];
-      const f = Math.floor(c / fs), rem = c - f * fs;
-      const j = Math.floor(rem / n), i = rem - j * n;
-      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
-        const ii = i + di, jj = j + dj;
-        if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
-        const nb = f * fs + jj * n + ii;
-        if (level.has(nb)) continue;
-        // Only shore that is about as high as the water: never a plate
-        // floating over lower ground (e.g. the next basin down a valley).
-        faceABToDir(f, -1 + (2 * ii + 1) / n, -1 + (2 * jj + 1) / n, dr, 0);
-        if (data.heightAt(dr[0], dr[1], dr[2]) < levels[k] - 0.4) continue;
-        rim.set(nb, Math.max(rim.get(nb) ?? -Infinity, levels[k]));
-      }
-    }
-    const all: [number, number][] = [...level.entries(), ...rim.entries()];
+    // Edge-exact quads: neighbours share edges, nothing overlaps, so the
+    // translucent surface is never blended twice.
+    const all: [number, number][] = [];
+    for (let k = 0; k < cells.length; k++) all.push([cells[k], levels[k]]);
     const pos = new Float32Array(all.length * 4 * 3);
     const lvl = new Float32Array(all.length * 4);
     const idx: number[] = [];

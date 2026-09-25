@@ -104,12 +104,12 @@ vec3 skyAmbient(vec3 up, vec3 N, vec3 sunDir) {
   float day = smoothstep(-0.18, 0.25, sunH);
   vec3 dayCol = vec3(0.30, 0.45, 0.75) * 0.9;
   vec3 duskCol = vec3(0.55, 0.32, 0.30) * 0.5;
-  vec3 nightCol = vec3(0.014, 0.02, 0.04);
+  vec3 nightCol = vec3(0.02, 0.028, 0.055);
   vec3 sky = mix(nightCol, mix(duskCol, dayCol, smoothstep(0.0, 0.35, sunH)), day);
   float hemi = 0.55 + 0.45 * dot(N, up);
   float phase = 0.5 - 0.5 * dot(sunDir, uMoonDir);
   float moonUp = smoothstep(-0.08, 0.25, dot(up, uMoonDir));
-  vec3 moon = vec3(0.07, 0.095, 0.17) * (0.3 + 0.7 * phase) * moonUp * (1.0 - day) * (0.3 + 1.5 * max(dot(N, uMoonDir), 0.0));
+  vec3 moon = vec3(0.07, 0.095, 0.17) * (0.45 + 0.55 * phase) * moonUp * (1.0 - day) * (0.3 + 1.5 * max(dot(N, uMoonDir), 0.0));
   return sky * hemi + moon;
 }
 `;

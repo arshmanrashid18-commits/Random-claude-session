@@ -70,7 +70,7 @@ function fillTextures(w: World, t: RegionTextures): void {
     // Development falls off from the settlement centre.
     const g = w.planet.region;
     const d = Math.acos(Math.min(1, st.x * g.centers[c * 3] + st.y * g.centers[c * 3 + 1] + st.z * g.centers[c * 3 + 2])) * 1000;
-    return Math.max(0, 1 - d / (st.radius + 10)) * Math.min(1, 0.25 + st.pop / 120);
+    return Math.max(0, 1 - d / (st.radius + 34)) * Math.min(1, 0.4 + st.pop / 100);
   };
   const lava = w.divine.lava, flood = w.divine.flood;
   packRGBA(pm, t.surface, (c) => w.fires.scar[c], (c) => cl.ash[c], (c) => Math.min(1, lava[c] * 0.8), dev);
