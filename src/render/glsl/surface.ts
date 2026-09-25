@@ -16,9 +16,12 @@ uniform int uStormCount;
 
 float remap(float v, float a, float b, float c, float d) { return c + (v - a) * (d - c) / (b - a); }
 
-float stormCoverage(vec3 dir, out float swirl) {
+// Fronts and blizzards return their cover (shaped later by the weather
+// field); hurricanes keep their own spiral and eye and come back in 'hur'.
+float stormCoverage(vec3 dir, out float swirl, out float hur) {
   float cov = 0.0;
   swirl = 0.0;
+  hur = 0.0;
   for (int i = 0; i < 8; i++) {
     if (i >= uStormCount) break;
     vec4 s = uStorms[i];
@@ -35,7 +38,7 @@ float stormCoverage(vec3 dir, out float swirl) {
       float spiral = 0.5 + 0.5 * sin(ang * 2.0 * sp.y + log(max(r, 0.02)) * 7.0 - uTime * 0.6 * sp.y);
       float arms = mix(1.0, spiral, smoothstep(0.25, 0.8, r));
       float eye = smoothstep(0.05, 0.14, r);
-      cov = max(cov, sp.x * arms * eye * (1.0 - smoothstep(0.9, 2.1, r)));
+      hur = max(hur, sp.x * arms * eye * (1.0 - smoothstep(0.9, 2.1, r)));
       swirl = max(swirl, sp.x * (1.0 - smoothstep(0.0, 1.8, r)));
     } else {
       cov = max(cov, sp.x * (1.0 - smoothstep(0.4, 1.6, r)));
@@ -50,11 +53,13 @@ float cloudDensity(vec3 p, float lod) {
   float hf = (r - CLOUD_R0) / (CLOUD_R1 - CLOUD_R0);
   if (hf < 0.0 || hf > 1.0) return 0.0;
   vec3 dir = p / r;
-  float swirl;
+  float swirl, hur;
   float cov = texture(uClimateTex, regionUV(dir)).a;
-  cov = max(cov, stormCoverage(dir, swirl));
+  cov = max(cov, stormCoverage(dir, swirl, hur));
   cov = clamp(cov * 1.05 + uCloudCoverBias, 0.0, 1.0);
-  if (cov < 0.04) return 0.0;
+  // A hurricane's arms are solid walls of cloud even at moderate intensity.
+  hur = smoothstep(0.0, 0.5, hur);
+  if (max(cov, hur) < 0.04) return 0.0;
   // Large-scale weather systems: low-frequency noise sculpts cloud fields
   // into fronts and cells; the climate cover decides where they can exist.
   vec3 qw = dir * 1.9 + uCloudWind * uTime * 0.35;
@@ -62,6 +67,8 @@ float cloudDensity(vec3 p, float lod) {
   float wx = a0 * 0.55 + a1 * 0.3 + a2 * 0.15;
   cov = smoothstep(0.12, 0.75, cov);
   cov = clamp(cov * smoothstep(0.34, 0.66, wx) * 1.5, 0.0, 1.0);
+  // Hurricanes keep their own shape (spiral arms, eye) through the mask.
+  cov = max(cov, hur);
   if (cov < 0.04) return 0.0;
   // Domain warp by the weather-scale field turns uniform cells into swirls
   // and streaks, and a zonal stretch lays them along the winds.
@@ -71,9 +78,15 @@ float cloudDensity(vec3 p, float lod) {
   // A mid-scale field breaks the periodic cell lattice under heavy cover.
   float mid = texture(uCloudNoise, q * 0.27 + vec3(0.13, 0.57, 0.31)).a;
   float base = (n.r * 0.65 + n.g * 0.35) * (0.62 + 0.7 * mid);
-  // Height profile: flat-ish bases, rounded tops; storms tower.
-  float prof = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(mix(0.45, 1.0, cov), 1.0, hf));
+  // Height profile: flat-ish bases, rounded tops; storms tower. (The top
+  // edge stays below 1: smoothstep with equal edges is undefined in GLSL and
+  // blanked the densest cloud — hurricane cores — on some drivers.)
+  float prof = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(mix(0.45, 0.94, cov), 1.0, hf));
   float d = remap(base * prof, 1.0 - cov * 0.92, 1.0, 0.0, 1.0);
+  // Hurricane walls are thick (the threshold and edge erosion meant for
+  // fair-weather cloud left them a faint haze); toward the edges of the rain
+  // bands the noise frays them into feathered, broken cloud.
+  d = max(d, hur * prof * (0.4 + 0.6 * base) * smoothstep(0.12, 0.5, base + 0.4 * hur));
   if (d <= 0.0) return 0.0;
   if (lod < 0.5) {
     float det = texture(uCloudNoise, q * 3.1 + vec3(0.3, 0.1, 0.7) * uTime * 0.02).b;

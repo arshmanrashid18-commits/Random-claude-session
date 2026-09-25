@@ -59,7 +59,7 @@ rivers and lakes re-flow after every stroke.
 * **Eight scenarios** with objectives evaluated by the simulation, each proven winnable
   and losable by scripted players in the test suite (and not winnable by doing nothing):
   The First Flame, The Long Drought, Ark of the Beasts, Two Faiths, The Chosen People,
-  Wrath, The Green Desert, The Forgotten God.
+  Wrath, Green the Desert, A God Forgotten.
 * **Chronicle** of everything the peoples remember, **time controls** (pause, 1×, 10×,
   100×, cinematic time-lapse), **auto-director**, **photo mode**.
 

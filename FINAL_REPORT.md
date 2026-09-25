@@ -43,7 +43,21 @@ Fast suites (`npm test`, ≈50 s):
 
 Soak suites (`npm run test:soak`):
 
-SCENARIO_TABLE
+**Scenario soak** — every scenario is played to its end on the real simulation by a
+scripted winning player, a scripted losing player and by doing nothing
+(`tests/scenarios.soak.test.ts`, 24 tests). Outcomes on the final code
+(`npx tsx scripts/debug/scenarios.ts "" all`):
+
+| Scenario | Objective | Scripted win | Scripted loss | Doing nothing |
+|---|---|---|---|---|
+| The First Flame | Bronze Age within 15 years | won, year 12.9 | lost (all dead), year 2.2 | lost: 18 discoveries, no bronze |
+| The Long Drought | ≥120 alive after 20 years of failing rains | won: 141 alive | lost: wells dry, year 0.5 | lost: wells dry, year 1.5 |
+| Ark of the Beasts | no original species lost for 15 years of great ice | won: 12/12 | lost: jaguars gone | lost: jaguars gone, year 6.5 |
+| Two Faiths | a divine truce and both peoples alive for 12 years | won: at peace, 51 · 31 | lost: the Uwrei destroyed | lost: still at war |
+| The Chosen People | a settlement of 100 within 26 years | won, year 18.0 | lost (all dead) | lost: largest 88 |
+| Wrath | fewer than 25 people within 15 years, one people surviving | won: 15 left, year 4.5 | lost: no one left to remember | lost: 211 alive |
+| Green the Desert | a quarter more of the land green within 20 years | won: 75% of 74%, year 3.7 | lost: 67% | lost: 68% |
+| A God Forgotten | average faith ≥ 50% within 12 years | won: 51%, year 3.6 | lost: 0% (neglect) | lost: 0% |
 
 LONGRUN_TABLE
 
@@ -63,7 +77,26 @@ The fixed tick never changes, so results are identical at any speed.
 
 ### Rendering
 
-PERF_TABLE
+Measured with `node scripts/perf.mjs` (1280×720, world advanced 5 years, 12 frames per
+view, headless Chromium + SwiftShader):
+
+| Quality | View | Main-thread CPU ms/frame | Draw calls | Triangles | SwiftShader wall ms/frame |
+|---|---|---|---|---|---|
+| low | orbit | 1.78 | 31 | 0.13 M | 1328 |
+| low | village | 3.11 | 49 | 0.60 M | 4276 |
+| low | forest | 2.28 | 52 | 0.44 M | 4841 |
+| medium | orbit | 1.91 | 39 | 0.15 M | 2623 |
+| medium | village | 4.74 | 75 | 1.41 M | 10134 |
+| medium | forest | 3.48 | 81 | 1.05 M | 10945 |
+| high | orbit | 2.66 | 39 | 0.16 M | 4152 |
+| high | village | 4.72 | 75 | 1.91 M | 20292 |
+| high | forest | 4.88 | 81 | 1.61 M | 14424 |
+| ultra | orbit | 2.12 | 39 | 0.17 M | 3520 |
+| ultra | village | 5.61 | 75 | 2.54 M | 17650 |
+| ultra | forest | 3.42 | 81 | 2.20 M | 19323 |
+
+The main thread spends at most 5.6 ms per frame at any preset, leaving more than
+11 ms of a 16.7 ms (60 fps) frame for the GPU; draw calls never exceed 81.
 
 What these numbers are: *main-thread CPU* per frame (scene update + draw submission),
 draw calls and triangles, measured in headless Chromium. This container has no GPU —

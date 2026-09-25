@@ -192,10 +192,13 @@ void main() {
   float night = smoothstep(0.02, -0.12, mu);
   if (night > 0.0 && surf.a > 0.02 && h > 0.0) {
     float speck = smoothstep(0.35, 0.9, snoise(dir * 2600.0) * 0.5 + snoise(dir * 700.0) * 0.5 + surf.a);
+    // From afar the fine specks would alias: coarser clusters of lights take
+    // over (a flat constant here made each town one saturated disc).
     float farGlow = smoothstep(200.0, 900.0, vDist);
-    float lights = surf.a * mix(speck, 0.6, farGlow) * night * uNightLights;
+    float speckFar = smoothstep(0.25, 0.85, snoise(dir * 320.0) * 0.55 + snoise(dir * 90.0) * 0.45 + surf.a * 0.7);
+    float lights = surf.a * mix(speck, speckFar, farGlow) * night * uNightLights;
     // Brighter from afar so towns read as a glow on the night side.
-    color += vec3(3.2, 1.9, 0.8) * lights * mix(0.9, 2.6, farGlow);
+    color += vec3(3.2, 1.9, 0.8) * lights * mix(0.9, 1.7, farGlow);
   }
   // Borders between peoples, seen from afar.
   if (uBorders > 0.0) {
@@ -339,9 +342,14 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   col = mix(col, foamCol, foam * 0.85);
   a = max(a, foam * 0.85);
   // Sea ice.
-  float ice = smoothstep(-1.0, -3.5, temp + snoise(wp * 0.03) * 1.5);
+  // Pack ice: large ragged sheets that break into floes toward the margin
+  // (a single noise octave here read as a regular polka-dot pattern).
+  // Fine floes and leads fade out with distance, where they would only alias.
+  float iceFar = smoothstep(350.0, 1300.0, dist);
+  float iceN = snoise(wp * 0.007) * 0.55 + snoise(wp * 0.023) * 0.3 + snoise(wp * 0.08) * 0.15 * (1.0 - iceFar);
+  float ice = smoothstep(-1.0, -3.0, temp + iceN * 2.2);
   if (ice > 0.0) {
-    float cracks = smoothstep(0.02, 0.08, abs(snoise(wp * 0.12)));
+    float cracks = mix(smoothstep(0.02, 0.08, abs(snoise(wp * 0.12))), 0.85, iceFar);
     vec3 iceCol = mix(vec3(0.55, 0.68, 0.78), vec3(0.88, 0.92, 0.96), cracks);
     vec3 iceLit = iceCol * (sunCol * max(dot(dir, L), 0.0) / PI + skyAmbient(dir, dir, L) * uSunIntensity * 0.06);
     col = mix(col, iceLit, ice);

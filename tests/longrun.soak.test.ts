@@ -43,7 +43,7 @@ describe('500-year soak', () => {
       const people = w.civ.totalPeople();
       maxPeople = Math.max(maxPeople, people);
       if (y % 25 === 0) {
-        log.push(`year ${y}: people ${people}, ms/tick ${(yearMs / TICKS_PER_YEAR).toFixed(2)}, tribes ${w.civ.tribes.filter((t) => t.alive).length}, animals ${w.animals.totalAlive()}, species ${w.animals.livingSpecies()}, buildings ${w.civ.buildings.length}, memories ${w.civ.godMemories.length}, paths ${Object.keys(w.civ.pathTable).length}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+        log.push(`year ${y}: people ${people}, ms/tick ${(yearMs / TICKS_PER_YEAR).toFixed(2)}, tribes ${w.civ.tribes.filter((t) => t.alive).length}, animals ${w.animals.totalAlive()}, species ${w.animals.livingSpecies()}, buildings ${w.civ.buildings.filter((b) => !b.gone).length}/${w.civ.buildings.length}, memories ${w.civ.godMemories.length}, paths ${Object.keys(w.civ.pathTable).length}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
         expect(nonFinite(w), `year ${y}`).toEqual([]);
         // Bounded structures.
         expect(w.events.history.length).toBeLessThanOrEqual(6000);
@@ -51,6 +51,8 @@ describe('500-year soak', () => {
         expect(w.civ.graves.length).toBeLessThanOrEqual(900);
         expect(Object.keys(w.civ.pathTable).length).toBeLessThan(6000);
         expect(w.animals.count).toBeLessThanOrEqual(w.animals.cap);
+        // Crumbled ruins free their slots: the building list does not grow for ever.
+        expect(w.civ.buildings.length).toBeLessThan(9000);
       }
     }
     console.log(log.join('\n'));

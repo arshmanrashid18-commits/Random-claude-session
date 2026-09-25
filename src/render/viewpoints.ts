@@ -155,13 +155,17 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
       return { focus: f, distance: 1700, heading: 0.3, tiltOffset: 0.25, localTime: 0.02 };
     }
     case 'aurora': {
-      const f = findBest(r, (d) => (d.y > 0 ? d.y : -1) - Math.abs(d.y - 0.85), 1500);
-      return { focus: f, distance: 1250, heading: Math.PI, tiltOffset: 0.35, localTime: 0.0 };
+      // Midnight under the auroral oval of the winter hemisphere (the summer
+      // pole may lie in unbroken daylight), over land where possible.
+      const sun = r.shared.uSunDir.value as THREE.Vector3;
+      const sgn = sun.y > 0 ? -1 : 1;
+      const f = findBest(r, (d, h) => -Math.abs(d.y * sgn - 0.88) * 3 + (h > 0 ? 0.1 : 0), 1500);
+      return { focus: f, distance: 1150, heading: Math.PI, tiltOffset: 0.45, localTime: 0.0 };
     }
     case 'storm': {
       // The strongest hurricane if one is spinning, else the cloudiest band.
       const hur = r.storms.filter((st) => st.type === 1).sort((a, b) => b.intensity - a.intensity)[0];
-      if (hur) return { focus: new THREE.Vector3(hur.x, hur.y, hur.z).normalize(), distance: 900, heading: 0.2, tiltOffset: 0.1, localTime: 0.55 };
+      if (hur) return { focus: new THREE.Vector3(hur.x, hur.y, hur.z).normalize(), distance: 820, heading: 0.2, tiltOffset: 0.1, localTime: 0.55 };
       const f = findBest(r, (d) => climateAt(r, d).cloud * 3 - Math.abs(Math.abs(d.y) - 0.3), 2000);
       return { focus: f, distance: 1100, heading: 0.2, tiltOffset: 0.1, localTime: 0.45 };
     }

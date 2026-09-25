@@ -140,3 +140,26 @@ Each entry: decision — why.
     rain ends it. Droughts are now a real threat rather than a food footnote, and The Long
     Drought is lost by idling (everyone dies within two years) and won by breaking each
     drought with rain (≈140 survive).
+45. **Hurricanes are drawn as thick cloud walls.** A diagnostic render (a forced
+    full-strength storm, then shader patches bisecting `cloudDensity`) showed the spiral
+    coverage was right but the fair-weather threshold and edge erosion left hurricane
+    cloud a faint haze. Hurricanes now keep their own coverage past the weather mask and
+    get a density floor textured and frayed by the same noise, so the storm view shows
+    named storms as spirals with an eye. The cloud height profile also no longer calls
+    `smoothstep` with equal edges (undefined in GLSL) at full cover.
+46. **Sea ice is pack ice, not polka dots.** The "cloud lattice" over the poles was the
+    sea-ice mask: one noise octave at a 33-unit scale punched regular round holes into the
+    ice. It is now three octaves (sheets, floes, fine floes) with the finest detail and
+    the leads fading out beyond ~1,000 units.
+47. **Auroral curtains follow the oval.** The curtains were sheets at fixed longitudes,
+    which from orbit read as radial spokes (a picket fence). They are now two folded
+    ribbons running along the oval with fine vertical rays and slow surges of brightness,
+    and the aurora viewpoint looks at midnight under the winter hemisphere's oval (the
+    summer pole can sit in unbroken daylight).
+48. **Crumbled ruins free their slots.** The final 500-year soak showed that although
+    live buildings plateau, the building list kept every crumbled ruin (17,578 entries by
+    year 500, ~35 a year) and the per-tick cost crept from 5 to 7.5 ms. Building ids are
+    indices referenced by homes, work intents and settlement lists, so instead of
+    compacting, a crumbled ruin's slot goes on a sorted free list that new buildings take
+    lowest-first (deterministic across save/load), and anyone still pointing at it as a
+    home or workplace is cleared. The soak now asserts the list stays bounded.

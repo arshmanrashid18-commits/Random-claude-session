@@ -31,6 +31,8 @@ const WALK = 0.34 * INV_R;
 const TRIBE_CAPACITY = 800;
 /** Years before a ruin crumbles away. */
 const RUIN_YEARS = 25;
+/** Intents whose argument is a building id. */
+const BUILDING_INTENTS = new Set<number>([Intent.Farm, Intent.Quarry, Intent.Mine, Intent.Study, Intent.Pray, Intent.Build, Intent.Fetch, Intent.Sleep]);
 
 export interface Ledger {
   created: number[];
@@ -140,6 +142,8 @@ export class Civ {
   tribes: Tribe[] = [];
   settlements: Settlement[] = [];
   buildings: Building[] = [];
+  /** Slots of crumbled ruins, ascending, reused by new buildings (ids are indices). */
+  freeSlots: number[] = [];
   roads: RoadSeg[] = [];
   /** Corridor (cell pair) → index of its road segment in `roads`. */
   roadIndex: Record<string, number> = {};
@@ -357,8 +361,11 @@ export class Civ {
 
   // ------------------------------------------------------------------ buildings
   private addBuilding(type: BType, s: Settlement, x: number, y: number, z: number, rot: number, tick: number): Building {
+    // Reuse the lowest slot a crumbled ruin left, so the list stays bounded.
+    if (!this.freeSlots) this.freeSlots = this.buildings.filter((o) => o.gone).map((o) => o.id);
+    const slot = this.freeSlots.length > 0 ? this.freeSlots.shift()! : this.buildings.length;
     const b: Building = {
-      id: this.buildings.length,
+      id: slot,
       type,
       settle: s.id,
       tribe: s.tribe,
@@ -376,7 +383,8 @@ export class Civ {
       built: tick,
       lastWork: tick,
     };
-    this.buildings.push(b);
+    if (slot === this.buildings.length) this.buildings.push(b);
+    else this.buildings[slot] = b;
     s.buildings.push(b.id);
     this.version++;
     // Road from the settlement centre.
@@ -522,14 +530,28 @@ export class Civ {
   /** Ruins crumble away after a generation: gone from their settlement and from view. */
   private weatherRuins(tick: number): void {
     const touched = new Set<number>();
+    const goneIds = new Set<number>();
     for (const b of this.buildings) {
       if (!b.ruin || b.gone) continue;
       if (b.ruinSince === undefined) { b.ruinSince = tick; continue; }
       if (tick - b.ruinSince < TICKS_PER_YEAR * RUIN_YEARS) continue;
       b.gone = true;
       touched.add(b.settle);
+      goneIds.add(b.id);
     }
     if (touched.size === 0) return;
+    // The slot will hold a new building: nobody may still call it home or work there.
+    const P = this.people;
+    for (let i = 0; i < P.count; i++) {
+      if (!P.alive[i]) continue;
+      if (goneIds.has(P.home[i])) P.home[i] = -1;
+      if (goneIds.has(P.intentArg[i]) && BUILDING_INTENTS.has(P.intent[i])) {
+        P.state[i] = PState.Idle; P.intent[i] = 0; P.intentArg[i] = -1; P.timer[i] = 0;
+      }
+    }
+    if (!this.freeSlots) this.freeSlots = [];
+    for (const id of goneIds) this.freeSlots.push(id);
+    this.freeSlots.sort((a, b) => a - b);
     for (const sid of touched) {
       const s = this.settlements[sid];
       if (s) s.buildings = s.buildings.filter((id) => !this.buildings[id].gone);
