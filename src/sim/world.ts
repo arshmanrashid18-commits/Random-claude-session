@@ -84,6 +84,8 @@ export class World {
   /** Reconnect callbacks (after construction or after loading a save). */
   wire(): void {
     const p = this.planet;
+    // Sacred groves shelter beasts from the climate.
+    this.animals.shelter = this.civ.sanctuary;
     this.terraform.onCommit = () => {
       this.animals.computeWater(p.region, p.terrain);
       this.civ.afterTerraform(p, this.tick, this.rng, this.events);

@@ -76,8 +76,8 @@ export const POWERS: PowerDef[] = [
     desc: 'Light a pillar that calls the living.', effect: 'Every beast within reach gathers at the beacon — the scattered last of a kind find each other — and wanderers take it as a sign to settle there.', color: 0xfff0a0 },
   { id: 'eclipse', name: 'Eclipse', school: 'spirit', cost: 200, cooldown: 1920, radius: 0, target: 'global', mood: -0.3, key: '',
     desc: 'Draw the moon across the sun.', effect: 'Darkness at noon. Every people falls to its knees; fear and devotion surge across the world.', color: 0xff9a5a },
-  { id: 'sanctuary', name: 'Sacred Grove', school: 'spirit', cost: 60, cooldown: 240, radius: 25, target: 'land', mood: 0.6, key: '',
-    desc: 'Consecrate a place forever.', effect: 'Ancient trees rise, animals there cannot be hunted, and the nearest people make pilgrimages to it.', color: 0x7de0a0 },
+  { id: 'sanctuary', name: 'Sacred Grove', school: 'spirit', cost: 60, cooldown: 240, radius: 40, target: 'land', mood: 0.6, key: '',
+    desc: 'Consecrate a place forever.', effect: 'Ancient trees rise; beasts there cannot be hunted, feel neither frost nor heat and breed freely; the nearest people make pilgrimages to it.', color: 0x7de0a0 },
 ];
 
 export const POWER_INDEX = new Map<PowerId, number>(POWERS.map((p, i) => [p.id, i]));

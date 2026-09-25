@@ -3,7 +3,7 @@
  * then with the agent count raised to 5,000 and 10,000 (herds cloned into
  * their own habitat). Runs in Node — the same code the Web Worker runs.
  *
- * Usage: npx tsx scripts/bench.mts [--seed=N] [--ticks=400]
+ * Usage: npx tsx scripts/bench.mts [--seed=N] [--ticks=400] [--years=1]
  */
 import { World } from '../src/sim/world';
 import { TICKS_PER_YEAR } from '../src/sim/constants';
@@ -14,6 +14,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
 }));
 const seed = Number(args.seed ?? 20260925);
 const N = Number(args.ticks ?? 400);
+const WARM = Number(args.years ?? 1);
 
 const t0 = performance.now();
 const w = new World({ seed, preset: 'earthlike' });
@@ -38,8 +39,8 @@ timed(w.animals, 'tick', 'animals');
 timed(w.civ, 'tick', 'civilisation');
 timed(w.divine, 'tick', 'powers');
 
-// One simulated year so the world has settled.
-for (let i = 0; i < TICKS_PER_YEAR; i++) w.step();
+// Let the world settle (and its peoples grow) before measuring.
+for (let i = 0; i < TICKS_PER_YEAR * WARM; i++) w.step();
 
 const people = () => w.civ.totalPeople();
 const animals = () => w.animals.totalAlive();
@@ -68,7 +69,7 @@ function fill(target: number): void {
 }
 
 const rows: string[] = [];
-rows.push(measure('natural (year 1)'));
+rows.push(measure(`natural (year ${WARM})`));
 fill(5000);
 rows.push(measure('5,000 agents'));
 fill(10000);

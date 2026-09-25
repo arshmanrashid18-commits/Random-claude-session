@@ -41,24 +41,40 @@ export const WIN: Record<string, Strategy> = {
     }
   },
   ark: (w, day) => {
-    // Lead the rarest original species to the best ground its members can
-    // reach with a beacon, and feed that refuge when devotion allows.
+    // Every species that has fallen below 80% of its original number gets a
+    // sacred grove (shelter from the cold) at the best refuge its members can
+    // reach; the most endangered is called there with a beacon and fed.
     const A = w.animals;
     const memo = w.scenario!.memo;
-    let rare = -1, n = Infinity;
-    for (let sp = 0; sp < A.defs.length; sp++) if (memo[`sp${sp}`] && A.pop[sp] > 0 && A.pop[sp] < n) { n = A.pop[sp]; rare = sp; }
-    if (rare < 0 || n > 80) return;
     const cl = w.planet.climate, g = w.planet.region;
-    let best = -1, bt = -Infinity;
-    for (let i = 0; i < A.count; i++) {
-      if (!A.alive[i] || A.species[i] !== rare) continue;
-      const c = g.cellOf(A.x[i], A.y[i], A.z[i]);
-      if (w.planet.terrain.oceanFrac[c] > 0.3) continue;
-      const h = habitat(A.defs[rare], cl.biome[c], cl.temp[c], A.gCold[i], A.gHeat[i]);
-      if (h > bt) { bt = h; best = i; }
+    const struggling: { sp: number; ratio: number }[] = [];
+    for (let sp = 0; sp < A.defs.length; sp++) {
+      const start = memo[`sp${sp}`];
+      if (!start || A.pop[sp] <= 0) continue;
+      const ratio = A.pop[sp] / start;
+      // Small populations are at risk even before they fall.
+      if (ratio < 0.8 || A.pop[sp] < 40) struggling.push({ sp, ratio: Math.min(ratio, A.pop[sp] / 60) });
     }
-    if (best < 0) return;
-    const p = { x: A.x[best], y: A.y[best], z: A.z[best] };
+    struggling.sort((a, b) => a.ratio - b.ratio);
+    let first: { x: number; y: number; z: number } | null = null;
+    for (const { sp } of struggling) {
+      let best = -1, bt = -Infinity;
+      for (let i = 0; i < A.count; i++) {
+        if (!A.alive[i] || A.species[i] !== sp) continue;
+        const c = g.cellOf(A.x[i], A.y[i], A.z[i]);
+        if (w.planet.terrain.oceanFrac[c] > 0.3) continue;
+        const h = habitat(A.defs[sp], cl.biome[c], cl.temp[c], A.gCold[i], A.gHeat[i]) + cl.temp[c] * 0.01;
+        if (h > bt) { bt = h; best = i; }
+      }
+      if (best < 0) continue;
+      const p = { x: A.x[best], y: A.y[best], z: A.z[best] };
+      let grove = null as { x: number; y: number; z: number } | null;
+      for (const e of w.divine.effects) if (e.power === 'sanctuary' && e.x * p.x + e.y * p.y + e.z * p.z > Math.cos(250 / 1000)) grove = e;
+      if (!grove && cast(w, 'sanctuary', p)) grove = p;
+      if (!first) first = grove ?? p;
+    }
+    if (!first) return;
+    const p = { x: first.x, y: first.y, z: first.z };
     if (day % 3 === 0) cast(w, 'beacon', p);
     if (w.civ.devotion >= powerDef('bloom').cost + powerDef('beacon').cost) cast(w, 'bloom', p);
   },
@@ -145,7 +161,9 @@ export const LOSE: Record<string, Strategy> = {
   chosen: DESTROY_ALL,
   wrath: DESTROY_ALL,
   'green-desert': (w) => { w.divine.boundless = true; for (const s of live(w)) cast(w, 'drought', s); },
-  forgotten: DESTROY_ALL,
+  // Terror is also awe (the brief says so): a god who destroys wins their
+  // fear. The way to lose this scenario is neglect.
+  forgotten: IDLE,
 };
 
 /** How often (ticks) a strategy acts; attentive players act many times a day. */

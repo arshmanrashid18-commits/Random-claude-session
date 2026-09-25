@@ -261,7 +261,6 @@ void main() {
       // Faint airglow keeps the night side from being pure black.
       s += T * BETA_R * dR * dt * vec3(0.0006, 0.0009, 0.0016);
       inscatter += s;
-      if (uAurora > 0.0) aur += T * auroraEmission(p) * dt;
       tau += ext * dtE * 0.5;
       if (!cloudPassed && t >= cloudDepth) {
         cloudPassed = true;
@@ -270,6 +269,25 @@ void main() {
       }
     }
     if (!cloudPassed) { inscatterToCloud = inscatter; tauToCloud = tau; }
+    // Aurora: its own jittered march through the thin emitting shell, so the
+    // curtains read as soft folds rather than the steps of the air march.
+    if (uAurora > 0.0) {
+      vec2 sA = raySphere(ro, rd, PLANET_R + 70.0);
+      vec2 sB = raySphere(ro, rd, PLANET_R + 26.0);
+      float a0 = max(sA.x, 0.0), a1 = min(sA.y, t1);
+      // Stop at the inner shell when looking down through it.
+      if (sB.x > 0.0) a1 = min(a1, sB.x);
+      if (a1 > a0) {
+        int an = min(20, uAtmoSteps + 4);
+        float ad = (a1 - a0) / float(an);
+        float aj = hash13(vec3(gl_FragCoord.yx, uTime * 37.0));
+        vec3 Tm = exp(-tau * 0.5);
+        for (int i = 0; i < 20; i++) {
+          if (i >= an) break;
+          aur += Tm * auroraEmission(ro + rd * (a0 + (float(i) + aj) * ad)) * ad;
+        }
+      }
+    }
     vec3 Tfull = exp(-tau);
     vec3 background = sceneCol;
     if (sky) {
@@ -306,7 +324,9 @@ void main() {
   // Rainbows belong to observers inside the rain, never to the view from orbit.
   float rbAlt = 1.0 - smoothstep(160.0, 320.0, length(uCamPos) - PLANET_R);
   if (uRainbow * rbAlt > 0.001 && dot(rd, uSunDir) < 0.0) {
-    float reach = (sky ? 1.0 : clamp(sceneDist / 180.0, 0.0, 1.0)) * rbAlt;
+    // Against the open sky only from near the ground (never against space).
+    float camAltR = length(uCamPos) - PLANET_R;
+    float reach = (sky ? 1.0 - smoothstep(40.0, 110.0, camAltR) : clamp(sceneDist / 180.0, 0.0, 1.0)) * rbAlt;
     result += rainbow(rd) * uRainbow * reach * uSunIntensity * 0.035;
   }
   outColor = vec4(result, 1.0);

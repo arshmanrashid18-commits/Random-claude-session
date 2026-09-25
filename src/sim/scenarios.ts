@@ -51,19 +51,19 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'The First Flame',
     tagline: 'From stone to bronze.',
     brief: 'Five small bands huddle around their fires. They do not know you yet. Teach them — gently or terribly — and carry one people out of the Stone Age.',
-    objective: 'A people reaches the Bronze Age within 12 years.',
+    objective: 'A people reaches the Bronze Age within 14 years.',
     difficulty: 1,
     seed: 20260925,
     preset: 'earthlike',
-    years: 12,
+    years: 14,
     setup(w) { w.civ.devotion = 150; },
     check(w, s) {
       const best = Math.max(...w.civ.tribes.filter((t) => t.alive).map((t) => t.known.reduce((a, b) => a + b, 0)), 0);
       s.progress = Math.min(1, best / 16);
-      s.detail = `${best} discoveries · ${Math.max(0, 12 - years(w, s)).toFixed(1)} years left`;
+      s.detail = `${best} discoveries · ${Math.max(0, 14 - years(w, s)).toFixed(1)} years left`;
       if (w.civ.tribes.some((t) => t.alive && t.age >= Age.Bronze)) { s.outcome = 'Bronze is poured for the first time. Your people will never again be only hunters.'; return 'won'; }
       if (aliveTribes(w) === 0) { s.outcome = 'The last fire has gone out.'; return 'lost'; }
-      if (years(w, s) >= 12) { s.outcome = 'Twelve years pass, and still they work only in stone.'; return 'lost'; }
+      if (years(w, s) >= 14) { s.outcome = 'Fourteen years pass, and still they work only in stone.'; return 'lost'; }
       return 'active';
     },
   },
@@ -116,15 +116,19 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'Ark of the Beasts',
     tagline: 'Let nothing be lost.',
     brief: 'An ice age is coming — you have already set it in motion. The herds must find refuge, or whole kinds of life will vanish forever.',
-    objective: 'No original species goes extinct for 15 years.',
+    objective: 'A great ice is coming. No original species may go extinct for 15 years.',
     difficulty: 2,
     seed: 5150,
     preset: 'earthlike',
     years: 15,
     setup(w, s) {
-      w.civ.devotion = 400;
+      w.civ.devotion = 700;
       w.divine.cast(w, { power: 'iceage', x: 0, y: 1, z: 0 });
-      w.animals.pop.forEach((p, i) => { if (i < w.animals.defs.length && p > 0 && w.animals.defs[i].parent < 0) s.memo[`sp${i}`] = 1; });
+      // A great ice: deeper and longer than any the god could call alone.
+      const ice = w.divine.effects.find((e) => e.power === 'iceage');
+      if (ice) { ice.strength = 1.3; ice.end = ice.start + TICKS_PER_YEAR * 9; }
+      // Remember every original species and how many there were.
+      w.animals.pop.forEach((p, i) => { if (i < w.animals.defs.length && p > 0 && w.animals.defs[i].parent < 0) s.memo[`sp${i}`] = p; });
     },
     check(w, s) {
       const originals = Object.keys(s.memo).filter((k) => k.startsWith('sp')).map((k) => Number(k.slice(2)));

@@ -27,7 +27,56 @@ export type VegType = (typeof VEG_TYPES)[number];
 const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const E = (x: number, y: number, z: number) => new THREE.Euler(x, y, z);
 
-function buildModel(type: VegType): THREE.BufferGeometry {
+/** Simplified silhouettes for distant trees (a fifth of the triangles). */
+function buildFarModel(type: VegType): THREE.BufferGeometry | null {
+  const b = new MeshBuilder();
+  const bark = lin(0x5a4230), barkLight = lin(0xb9b2a4);
+  switch (type) {
+    case 'broadleaf':
+      b.cylinder(0.2, 0.36, 3.4, 4, V3(0, -0.4, 0), { color: bark, ao: 0.4 });
+      b.blob(2.05, 0, V3(0, 4.6, 0), V3(1.3, 1.0, 1.3), { color: lin(0x40692a), sway: 0.7, jitter: 0.2, ao: 0.45, flat: true });
+      b.blob(1.3, 0, V3(0.9, 4.0, 0.2), V3(1, 0.85, 1), { color: lin(0x355a22), sway: 0.7, jitter: 0.2, ao: 0.5, flat: true });
+      break;
+    case 'birch':
+      b.cylinder(0.12, 0.2, 4.4, 4, V3(0, -0.4, 0), { color: barkLight, ao: 0.3 });
+      b.blob(1.25, 0, V3(0, 4.1, 0), V3(1.0, 1.55, 1.0), { color: lin(0x708f38), sway: 0.8, jitter: 0.25, ao: 0.4, flat: true });
+      break;
+    case 'conifer':
+      b.cylinder(0.16, 0.3, 2.2, 4, V3(0, -0.4, 0), { color: bark, ao: 0.4 });
+      b.cone(2.2, 3.8, 6, V3(0, 1.3, 0), { color: lin(0x284a31), sway: 0.3, ao: 0.55, flat: true });
+      b.cone(1.45, 3.4, 6, V3(0, 3.6, 0), { color: lin(0x1f3d28), sway: 0.5, ao: 0.55, flat: true });
+      break;
+    case 'palm': {
+      const trunk = lin(0x8a6f4c);
+      let x = 0, y = -0.3;
+      for (let i = 0; i < 3; i++) {
+        const lean = 0.1 + i * 0.07;
+        b.cylinder(0.16 - i * 0.02, 0.2 - i * 0.02, 2.2, 4, V3(x, y, 0), { color: trunk, sway: i * 0.1 }, E(0, 0, -lean));
+        x += Math.sin(lean) * 2.2;
+        y += Math.cos(lean) * 2.2;
+      }
+      for (let k = 0; k < 6; k++) b.leaf(2.9, 0.5, 0.6, 1.6, V3(x, y, 0), (k / 6) * Math.PI * 2, { color: k % 2 ? lin(0x3f6a2a) : lin(0x55782f), sway: 0.9 }, 3);
+      break;
+    }
+    case 'bush':
+      b.blob(0.85, 0, V3(0, 0.45, 0), V3(1.2, 0.8, 1.2), { color: lin(0x4a6a2e), sway: 0.4, jitter: 0.25, ao: 0.6, flat: true });
+      b.blob(0.6, 0, V3(0.55, 0.3, 0.2), V3(1, 0.8, 1), { color: lin(0x3d5a27), sway: 0.4, jitter: 0.25, ao: 0.6, flat: true });
+      break;
+    case 'cactus': {
+      const g = lin(0x5d8043);
+      b.cylinder(0.32, 0.36, 3.0, 5, V3(0, -0.3, 0), { color: g, ao: 0.3 });
+      b.cylinder(0.2, 0.2, 1.2, 4, V3(0.8, 1.2, 0), { color: g });
+      b.cylinder(0.18, 0.18, 1.0, 4, V3(-0.7, 1.5, 0), { color: g });
+      break;
+    }
+    default:
+      return null;
+  }
+  return b.build();
+}
+
+export function buildModel(type: VegType, far = false): THREE.BufferGeometry {
+  if (far) { const g = buildFarModel(type); if (g) return g; }
   const b = new MeshBuilder();
   const bark = lin(0x5a4230), barkLight = lin(0xb9b2a4);
   switch (type) {
@@ -234,8 +283,10 @@ export class Vegetation {
       polygonOffsetFactor: 2,
       polygonOffsetUnits: 4,
     });
-    VEG_TYPES.forEach((t, i) => {
-      const src = buildModel(t);
+    // Slots 0..N-1 near (full models), N..2N-1 far (simplified silhouettes).
+    for (let lod = 0; lod < 2; lod++) VEG_TYPES.forEach((t, ti) => {
+      const i = ti + lod * VEG_TYPES.length;
+      const src = buildModel(t, lod === 1);
       const geo = new THREE.InstancedBufferGeometry();
       geo.index = src.index;
       for (const name of ['position', 'normal', 'color', 'aSway']) geo.setAttribute(name, src.getAttribute(name));
@@ -249,7 +300,7 @@ export class Vegetation {
       geo.instanceCount = 0;
       const mesh = new THREE.Mesh(geo, this.material);
       mesh.frustumCulled = false;
-      mesh.name = `veg-${t}`;
+      mesh.name = `veg-${t}${lod ? '-far' : ''}`;
       this.group.add(mesh);
       this.meshes.push(mesh);
       this.geos[i] = geo;
@@ -405,19 +456,24 @@ export class Vegetation {
     // Nearest first, so any truncation always drops the farthest plants.
     cands.sort((p, q) => p.dist - q.dist);
     if (cands.length > this.budget) cands.length = this.budget;
-    const counts = new Array(VEG_TYPES.length).fill(0);
-    for (const c of cands) counts[c.type]++;
+    // Level of detail: full models near the focus, silhouettes beyond.
+    const NT = VEG_TYPES.length;
+    const nearR = Math.max(45, radius * 0.4);
+    const slotOf = (c: Candidate) => c.type + (c.dist < nearR ? 0 : NT);
+    const counts = new Array(NT * 2).fill(0);
+    for (const c of cands) counts[slotOf(c)]++;
     counts.forEach((cnt, i) => this.ensureCapacity(i, cnt));
-    const fill = new Array(VEG_TYPES.length).fill(0);
+    const fill = new Array(NT * 2).fill(0);
     for (const c of cands) {
-      const arr = this.data[c.type];
-      const o = fill[c.type]++ * STRIDE;
+      const slot = slotOf(c);
+      const arr = this.data[slot];
+      const o = fill[slot]++ * STRIDE;
       arr[o] = c.x; arr[o + 1] = c.y; arr[o + 2] = c.z;
       arr[o + 3] = c.h;
       arr[o + 4] = c.scale; arr[o + 5] = c.rot;
       arr[o + 6] = c.hue; arr[o + 7] = c.autumn; arr[o + 8] = c.snow;
     }
-    for (let i = 0; i < VEG_TYPES.length; i++) {
+    for (let i = 0; i < NT * 2; i++) {
       this.geos[i].instanceCount = counts[i];
       const buf = this.bufs[i];
       buf.clearUpdateRanges();

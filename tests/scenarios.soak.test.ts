@@ -1,11 +1,12 @@
 /**
  * Every scenario is winnable and losable: a scripted winning strategy and a
  * scripted losing strategy are played to completion on the real simulation.
+ * None can be won by doing nothing.
  */
 import { describe, it, expect } from 'vitest';
 import { World } from '../src/sim/world';
 import { SCENARIOS, startScenario } from '../src/sim/scenarios';
-import { WIN, LOSE, play } from './support/strategies';
+import { WIN, LOSE, IDLE, play } from './support/strategies';
 
 describe('scenarios', () => {
   it('there are eight, each with an objective and a time limit', () => {
@@ -29,5 +30,12 @@ describe('scenarios', () => {
       startScenario(w, def.id);
       expect(play(w, LOSE[def.id], def.years + 1), w.scenario!.detail).toBe('lost');
     });
+    if (LOSE[def.id] !== IDLE) {
+      it(`${def.id}: is not won by doing nothing`, () => {
+        const w = new World({ seed: def.seed, preset: def.preset });
+        startScenario(w, def.id);
+        expect(play(w, IDLE, def.years + 1), w.scenario!.detail).toBe('lost');
+      });
+    }
   }
 });

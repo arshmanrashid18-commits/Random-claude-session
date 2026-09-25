@@ -17,7 +17,7 @@ await page.goto(url);
 await page.waitForFunction(() => window.__genesis !== undefined, null, { timeout: 180_000 });
 await page.evaluate(() => window.__genesis.ready);
 const step = async (name, fn) => { const t = Date.now(); await fn(); console.log(name, ((Date.now() - t) / 1000).toFixed(1) + 's'); };
-await step('advance', () => page.evaluate(() => window.__genesis.advance(1920)));
+await step('advance', () => page.evaluate(() => window.__genesis.advance(9600)));
 await step('village', async () => {
   await page.evaluate(() => { window.__genesis.view('village'); window.__genesis.setTime(12.5); });
   await page.evaluate(() => window.__genesis.renderFrames(3));

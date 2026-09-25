@@ -194,7 +194,8 @@ void main() {
     float speck = smoothstep(0.35, 0.9, snoise(dir * 2600.0) * 0.5 + snoise(dir * 700.0) * 0.5 + surf.a);
     float farGlow = smoothstep(200.0, 900.0, vDist);
     float lights = surf.a * mix(speck, 0.6, farGlow) * night * uNightLights;
-    color += vec3(3.2, 1.9, 0.8) * lights * 0.9;
+    // Brighter from afar so towns read as a glow on the night side.
+    color += vec3(3.2, 1.9, 0.8) * lights * mix(0.9, 2.6, farGlow);
   }
   // Borders between peoples, seen from afar.
   if (uBorders > 0.0) {

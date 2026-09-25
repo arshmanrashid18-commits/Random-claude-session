@@ -595,7 +595,7 @@ export class Divine {
   private sanctuary(w: World, x: number, y: number, z: number): CastResult {
     const tick = w.tick;
     const p = w.planet, pl = w.plants;
-    const { cells, w: ws } = this.cellsNear(w, x, y, z, 25);
+    const { cells, w: ws } = this.cellsNear(w, x, y, z, 40);
     for (let k = 0; k < cells.length; k++) {
       const c = cells[k];
       w.civ.sanctuary[c] = 1;
@@ -611,7 +611,9 @@ export class Divine {
       t.religion.sacredSites.push({ x, y, z, origin: 'the sacred grove', tick, shrine: -1 });
       w.events.emit(tick, 'sacred-site', { x, y, z }, 0.55, { tribe: t.name, origin: 'the sacred grove', where: this.place(w, x, y, z) });
     }
-    this.add('sanctuary', x, y, z, 25, tick, Number.MAX_SAFE_INTEGER);
+    this.add('sanctuary', x, y, z, 40, tick, Number.MAX_SAFE_INTEGER);
+    if (!w.animals.refuges) w.animals.refuges = [];
+    w.animals.refuges.push(x, y, z);
     w.civ.witness(x, y, z, 100, 0.15, 0.02, 'grove', tick, this.place(w, x, y, z), 0);
     return { ok: true, message: '' };
   }

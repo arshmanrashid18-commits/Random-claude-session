@@ -105,8 +105,21 @@ Each entry: decision — why.
 34. **Scenarios must not be won by idling.** Each scenario is checked with a scripted
     winning strategy, a losing strategy and doing nothing; objectives were retuned until
     idling loses (The Long Drought's rains fail every year; Two Faiths' peace only holds
-    under a divine truce; First Flame needs Bronze within 12 years; The Chosen need a
+    under a divine truce; First Flame needs Bronze within 14 years; The Chosen need a
     settlement of 100 within 25 years).
 35. **The god can see at night.** Sky ambient gains a phase-weighted cool moonlight so the
     night side reads as a moonlit world rather than a black disc; the lens flare is
     occluded by the planet.
+36. **Sacred groves are arks.** Beasts inside a grove feel neither frost nor heat and breed
+    freely, and beasts suffering outside one seek the nearest grove within reach. This
+    gives the god a real tool for Ark of the Beasts, whose ice is now deeper (−12 °C for
+    nine years) so that doing nothing loses a species.
+37. **Terror is awe.** In A God Forgotten a god who destroys earns the survivors' fear and
+    can win; the scenario is lost through neglect, which the losing test strategy plays.
+38. **Vegetation has two levels of detail.** Full models near the focus, silhouettes with
+    about a fifth of the triangles beyond 40% of the placement radius.
+39. **Hurricanes form where they can.** Each check in the season samples up to 24 cells
+    for warm open ocean in the tropical band, so every warm season spins up a few named
+    storms instead of one every decade.
+40. **Demographic transition.** Birth rates fall by 1/(1 + 0.18·age) as a people advances,
+    so growth levels off below the agent capacity instead of hitting it.

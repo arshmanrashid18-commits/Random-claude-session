@@ -295,6 +295,11 @@ export class Animals {
     return i;
   }
 
+  /** Sacred grove cells (shared with the civilisation): no climate stress, easy breeding. */
+  shelter: Uint8Array | null = null;
+  /** Grove centres (x,y,z unit dirs): suffering beasts within reach seek them out. */
+  refuges: number[] = [];
+
   /** Divine beacon: animals within reach travel toward it (the scattered find each other). */
   attractor: { x: number; y: number; z: number; cosR: number; until: number } | null = null;
 
@@ -410,7 +415,8 @@ export class Animals {
       const K = 2;
       const temp = climate.temp[c];
       const lo = d.tMin - this.gCold[i] * 12, hi = d.tMax + this.gHeat[i] * 12;
-      const stress = temp < lo ? (lo - temp) / 15 : temp > hi ? (temp - hi) / 15 : 0;
+      const sheltered = this.shelter !== null && this.shelter[c] === 1;
+      const stress = sheltered ? 0 : temp < lo ? (lo - temp) / 15 : temp > hi ? (temp - hi) / 15 : 0;
       const st = this.state[i];
       const resting = st === AState.Rest || st === AState.Hibernate;
       let meta = d.metabolism * Math.pow(this.gSize[i], 0.75) * (1 + stress * 0.6) * (resting ? (st === AState.Hibernate ? 0.15 : 0.6) : 1) * (this.age[i] < d.adultAge ? 0.55 : 1);
@@ -670,7 +676,7 @@ export class Animals {
     if (this.sex[i] === 0 && this.pregnant[i] <= 0 && this.cooldown[i] <= 0 && this.age[i] > d.adultAge && fedEnough && this.health[i] > 0.5) {
       const ratio = this.pop[sp] / d.softCap;
       const popK = ratio < 1 ? 1 - ratio * ratio * 0.9 : Math.max(0, 0.1 * (2 - ratio));
-      const hab = habitat(d, climate.biome[c], climate.temp[c], this.gCold[i], this.gHeat[i]);
+      const hab = this.shelter !== null && this.shelter[c] === 1 ? 1 : habitat(d, climate.biome[c], climate.temp[c], this.gCold[i], this.gHeat[i]);
       if (rng.chance(0.25 * popK * this.gFert[i] * (0.3 + hab))) {
         let mate = -1;
         const Lm = this.leader[i];
@@ -709,6 +715,25 @@ export class Animals {
         this.tx[i] = this.scratch[0]; this.ty[i] = this.scratch[1]; this.tz[i] = this.scratch[2];
         this.state[i] = AState.Migrate;
         return;
+      }
+    }
+    // ----- beasts suffering frost or heat seek a sacred grove within reach
+    const refuges = this.refuges;
+    if (refuges && refuges.length && (tick + i) % 30 < BRAIN_INTERVAL && !(this.shelter && this.shelter[c])) {
+      const here = habitat(d, climate.biome[c], climate.temp[c], this.gCold[i], this.gHeat[i]);
+      if (here < 0.45) {
+        const cosR = Math.cos(380 * INV_R);
+        let bestDot = cosR, bi = -1;
+        for (let k = 0; k < refuges.length; k += 3) {
+          const dot = this.x[i] * refuges[k] + this.y[i] * refuges[k + 1] + this.z[i] * refuges[k + 2];
+          if (dot > bestDot) { bestDot = dot; bi = k; }
+        }
+        if (bi >= 0) {
+          offsetDir(refuges[bi], refuges[bi + 1], refuges[bi + 2], rng.range(-20, 20) * INV_R, rng.range(-20, 20) * INV_R, this.scratch);
+          this.tx[i] = this.scratch[0]; this.ty[i] = this.scratch[1]; this.tz[i] = this.scratch[2];
+          this.state[i] = AState.Migrate;
+          return;
+        }
       }
     }
     // ----- migration toward better habitat

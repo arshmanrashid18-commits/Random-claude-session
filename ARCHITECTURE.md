@@ -59,8 +59,8 @@ simulation is deterministic regardless of the speed the player picks.
 | `ecology/plants.ts` | 8 plant functional types per region cell: suitability from climate, growth, competition, spread, grazing, logging, seasonal dieback, bloom |
 | `ecology/fire.ts` | wildfire spread by fuel, dryness and wind; burn-out, scars, settlement firebreaks |
 | `ecology/animals.ts` | SoA animals (cap 12 000): needs, genetics-lite (speed, size, fertility, cold/heat), herding, migration, scent fields for predators, carrion, small game, disease, reproduction, speciation and extinction records, population history |
-| `civ/civ.ts` | tribes, settlements, people (SoA, cap 9 000) with needs, skills, personality, families, jobs and intents; conserving resource ledger; construction planner; colonisation; disease; graves; divine interface (witness, damage, flood, resurrect) |
-| `civ/society.ts` | contact, opinion, pacts, alliances, betrayals, wars with mustered armies, person-to-person combat, sieges, conquest, refugees; trade routes with caravans and ships; prophets, pilgrims, tenets, epithets, scripture, conversion, schism/secession |
+| `civ/civ.ts` | tribes, settlements, people (SoA, cap 9 000; two life-years per world year) with needs, skills, personality, families (matchmaking within and across sister settlements), jobs and intents; conserving resource ledger; construction planner; colonisation; disease with natural outbreaks and carrier provenance; demographic transition; graves; divine interface (witness, damage, flood, resurrect) |
+| `civ/society.ts` | contact (seafarers reach further), opinion with per-pair cultural affinity, pacts, alliances, betrayals, wars with provisioned armies (forage, forced march, rejoin after scares, naval invasions), person-to-person combat, sieges, conquest, refugees; trade routes with caravans and ships; prophets, pilgrims, tenets, epithets, scripture, conversion, schism/secession |
 | `civ/tech.ts` | 52 technologies in 8 fields, ages Stone → Steam; need-driven research |
 | `civ/pathfind.ts` | A* on the region grid (land/sea modes, road bonus, cache) |
 | `powers/defs.ts`, `powers/divine.ts` | 20 divine powers, costs, cooldowns, combos; lingering effects (rain, drought, volcano growth and lava flow, tsunami front, meteor fall, locust drift, ice age forcing, eclipse) |
@@ -104,12 +104,19 @@ simulation is deterministic regardless of the speed the player picks.
      the moon, depth absorption, shore waves, foam, GGX glint, sea ice.
    * `water.ts` – lakes (flat at spill level) and flowing river ribbons.
    * `vegetation.ts` – instanced procedural trees/rocks/reeds placed from simulated
-     plant densities; `groundHeight.ts` is an exact CPU port of the shader height
-     function (verified GPU vs CPU ≤ 1e-4 by `__genesis.groundCheck()`).
+     plant densities, nearest first, in two levels of detail (full models near the
+     focus, ~1/5-triangle silhouettes beyond); kept out of lakes and out of cleared
+     ground (settlement cores, building plots, fields); rebuilt on camera cuts.
+     `groundHeight.ts` is an exact CPU port of the shader height function (verified
+     GPU vs CPU ≤ 1e-4 by `__genesis.groundCheck()`).
+   * Instanced renderers that grow their buffers dispose the geometry's GPU state
+     first: three.js caches the drawable instance count once per geometry.
 3. **Atmosphere composite** (`atmosphere.ts`) – transmittance LUT; single scattering
    (Rayleigh, Mie, ozone) along each view ray to the depth-buffer hit; raymarched cloud
    shell driven by simulated cloud cover + storm systems (hurricane spirals); aurora
-   curtains; sun disc.
+   curtains (own jittered march through the emitting shell); sun disc and eclipse
+   corona; moonlight in the sky ambient; rainbows for low observers in rain; low
+   cameras see the far cloud deck dissolve into haze instead of an undersampled sheet.
    * `people.ts`, `creatures.ts`, `buildings.ts` – instanced procedural models with
      vertex-shader animation (gaits, work poses, boats), construction-order reveal,
      fields with crop growth, roads, scaffolding.
@@ -131,3 +138,11 @@ down when frame time stays over budget.
   WebGL2, drives `window.__genesis` (view, advance, setTime, renderFrames, stats, hash,
   groundCheck) and saves PNGs; fails on any console error/warning.
 * `npx tsx scripts/debug/*.ts` – equirectangular terrain/biome/temperature/rain maps.
+* `npm run monkey` – five minutes of random input against the real game; any console
+  error, warning or page error fails it (intentional save-load reloads are awaited).
+* `npm run test:soak` – scenario soak (each scenario won and lost by scripted players)
+  and the 500-year soak (bounded memory, no NaN, life endures, save/load after centuries).
+* `npx tsx scripts/bench.mts [--years=N]` – ms/tick by subsystem at natural, 5 000 and
+  10 000 agents.
+* Debug probes: `scripts/debug/vp.mjs` (viewpoint + vegetation counts + screenshot),
+  `rel.mts` (diplomacy/war trace), `army.mts`, `starve.mts`, `plague.mts`, `eco.mts`.

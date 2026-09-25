@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { World } from '../src/sim/world';
 import { TICKS_PER_YEAR } from '../src/sim/constants';
 import { saveWorld, loadWorld } from '../src/sim/serialize';
+import { mkdirSync, writeFileSync } from 'node:fs';
 
 function nonFinite(w: World): string[] {
   const bad: string[] = [];
@@ -35,12 +36,14 @@ describe('500-year soak', () => {
     let maxPeople = 0;
     const t0 = Date.now();
     for (let y = 1; y <= YEARS; y++) {
+      const ys = performance.now();
       for (let t = 0; t < TICKS_PER_YEAR; t++) w.step();
+      const yearMs = performance.now() - ys;
       w.events.drain();
       const people = w.civ.totalPeople();
       maxPeople = Math.max(maxPeople, people);
       if (y % 25 === 0) {
-        log.push(`year ${y}: people ${people}, tribes ${w.civ.tribes.filter((t) => t.alive).length}, animals ${w.animals.totalAlive()}, species ${w.animals.livingSpecies()}, buildings ${w.civ.buildings.length}, memories ${w.civ.godMemories.length}, paths ${Object.keys(w.civ.pathTable).length}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+        log.push(`year ${y}: people ${people}, ms/tick ${(yearMs / TICKS_PER_YEAR).toFixed(2)}, tribes ${w.civ.tribes.filter((t) => t.alive).length}, animals ${w.animals.totalAlive()}, species ${w.animals.livingSpecies()}, buildings ${w.civ.buildings.length}, memories ${w.civ.godMemories.length}, paths ${Object.keys(w.civ.pathTable).length}, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
         expect(nonFinite(w), `year ${y}`).toEqual([]);
         // Bounded structures.
         expect(w.events.history.length).toBeLessThanOrEqual(6000);
@@ -51,6 +54,8 @@ describe('500-year soak', () => {
       }
     }
     console.log(log.join('\n'));
+    mkdirSync('test-results', { recursive: true });
+    writeFileSync(`test-results/soak-${YEARS}y.txt`, log.join('\n') + '\n');
     // Life endures.
     expect(w.animals.totalAlive()).toBeGreaterThan(500);
     expect(w.animals.livingSpecies()).toBeGreaterThanOrEqual(5);

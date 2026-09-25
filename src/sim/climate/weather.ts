@@ -110,11 +110,17 @@ export class Weather {
       const hurricanes = this.storms.filter((s) => s.type === StormType.Hurricane).length;
       const northSeason = yf > 0.25 && yf < 0.55;
       const southSeason = yf > 0.75 || yf < 0.05;
-      if (hurricanes < 2 && (northSeason || southSeason) && rng.chance(0.2)) {
-        const c = rng.int(0, g.count);
-        const lat = g.lat[c];
-        const inBand = (northSeason && lat > 0.12 && lat < 0.4) || (southSeason && lat < -0.12 && lat > -0.4);
-        if (inBand && terr.oceanFrac[c] > 0.9 && climate.temp[c] > 25.5) this.spawn(rng, StormType.Hurricane, g.centers[c * 3], g.centers[c * 3 + 1], g.centers[c * 3 + 2], tick, events);
+      if (hurricanes < 2 && (northSeason || southSeason) && rng.chance(0.12)) {
+        // Look for warm open ocean in the season's tropical band.
+        for (let k = 0; k < 24; k++) {
+          const c = rng.int(0, g.count);
+          const lat = g.lat[c];
+          const inBand = (northSeason && lat > 0.12 && lat < 0.4) || (southSeason && lat < -0.12 && lat > -0.4);
+          if (inBand && terr.oceanFrac[c] > 0.9 && climate.temp[c] > 24.5) {
+            this.spawn(rng, StormType.Hurricane, g.centers[c * 3], g.centers[c * 3 + 1], g.centers[c * 3 + 2], tick, events);
+            break;
+          }
+        }
       }
       const blizzards = this.storms.filter((s) => s.type === StormType.Blizzard).length;
       if (blizzards < 2 && rng.chance(0.2)) {

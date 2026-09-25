@@ -4,29 +4,34 @@
 
 Working and verified (tests, screenshots or measurements):
 * World generation (plates, ridged mountains, erosion, climate spin-up, hydrology) ≈ 8 s in the worker.
-* Climate, weather (fronts, hurricanes, blizzards, lightning, droughts), emergent biomes.
+* Climate, weather (fronts, named hurricanes, blizzards, lightning, droughts), emergent biomes.
 * Ecology: 8 plant species, fire, 13 animal species with genetics, predation, disease,
-  migration, speciation, extinction.
-* Civilisation: tribes, settlements, logistics economy (conserving ledger), 52 techs,
-  construction, colonisation; society layer (diplomacy, war with armies, trade caravans
-  and ships, prophets, pilgrims, schisms, conversions).
+  migration, speciation, extinction; every predator persists unattended for 12+ years.
+* Civilisation: tribes, settlements (camp → village → town → city), logistics economy
+  (conserving ledger), 52 techs / 8 ages, construction, colonisation, marriage across
+  settlements, two life-years per world year (≈2,000 people by year 60, Age of Steam ≈ year 70).
+* Society: diplomacy with affinity, pacts, alliances, betrayal; wars with provisioned
+  armies, naval invasions, sieges, conquest, refugees; natural plague outbreaks carried
+  along trade routes; prophets, pilgrims, schisms, conversions.
 * 20 divine powers with consequences, costs, cooldowns and 10 combos; terraforming.
-* Rendering: CDLOD terrain, ocean, rivers/lakes, atmosphere, clouds, stars, aurora, moon,
-  post chain, vegetation, grass, creatures, people (boats), buildings, VFX, precipitation.
-* UI: title screen, HUD, power bar/wheel, feed, inspector, chronicle, ecology, peoples,
-  settings (rebinding), help, saves (IndexedDB + export/import), tutorial, scenarios.
+* Rendering: CDLOD terrain, ocean, rivers/lakes, atmosphere with moonlight, clouds, stars,
+  aurora, moon, rainbows, post chain, vegetation (fixed instancing cap), grass, creatures,
+  people, boats, buildings with clearings, VFX, precipitation, map labels.
+* UI: title screen, HUD, power bar/wheel, feed, inspector, chronicle (merged weather),
+  ecology, peoples, settings (rebinding), help, saves (IndexedDB + export/import),
+  tutorial, 8 scenarios.
 * Audio: generative score, ambience, spatial effects, UI sounds.
-* Tests: 9 fast suites (determinism, sanity, save/load, economy, pathfinding, tech tree,
-  powers + NaN scan, ecosystem, worker protocol); soak: scenarios, 500 years.
+* Tests: 9 fast suites (25 tests); soak: scenarios (8 × win/lose, and idle loses), 150-year
+  soak green; monkey test harness tolerates intentional save-load reloads.
 
 In progress:
-* Scenario calibration (strategies in `tests/support/strategies.ts`).
-* Performance pass (sim ≈ 2.3 ms/tick at ~3.5k animals; target ≤ 1.9 ms for true 100×).
+* Visual quality loop (full `npm run shots` after the instancing fix).
+* 500-year soak with the faster-growing civilisation; performance at large populations.
 
 Next:
-1. Monkey test green; soak suite green.
-2. Visual quality loop (screenshots of every viewpoint + UI), fix the worst.
-3. README with screenshots, FINAL_REPORT.md, QUALITY_LOG passes, delight pass.
+1. Clean bench numbers → FINAL_REPORT perf section.
+2. UI screenshots into docs/screenshots/ui (uicheck + title scripts).
+3. Monkey test rerun; scenario soak rerun; QUALITY_LOG pass; FINAL_REPORT.
 
 ## How to resume
 
@@ -34,5 +39,8 @@ Next:
 2. `npm install && npx tsc --noEmit && npm test`.
 3. `npm run shots -- --only=orbit,village --out=/tmp/shots` and look at the images.
 4. Debug scripts: `npx tsx scripts/debug/civ.ts <seed> <years> <every>`,
-   `npx tsx scripts/debug/powers.ts`, `npx tsx scripts/debug/scenarios.ts <ids>`,
-   `node scripts/debug/uicheck.mjs`, `node scripts/debug/title.mjs`.
+   `npx tsx scripts/debug/scenarios.ts <ids|""> <win|lose|idle|both|all>`,
+   `npx tsx scripts/debug/rel.mts <seed> <years>` (diplomacy/war trace),
+   `npx tsx scripts/bench.mts --years=N`, `node scripts/debug/vp.mjs <viewpoints>`
+   (viewpoint probe + screenshot), `node scripts/debug/uicheck.mjs <outdir>`,
+   `node scripts/debug/title.mjs <outdir>`.

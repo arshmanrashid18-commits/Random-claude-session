@@ -1447,7 +1447,8 @@ export class Civ {
       for (const i of members) {
         if (P.sex[i] !== 0 || P.pregnant[i] > 0 || P.age[i] < 17 || P.age[i] > 42 || P.spouse[i] < 0) continue;
         if (P.children[i] >= 6) continue;
-        if (rng.chance(s.blessed > tick ? 0.14 : 0.07)) P.pregnant[i] = 300;
+        // Demographic transition: families shrink as a people advances.
+        if (rng.chance((s.blessed > tick ? 0.14 : 0.07) / (1 + 0.18 * t.age))) P.pregnant[i] = 300;
       }
     }
     // Disease burden (drives medicine research and the chronicle).
