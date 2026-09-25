@@ -60,7 +60,26 @@ scripted winning player, a scripted losing player and by doing nothing
 | Green the Desert | a quarter more of the land green within 20 years | won: 75% of 74%, year 3.7 | lost: 67% | lost: 68% |
 | A God Forgotten | average faith ≥ 50% within 12 years | won: 51%, year 3.6 | lost: 0% (neglect) | lost: 0% |
 
-LONGRUN_TABLE
+**500-year soak** (`tests/longrun.soak.test.ts`, seed 424242, default settings, no god):
+passes on the final code in 46 minutes — no NaN or Infinity anywhere in the state, event
+history, memories, graves and path cache within their bounds, the building list bounded
+(crumbled ruins free their slots), life endures, and the world still saves and loads to
+an identical hash after five centuries. Trajectory (`test-results/soak-500y.txt`):
+
+| Year | People | Tribes | Animals | Species | Buildings (live / slots) | Cached paths | ms/tick |
+|---|---|---|---|---|---|---|---|
+| 25 | 523 | 5 | 4,614 | 13 | 281 / 281 | 83 | 2.95 |
+| 50 | 1,554 | 5 | 4,824 | 13 | 942 / 942 | 537 | 3.88 |
+| 100 | 2,714 | 5 | 5,430 | 15 | 1,976 / 1,976 | 2,654 | 5.14 |
+| 150 | 2,884 | 5 | 6,754 | 18 | 2,423 / 2,423 | 3,213 | 5.92 |
+| 200 | 2,869 | 5 | 6,568 | 20 | 2,532 / 2,547 | 3,100 | 5.44 |
+| 300 | 2,939 | 5 | 7,806 | 30 | 3,318 / 3,322 | 3,335 | 6.68 |
+| 400 | 2,817 | 5 | 8,270 | 42 | 3,641 / 3,687 | 3,213 | 6.34 |
+| 500 | 2,903 | 5 | 8,335 | 34 | 3,671 / 3,687 | 3,272 | 6.23 |
+
+Peoples grow logistically to a plateau near 2,900; animals diversify through speciation
+(13 → 42 species, then extinctions bring it to 34). Before the slot fix the same run
+ended with 17,578 building entries and 6.9 ms/tick.
 
 Monkey test (`npm run monkey`): five minutes of random play against the real game —
 drags, zooms, clicks, hotkeys, power casts, terraforming strokes, panels, settings,
