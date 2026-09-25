@@ -29,8 +29,16 @@ const QTABLE_N = 256;
 export const CLIMATE_STEPS_PER_YEAR = TICKS_PER_YEAR / CLIMATE_PHASES;
 
 /** Saturation humidity (g/kg) – Clausius–Clapeyron approximation. */
+const SAT_TABLE = (() => {
+  const t = new Float32Array(902);
+  for (let i = 0; i < 902; i++) t[i] = 3.8 * Math.exp(0.0687 * (-45 + i * 0.1));
+  return t;
+})();
 export function saturation(tC: number): number {
-  return 3.8 * Math.exp(0.0687 * Math.max(-45, Math.min(45, tC)));
+  const f = (Math.max(-45, Math.min(45, tC)) + 45) * 10;
+  const i = f | 0;
+  const k = f - i;
+  return SAT_TABLE[i] * (1 - k) + SAT_TABLE[i + 1] * k;
 }
 
 /** Daily-mean insolation (normalised: equator at equinox ≈ 0.318). */
@@ -85,13 +93,21 @@ export class Climate {
   ash: Float32Array;
   /** Local drought/rain overrides from divine powers: + wetter, − drier. */
   rainBias: Float32Array;
+  /** Persistent per-cell climate tweaks from biome painting (°C, rain). */
+  tempPaint: Float32Array;
+  rainPaint: Float32Array;
+  /** Divine gale: added wind (east, north) per cell, decays. */
+  galeE: Float32Array;
+  galeN: Float32Array;
   // Precomputed geometry.
   private eastX: Float32Array; private eastY: Float32Array; private eastZ: Float32Array;
   private northX: Float32Array; private northY: Float32Array; private northZ: Float32Array;
   private gradE: Float32Array; private gradN: Float32Array;
   /** Unit (east,north) direction to each of the 4 edge neighbours. */
-  private nbE: Float32Array; private nbN: Float32Array;
+  readonly nbE: Float32Array; readonly nbN: Float32Array;
   private qAnnual: Float32Array;
+  /** Per-cell sin/cos of 2·longitude and polar damping for the oscillation. */
+  private osS: Float32Array; private osC: Float32Array;
   /** Per-step insolation lookup over latitude (rebuilt when declination changes). */
   private qTable = new Float32Array(QTABLE_N + 1);
   private qTableDec = NaN;
@@ -120,11 +136,17 @@ export class Climate {
     this.biome = new Uint8Array(n);
     this.ash = new Float32Array(n);
     this.rainBias = new Float32Array(n);
+    this.tempPaint = new Float32Array(n);
+    this.rainPaint = new Float32Array(n);
+    this.galeE = new Float32Array(n);
+    this.galeN = new Float32Array(n);
     this.eastX = new Float32Array(n); this.eastY = new Float32Array(n); this.eastZ = new Float32Array(n);
     this.northX = new Float32Array(n); this.northY = new Float32Array(n); this.northZ = new Float32Array(n);
     this.gradE = new Float32Array(n); this.gradN = new Float32Array(n);
     this.nbE = new Float32Array(n * 4); this.nbN = new Float32Array(n * 4);
     this.qAnnual = new Float32Array(n);
+    this.osS = new Float32Array(n);
+    this.osC = new Float32Array(n);
     this.computeFrames();
     this.computeGradients();
   }
@@ -156,6 +178,10 @@ export class Climate {
         this.nbN[c * 4 + k] = dn / l;
       }
       this.qAnnual[c] = annualMeanInsolation(g.lat[c]);
+      const lon = Math.atan2(cz, cx);
+      const damp = Math.exp(-g.lat[c] * g.lat[c] * 3);
+      this.osS[c] = Math.sin(lon * 2) * damp;
+      this.osC[c] = Math.cos(lon * 2) * damp;
     }
   }
 
@@ -232,6 +258,11 @@ export class Climate {
   /** Radiative-equilibrium temperature target (°C). */
   targetTemp(c: number, tick: number, inertiaMix: number): number {
     this.ensureQTable(solarDeclination(tick));
+    return this.targetTempFast(c, inertiaMix);
+  }
+
+  /** targetTemp without refreshing the insolation table (caller ensures it). */
+  private targetTempFast(c: number, inertiaMix: number): number {
     const q = this.insolation(this.grid.lat[c]);
     const qMean = this.qAnnual[c];
     const ocean = this.isOcean(c);
@@ -243,7 +274,7 @@ export class Climate {
     t -= Math.min(1, this.snow[c]) * 4;
     t -= this.ash[c] * 14;
     if (ocean) t = Math.max(t, -2.5);
-    return t + this.forcing.baseOffset + this.forcing.transientOffset;
+    return t + this.forcing.baseOffset + this.forcing.transientOffset + this.tempPaint[c];
   }
 
   /** Process one slice of cells for the current climate step. */
@@ -253,12 +284,13 @@ export class Climate {
     const start = Math.floor((phase * n) / CLIMATE_PHASES);
     const end = Math.floor(((phase + 1) * n) / CLIMATE_PHASES);
     const dec = solarDeclination(tick);
+    this.ensureQTable(dec);
+    const oscS = Math.sin(this.forcing.oscillationPhase), oscC = Math.cos(this.forcing.oscillationPhase);
     const T = this.temp, H = this.humid;
     const Tn = this.tempNext, Hn = this.humidNext;
     const terr = this.terrain;
     const moistK = this.forcing.moisture;
     const osc = this.forcing.oscillation;
-    const oscPh = this.forcing.oscillationPhase;
     const storms = this.storms;
 
     for (let c = start; c < end; c++) {
@@ -303,6 +335,13 @@ export class Climate {
           wn -= up * gN * k;
         }
       }
+      if (this.galeE[c] !== 0 || this.galeN[c] !== 0) {
+        we += this.galeE[c];
+        wn += this.galeN[c];
+        this.galeE[c] *= 0.97;
+        this.galeN[c] *= 0.97;
+        if (Math.abs(this.galeE[c]) + Math.abs(this.galeN[c]) < 0.05) { this.galeE[c] = 0; this.galeN[c] = 0; }
+      }
       this.windE[c] = we;
       this.windN[c] = wn;
 
@@ -330,7 +369,7 @@ export class Climate {
 
       // --- temperature relaxation
       const ocean = this.isOcean(c);
-      const target = this.targetTemp(c, tick, 0.45);
+      const target = this.targetTempFast(c, 0.45);
       const relax = ocean ? 0.012 : 0.08;
       t += (target - t) * relax;
       t -= stormCold * 0.4;
@@ -340,8 +379,8 @@ export class Climate {
       // --- evaporation
       const sat = saturation(t);
       const water = ocean ? 1 : Math.max(terr.lakeFrac[c], Math.min(0.35, terr.river[c] * 0.02));
-      const lon = Math.atan2(cz, cx);
-      const oscMod = 1 + osc * Math.sin(lon * 2 + oscPh) * Math.exp(-lat * lat * 3);
+      // sin(2·lon + phase) via precomputed terms.
+      const oscMod = 1 + osc * (this.osS[c] * oscC + this.osC[c] * oscS);
       let evap = 0;
       if (water > 0) evap += water * Math.max(0, sat - h) * 0.09 * moistK * oscMod;
       // land transpiration from moist soils and vegetation
@@ -358,7 +397,7 @@ export class Climate {
       if (rhCrit < 0.35) rhCrit = 0.35;
       let p = rh > rhCrit ? (h - rhCrit * sat) * 0.35 : 0;
       // divine rain / drought
-      const bias = this.rainBias[c];
+      const bias = this.rainBias[c] + this.rainPaint[c];
       if (bias > 0) p += h * Math.min(0.6, bias * 0.3) + bias * 0.8;
       else if (bias < 0) p *= Math.max(0, 1 + bias);
       p = Math.max(0, Math.min(p, h + (bias > 0 ? bias * 0.8 : 0)));
@@ -381,7 +420,8 @@ export class Climate {
       this.meanRain[c] += (p * RAIN_SCALE - this.meanRain[c]) * meanAlpha;
       // ash settles slowly
       if (this.ash[c] > 0) this.ash[c] = Math.max(0, this.ash[c] - 0.0015);
-      if (bias !== 0) this.rainBias[c] = Math.abs(bias) < 0.002 ? 0 : bias * 0.995;
+      const rb = this.rainBias[c];
+      if (rb !== 0) this.rainBias[c] = Math.abs(rb) < 0.002 ? 0 : rb * 0.995;
     }
   }
 

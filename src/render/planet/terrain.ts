@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_DETAIL, GLSL_HEIGHT, GLSL_NOISE, GLSL_REGION } from '../glsl/common';
 import { GLSL_CLOUDS, GLSL_SKYLIGHT, GLSL_TERRAIN_ALBEDO } from '../glsl/surface';
 import { LodSelector, MAX_LOD_LEVELS, type LodSettings } from './quadtree';
+import { GLSL_SHADOW_SAMPLE } from '../shadows';
 import type { PlanetData } from './planetData';
 
 /** Grid patch with skirts. position = (gx, gy, skirt) with gx, gy ∈ [0,1]. */
@@ -44,7 +45,7 @@ export function createPatchGeometry(G: number): THREE.InstancedBufferGeometry {
   return geo;
 }
 
-const TERRAIN_VS = /* glsl */ `
+export const TERRAIN_VS = /* glsl */ `
 precision highp float;
 precision highp sampler2DArray;
 ${GLSL_CONSTANTS}
@@ -73,10 +74,8 @@ void main() {
   gg -= fract(gg * 0.5) * 2.0 * morph;
   ab = aPatch.xy + (gg / uGrid) * aPatch.z;
   vec3 dir = faceABToDir(face, ab);
-  float h = heightFaceAB(face, ab);
-  vec3 wp0 = dir * (PLANET_R + h);
-  float dist = distance(wp0, uCamPos);
-  h += detailHeight(dir, h, dist);
+  float h = groundHeightFaceAB(face, ab, dir);
+  float dist = distance(dir * (PLANET_R + h), uCamPos);
   float skirt = position.z * (1.5 + aPatch.z * 45.0);
   vWorld = dir * (PLANET_R + h - skirt);
   vDist = dist;
@@ -98,6 +97,7 @@ ${GLSL_ATMOSPHERE}
 ${GLSL_CLOUDS}
 ${GLSL_SKYLIGHT}
 ${GLSL_TERRAIN_ALBEDO}
+${GLSL_SHADOW_SAMPLE}
 uniform highp sampler2DArray uNormalTex;
 uniform vec3 uCamPos;
 uniform float uNightLights;
@@ -105,14 +105,24 @@ in vec3 vWorld;
 in float vDist;
 
 vec3 detailNormal(vec3 N, vec3 dir, float dist) {
-  float fade = 1.0 - smoothstep(40.0, 220.0, dist);
+  float fade = 1.0 - smoothstep(40.0, 180.0, dist);
   if (fade <= 0.0) return N;
-  vec3 p = dir * PLANET_R * 0.9;
-  float e = 0.35;
-  float n0 = snoise(p);
-  vec3 grad = vec3(snoise(p + vec3(e, 0.0, 0.0)) - n0, snoise(p + vec3(0.0, e, 0.0)) - n0, snoise(p + vec3(0.0, 0.0, e)) - n0) / e;
-  grad -= dir * dot(grad, dir);
-  return normalize(N - grad * 0.35 * fade);
+  // Gradient of the same detail field that displaces the vertices (so light
+  // matches geometry), plus a faint finer layer for ground texture.
+  vec3 p = dir * PLANET_R * 0.12;
+  float e = 0.08;
+  float n0 = snoise(p) * 0.6 + snoise(p * 2.3 + 5.1) * 0.25;
+  vec3 g;
+  g.x = snoise(p + vec3(e, 0.0, 0.0)) * 0.6 + snoise((p + vec3(e, 0.0, 0.0)) * 2.3 + 5.1) * 0.25 - n0;
+  g.y = snoise(p + vec3(0.0, e, 0.0)) * 0.6 + snoise((p + vec3(0.0, e, 0.0)) * 2.3 + 5.1) * 0.25 - n0;
+  g.z = snoise(p + vec3(0.0, 0.0, e)) * 0.6 + snoise((p + vec3(0.0, 0.0, e)) * 2.3 + 5.1) * 0.25 - n0;
+  g = g / e * 0.12 * 0.3;
+  vec3 q = dir * PLANET_R * 1.6;
+  float m0 = snoise(q);
+  vec3 g2 = vec3(snoise(q + vec3(0.2, 0.0, 0.0)) - m0, snoise(q + vec3(0.0, 0.2, 0.0)) - m0, snoise(q + vec3(0.0, 0.0, 0.2)) - m0) / 0.2;
+  g += g2 * 0.02 * (1.0 - smoothstep(10.0, 60.0, dist));
+  g -= dir * dot(g, dir);
+  return normalize(N - g * fade);
 }
 
 void main() {
@@ -133,14 +143,14 @@ void main() {
   float ndl = max(dot(N, L), 0.0);
   // Soften the terminator slightly (scattering in the canopy / subsurface).
   ndl = mix(ndl, smoothstep(-0.1, 0.4, dot(N, L)) * 0.5, 0.08);
-  float shadow = cloudShadow(vWorld, L);
+  float shadow = cloudShadow(vWorld, L) * sunShadow(vWorld, N);
   // Terrain self-shadowing approximation: grazing sun on the far side of ridges.
   float horizon = smoothstep(-0.02, 0.12, mu + (dot(N, L) - mu) * 0.5);
   vec3 V = normalize(uCamPos - vWorld);
   vec3 Hh = normalize(L + V);
   float spec = pow(max(dot(N, Hh), 0.0), mix(24.0, 90.0, si.wet)) * si.wet * 0.4;
   vec3 direct = sunCol * (si.albedo * ndl / PI + spec * ndl) * shadow * horizon;
-  vec3 amb = skyAmbient(dir, N, L) * si.albedo * uSunIntensity * 0.06;
+  vec3 amb = skyAmbient(dir, N, L) * si.albedo * uSunIntensity * 0.1;
   vec3 color = direct + amb;
   // Underwater light absorption (seabed seen through the ocean surface).
   if (h < 0.0) color *= exp(-vec3(0.35, 0.12, 0.06) * min(-h, 30.0) * 0.35);
@@ -183,21 +193,38 @@ void main() {
 }
 `;
 
+export const DEPTH_FS = /* glsl */ `
+precision highp float;
+layout(location = 0) out highp vec4 outColor;
+void main() { outColor = vec4(1.0); }
+`;
+
 export const OCEAN_SHADING = /* glsl */ `
 vec3 waterNormal(vec3 dir, vec3 wp, float dist, float rough) {
-  float fade = 1.0 - smoothstep(60.0, 900.0, dist);
+  float fade = 1.0 - smoothstep(80.0, 1400.0, dist);
   vec3 N = dir;
   if (fade <= 0.0) return N;
-  vec3 p = wp * 0.35;
+  // Sum of directional swells (analytic derivatives) plus fine chop.
+  vec3 ref = abs(dir.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+  vec3 e1 = normalize(cross(ref, dir));
+  vec3 e2 = cross(dir, e1);
+  vec2 q = vec2(dot(wp, e1), dot(wp, e2));
   float t = uTime;
-  float e = 0.25;
-  float n0 = snoise(p + vec3(t * 0.3, 0.0, t * 0.2)) + 0.5 * snoise(p * 2.3 - vec3(0.0, t * 0.5, t * 0.3));
-  float nx = snoise(p + vec3(e, 0.0, 0.0) + vec3(t * 0.3, 0.0, t * 0.2)) + 0.5 * snoise((p + vec3(e, 0.0, 0.0)) * 2.3 - vec3(0.0, t * 0.5, t * 0.3));
-  float ny = snoise(p + vec3(0.0, e, 0.0) + vec3(t * 0.3, 0.0, t * 0.2)) + 0.5 * snoise((p + vec3(0.0, e, 0.0)) * 2.3 - vec3(0.0, t * 0.5, t * 0.3));
-  float nz = snoise(p + vec3(0.0, 0.0, e) + vec3(t * 0.3, 0.0, t * 0.2)) + 0.5 * snoise((p + vec3(0.0, 0.0, e)) * 2.3 - vec3(0.0, t * 0.5, t * 0.3));
-  vec3 g = vec3(nx - n0, ny - n0, nz - n0) / e;
-  g -= dir * dot(g, dir);
-  return normalize(N - g * 0.06 * rough * fade);
+  vec2 g = vec2(0.0);
+  vec2 d1 = normalize(vec2(0.8, 0.6)), d2 = normalize(vec2(-0.3, 0.95)), d3 = normalize(vec2(0.95, -0.3)), d4 = normalize(vec2(-0.7, -0.7));
+  float k1 = 0.35, k2 = 0.62, k3 = 1.1, k4 = 1.9;
+  g += d1 * k1 * cos(dot(q, d1) * k1 + t * 1.3) * 0.35;
+  g += d2 * k2 * cos(dot(q, d2) * k2 + t * 1.8) * 0.18;
+  g += d3 * k3 * cos(dot(q, d3) * k3 + t * 2.4) * 0.08;
+  g += d4 * k4 * cos(dot(q, d4) * k4 + t * 3.1) * 0.04;
+  float nearK = 1.0 - smoothstep(20.0, 200.0, dist);
+  if (nearK > 0.0) {
+    vec3 p = wp * 1.4 + vec3(t * 0.4, 0.0, t * 0.3);
+    float n0 = snoise(p);
+    g += vec2(snoise(p + e1 * 0.2) - n0, snoise(p + e2 * 0.2) - n0) * 0.25 * nearK;
+  }
+  g *= rough * fade;
+  return normalize(N - (e1 * g.x + e2 * g.y) * 0.22);
 }
 
 vec3 skyReflection(vec3 R, vec3 up, vec3 L) {
@@ -219,7 +246,7 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   vec4 clim = texture(uClimateTex, ruv);
   float temp = clim.r * 80.0 - 40.0;
   float storm = clim.a;
-  vec3 N = waterNormal(dir, wp, dist, 1.0 + storm * 2.0);
+  vec3 N = waterNormal(dir, wp, dist, 0.6 + storm * 1.6);
   float NdV = max(dot(N, V), 0.0);
   float fres = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
   vec3 R = reflect(-V, N);
@@ -227,7 +254,7 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   // Sun glint (GGX-ish).
   vec3 H = normalize(L + V);
   float nh = max(dot(N, H), 0.0);
-  float a2 = 0.012 + storm * 0.03;
+  float a2 = 0.03 + storm * 0.05;
   float dd = nh * nh * (a2 - 1.0) + 1.0;
   float ggx = a2 / (PI * dd * dd);
   vec3 spec = sunCol * ggx * fres * max(dot(N, L), 0.0) * 0.9;
@@ -244,8 +271,12 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   float edgeFoam = 1.0 - smoothstep(0.0, 0.35, depth);
   float foamNoise = 0.6 + 0.4 * snoise(wp * 0.9 + uTime * 0.2);
   float foam = clamp((shoreFoam + edgeFoam * 0.8) * foamNoise, 0.0, 1.0);
-  // Whitecaps in storms.
-  foam = max(foam, smoothstep(0.55, 0.95, snoise(wp * 0.25 + uTime * 0.4)) * storm * 0.7 * (1.0 - smoothstep(200.0, 900.0, dist)));
+  // Whitecaps: streaky, only under strong storm winds.
+  float windy = smoothstep(0.55, 0.9, storm);
+  if (windy > 0.0) {
+    float caps = smoothstep(0.72, 0.95, snoise(vec3(wp.x * 0.12, wp.y * 0.5, wp.z * 0.12) + uTime * 0.3));
+    foam = max(foam, caps * windy * 0.6 * (1.0 - smoothstep(150.0, 800.0, dist)));
+  }
   vec3 foamCol = vec3(0.9, 0.95, 1.0) * (sunCol * max(mu, 0.0) * 0.3 + skyAmbient(dir, dir, L) * uSunIntensity * 0.06);
   vec3 col = bodyLit * alpha + refl * fres + spec;
   float a = clamp(max(alpha, fres * 0.9), 0.0, 1.0);
@@ -306,6 +337,7 @@ export class TerrainRenderer {
   private waterBuf: THREE.InstancedInterleavedBuffer;
   readonly terrainMat: THREE.ShaderMaterial;
   readonly oceanMat: THREE.ShaderMaterial;
+  readonly depthMat: THREE.ShaderMaterial;
 
   constructor(data: PlanetData, shared: SharedUniforms, lodSettings: LodSettings, gridSize: number) {
     this.grid = gridSize;
@@ -344,6 +376,15 @@ export class TerrainRenderer {
       blendDst: THREE.OneMinusSrcAlphaFactor,
       depthWrite: true,
     });
+    this.depthMat = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      vertexShader: TERRAIN_VS,
+      fragmentShader: DEPTH_FS,
+      uniforms: this.terrainMat.uniforms,
+      polygonOffset: true,
+      polygonOffsetFactor: 2,
+      polygonOffsetUnits: 4,
+    });
     this.terrainMesh = new THREE.Mesh(this.patchGeo, this.terrainMat);
     this.terrainMesh.frustumCulled = false;
     this.oceanMesh = new THREE.Mesh(this.oceanGeo, this.oceanMat);
@@ -377,6 +418,7 @@ export class TerrainRenderer {
     this.patchGeo.dispose();
     this.oceanGeo.dispose();
     this.terrainMat.dispose();
+    this.depthMat.dispose();
     this.oceanMat.dispose();
   }
 }

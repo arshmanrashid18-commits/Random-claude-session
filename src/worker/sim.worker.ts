@@ -6,7 +6,7 @@
 import { World } from '../sim/world';
 import { TICKS_PER_SECOND_1X } from '../sim/constants';
 import { buildPadMap, packRGBA } from '../sim/planet/regiontex';
-import type { MainToWorker, RegionTextures, StaticWorldData, WorkerToMain } from './protocol';
+import type { EntitySnapshot, FrameData, MainToWorker, RegionTextures, SpeciesInfo, StaticWorldData, WorkerToMain } from './protocol';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -25,48 +25,44 @@ let tpsWindowStart = performance.now();
 let tpsTicks = 0;
 let tps = 0;
 const spareTextures: RegionTextures[] = [];
+const spareSnaps: EntitySnapshot[] = [];
 let lastTexTime = 0;
 let texDirty = true;
+let lastSnapTick = -1;
+let lastStatsTime = 0;
+let speciesCount = 0;
 
 function makeTextures(n: number): RegionTextures {
   const size = (n + 2) * (n + 2) * 6 * 4;
-  return { climate: new Uint8Array(size), vegA: new Uint8Array(size), vegB: new Uint8Array(size), surface: new Uint8Array(size) };
+  return { climate: new Uint8Array(size), vegA: new Uint8Array(size), vegB: new Uint8Array(size), surface: new Uint8Array(size), fx: new Uint8Array(size) };
+}
+
+function makeSnapshot(cap: number): EntitySnapshot {
+  return { tick: 0, count: 0, pos: new Float32Array(cap * 3), info: new Uint32Array(cap * 2) };
 }
 
 function fillTextures(w: World, t: RegionTextures): void {
   const pm = padMap!;
   const cl = w.planet.climate;
-  packRGBA(pm, t.climate,
-    (c) => (cl.temp[c] + 40) / 80,
-    (c) => cl.meanRain[c] / 4,
-    (c) => cl.snow[c],
-    (c) => cl.cloud[c]);
-  // Vegetation arrives with the ecology phase; derive a climate-based proxy.
-  packRGBA(pm, t.vegA,
-    (c) => vegProxy(cl.meanTemp[c], cl.meanRain[c], 0),
-    (c) => vegProxy(cl.meanTemp[c], cl.meanRain[c], 1),
-    (c) => vegProxy(cl.meanTemp[c], cl.meanRain[c], 2),
-    (c) => vegProxy(cl.meanTemp[c], cl.meanRain[c], 3));
-  packRGBA(pm, t.vegB,
-    (c) => vegProxy(cl.meanTemp[c], cl.meanRain[c], 4),
-    (c) => vegProxy(cl.meanTemp[c], cl.meanRain[c], 5),
-    () => 0,
-    (c) => vegProxy(cl.meanTemp[c], cl.meanRain[c], 7));
-  packRGBA(pm, t.surface, () => 0, (c) => cl.ash[c], () => 0, () => 0);
+  const pd = w.plants.density;
+  packRGBA(pm, t.climate, (c) => (cl.temp[c] + 40) / 80, (c) => cl.meanRain[c] / 4, (c) => cl.snow[c], (c) => cl.cloud[c]);
+  packRGBA(pm, t.vegA, (c) => pd[c * 8], (c) => pd[c * 8 + 1], (c) => pd[c * 8 + 2], (c) => pd[c * 8 + 3]);
+  packRGBA(pm, t.vegB, (c) => pd[c * 8 + 4], (c) => pd[c * 8 + 5], (c) => pd[c * 8 + 6], (c) => pd[c * 8 + 7]);
+  packRGBA(pm, t.surface, (c) => w.fires.scar[c], (c) => cl.ash[c], () => 0, () => 0);
+  packRGBA(pm, t.fx, (c) => cl.rain[c] * 2, (c) => fogAt(w, c), (c) => w.fires.intensity[c], () => 0);
 }
 
-function vegProxy(t: number, r: number, k: number): number {
-  const sm = (a: number, b: number, x: number) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
-  switch (k) {
-    case 0: return sm(-4, 4, t) * sm(0.25, 0.9, r);
-    case 1: return sm(0, 8, t) * sm(0.4, 1.1, r) * 0.6;
-    case 2: return sm(4, 10, t) * (1 - sm(20, 26, t)) * sm(1.0, 1.8, r);
-    case 3: return sm(-6, -1, t) * (1 - sm(6, 12, t)) * sm(0.45, 1.0, r);
-    case 4: return sm(18, 23, t) * sm(1.4, 2.4, r);
-    case 5: return sm(12, 20, t) * (1 - sm(0.3, 0.7, r)) * 0.7;
-    case 7: return sm(-12, -4, t) * (1 - sm(0, 5, t));
-    default: return 0;
-  }
+/** Fog: saturated, calm air near dawn-cool surfaces. */
+function fogAt(w: World, c: number): number {
+  const cl = w.planet.climate;
+  const sat = 3.8 * Math.exp(0.0687 * Math.max(-45, Math.min(45, cl.temp[c])));
+  const rh = cl.humid[c] / sat;
+  const wind = Math.hypot(cl.windE[c], cl.windN[c]);
+  return Math.max(0, (rh - 0.82) * 5) * Math.max(0, 1 - wind / 9);
+}
+
+function speciesInfo(w: World): SpeciesInfo[] {
+  return w.animals.defs.map((d) => ({ id: d.id, name: d.name, plural: d.plural, body: d.body, diet: d.diet, size: d.size, colour: d.colour, colour2: d.colour2, parent: d.parent }));
 }
 
 function staticData(w: World): { data: StaticWorldData; transfer: Transferable[] } {
@@ -103,8 +99,27 @@ function staticData(w: World): { data: StaticWorldData; transfer: Transferable[]
     heights,
     rivers: { points, width, level, offsets },
     lakes: { cells, levels },
+    species: speciesInfo(w),
   };
   return { data, transfer: [heights.buffer, points.buffer, width.buffer, level.buffer, offsets.buffer, cells.buffer, levels.buffer] };
+}
+
+function fillAnimals(w: World, s: EntitySnapshot): void {
+  const a = w.animals;
+  let n = 0;
+  for (let i = 0; i < a.count; i++) {
+    if (!a.alive[i]) continue;
+    s.pos[n * 3] = a.x[i];
+    s.pos[n * 3 + 1] = a.y[i];
+    s.pos[n * 3 + 2] = a.z[i];
+    const size = Math.min(255, Math.round(a.defs[a.species[i]].size * a.gSize[i] * 60));
+    const flags = (a.infected[i] === 1 ? 1 : 0) | (a.age[i] < a.defs[a.species[i]].adultAge ? 2 : 0) | (a.sex[i] ? 4 : 0);
+    s.info[n * 2] = a.uid[i];
+    s.info[n * 2 + 1] = a.species[i] | (a.state[i] << 8) | (size << 16) | (flags << 24);
+    n++;
+  }
+  s.count = n;
+  s.tick = w.tick;
 }
 
 function stepWorld(n: number): void {
@@ -117,6 +132,56 @@ function stepWorld(n: number): void {
   texDirty = true;
 }
 
+function sendFrame(now: number): void {
+  if (!world) return;
+  const w = world;
+  let animals: EntitySnapshot | null = null;
+  const transfer: Transferable[] = [];
+  if (w.tick !== lastSnapTick && spareSnaps.length > 0) {
+    animals = spareSnaps.pop()!;
+    fillAnimals(w, animals);
+    transfer.push(animals.pos.buffer, animals.info.buffer);
+    lastSnapTick = w.tick;
+  }
+  let stats = null;
+  if (now - lastStatsTime > 500) {
+    lastStatsTime = now;
+    const a = w.animals;
+    let cover = 0, land = 0;
+    const pd = w.plants.density;
+    const terr = w.planet.terrain;
+    for (let c = 0; c < terr.oceanFrac.length; c += 7) {
+      if (terr.oceanFrac[c] > 0.5) continue;
+      land++;
+      let s = 0;
+      for (let k = 0; k < 8; k++) s += pd[c * 8 + k];
+      cover += Math.min(1, s);
+    }
+    stats = {
+      animals: a.totalAlive(),
+      species: a.livingSpecies(),
+      biodiversity: a.shannon(),
+      plantCover: land ? cover / land : 0,
+      pop: Array.from(a.pop.subarray(0, a.defs.length)),
+      fires: w.fires.active.length,
+    };
+  }
+  if (w.animals.defs.length !== speciesCount) {
+    speciesCount = w.animals.defs.length;
+    post({ type: 'species', species: speciesInfo(w) });
+  }
+  const strikes = w.weather.strikeLog.splice(0);
+  const frame: FrameData = {
+    header: { tick: w.tick, tps, simMs: simMsAvg, speed, paused },
+    storms: w.weather.storms.map((s) => ({ id: s.id, type: s.type, name: s.name, x: s.x, y: s.y, z: s.z, radius: s.radius, intensity: s.intensity })),
+    strikes,
+    events: w.events.drain(),
+    animals,
+    stats,
+  };
+  post({ type: 'frame', frame }, transfer);
+}
+
 function loop(): void {
   const now = performance.now();
   const dt = Math.min(0.25, (now - lastTime) / 1000);
@@ -125,11 +190,9 @@ function loop(): void {
     const rate = TICKS_PER_SECOND_1X * speed;
     acc += dt * rate;
     const deadline = now + 28;
-    let n = 0;
     while (acc >= 1 && performance.now() < deadline) {
       stepWorld(1);
       acc -= 1;
-      n++;
     }
     // If the simulation cannot keep up, drop the backlog rather than spiral.
     if (acc > rate * 0.3 + 2) acc = rate * 0.3 + 2;
@@ -140,7 +203,7 @@ function loop(): void {
     tpsWindowStart = now;
   }
   if (world) {
-    post({ type: 'frame', header: { tick: world.tick, tps, simMs: simMsAvg, speed, paused } });
+    sendFrame(now);
     if (texDirty && spareTextures.length > 0 && now - lastTexTime > 200) sendTextures();
   }
   setTimeout(loop, 8);
@@ -152,7 +215,7 @@ function sendTextures(): void {
   fillTextures(world, t);
   lastTexTime = performance.now();
   texDirty = false;
-  post({ type: 'textures', tex: t, tick: world.tick }, [t.climate.buffer, t.vegA.buffer, t.vegB.buffer, t.surface.buffer]);
+  post({ type: 'textures', tex: t, tick: world.tick }, [t.climate.buffer, t.vegA.buffer, t.vegB.buffer, t.surface.buffer, t.fx.buffer]);
 }
 
 ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
@@ -164,6 +227,9 @@ ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
         padMap = buildPadMap(world.planet.region);
         spareTextures.length = 0;
         spareTextures.push(makeTextures(world.planet.region.n), makeTextures(world.planet.region.n));
+        spareSnaps.length = 0;
+        for (let i = 0; i < 3; i++) spareSnaps.push(makeSnapshot(world.animals.cap));
+        speciesCount = world.animals.defs.length;
         const { data, transfer } = staticData(world);
         post({ type: 'ready', data }, transfer);
         texDirty = true;
@@ -185,6 +251,9 @@ ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
         break;
       case 'returnTextures':
         spareTextures.push(msg.tex);
+        break;
+      case 'returnSnapshot':
+        spareSnaps.push(msg.snap);
         break;
     }
   } catch (err) {

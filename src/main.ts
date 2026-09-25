@@ -9,6 +9,8 @@ import { applyViewpoint, computeViewpoint, type ViewpointId } from './render/vie
 import { TICKS_PER_SECOND_1X } from './sim/constants';
 import type { WorldPresetId } from './sim/planet/presets';
 import { LoadingScreen } from './ui/loading';
+import { gpuGroundHeights } from './render/gpuCheck';
+import { groundHeight, snoiseA } from './render/groundHeight';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui') as HTMLDivElement;
@@ -43,6 +45,12 @@ sim.onReady = (data) => {
 sim.onTextures = (tex) => {
   if (renderer.ready) renderer.data.updateRegion(tex);
 };
+sim.onAnimals = (snap) => (renderer.ready ? renderer.creatures.pushSnapshot(snap) : snap);
+sim.onFrame = (f) => {
+  if (!renderer.ready) return;
+  renderer.setStorms(f.storms);
+  if (renderer.creatures.species.length !== sim.species.length) renderer.creatures.species = sim.species;
+};
 sim.init(seed, preset);
 
 let last = performance.now();
@@ -70,6 +78,7 @@ interface Harness {
   renderFrames(n: number): Promise<void>;
   stats(): unknown;
   hash(): Promise<number>;
+  groundCheck(): { maxErrGround: number; maxErrNoise: number; maxErrBilinear: number; samples: number };
 }
 const harness: Harness = {
   ready: readyPromise,
@@ -91,5 +100,24 @@ const harness: Harness = {
     return { ...renderer.stats, tick: sim.header.tick };
   },
   hash: () => sim.hash(),
+  groundCheck() {
+    const n = 256;
+    const dirs = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const y = 1 - (i / (n - 1)) * 2, r = Math.sqrt(1 - y * y), t = i * 2.399963;
+      dirs[i * 3] = Math.cos(t) * r; dirs[i * 3 + 1] = y; dirs[i * 3 + 2] = Math.sin(t) * r;
+    }
+    const gpu = gpuGroundHeights(renderer.renderer, renderer.shared, dirs);
+    let maxErrGround = 0, maxErrNoise = 0, maxErrBilinear = 0;
+    const d = renderer.data;
+    for (let i = 0; i < n; i++) {
+      const x = dirs[i * 3], y = dirs[i * 3 + 1], z = dirs[i * 3 + 2];
+      const l = Math.hypot(x, y, z);
+      maxErrGround = Math.max(maxErrGround, Math.abs(gpu[i * 4] - groundHeight(d.heights, d.n, x / l, y / l, z / l)));
+      maxErrBilinear = Math.max(maxErrBilinear, Math.abs(gpu[i * 4 + 1] - d.heightAt(x / l, y / l, z / l)));
+      maxErrNoise = Math.max(maxErrNoise, Math.abs(gpu[i * 4 + 2] - snoiseA(x / l * 37, y / l * 37, z / l * 37)));
+    }
+    return { maxErrGround, maxErrNoise, maxErrBilinear, samples: n };
+  },
 };
 (window as unknown as { __genesis: Harness }).__genesis = harness;

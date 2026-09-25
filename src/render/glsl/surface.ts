@@ -145,6 +145,18 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   vec3 desert = mix(sand, redSand, smoothstep(-0.2, 0.6, fbm3(dir * 21.0)) * 0.6);
   vec3 grass = mix(meadow, lush, smoothstep(1.0, 2.5, moist));
   grass = mix(grass, mix(dryGrass, savanna, warm), 1.0 - smoothstep(0.7, 1.4, moist));
+  // Close-range ground detail: grass mottling, sand ripples, pebbles.
+  float closeK = 1.0 - smoothstep(30.0, 140.0, dist);
+  if (closeK > 0.0) {
+    vec3 pp = dir * PLANET_R;
+    float mott = snoise(pp * 0.9) * 0.5 + snoise(pp * 2.7) * 0.3;
+    grass *= 1.0 + mott * 0.16 * closeK;
+    grass = mix(grass, soil, smoothstep(0.55, 0.9, snoise(pp * 0.35 + 3.0)) * 0.35 * closeK);
+    float ripple = sin(dot(pp, vec3(1.7, 0.4, 1.1)) * 2.2 + snoise(pp * 0.4) * 3.0) * 0.5 + 0.5;
+    desert *= 1.0 + (ripple - 0.5) * 0.12 * closeK;
+    float pebble = smoothstep(0.62, 0.8, snoise(pp * 3.3)) * closeK;
+    desert = mix(desert, desert * 0.7, pebble * 0.5);
+  }
   vec3 ground = mix(desert, grass, wetness);
   ground = mix(ground, tundra, 1.0 - smoothstep(-6.0, 3.0, temp + macro * 2.0));
   ground *= 0.9 + macro * 0.18 + micro * 0.08;
@@ -164,10 +176,16 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   // Deciduous leaves drop in cold months.
   float leaf = smoothstep(-2.0, 5.0, temp);
   float trees = broad * mix(0.35, 1.0, leaf) + conifer + tropical;
-  float treeNoise = smoothstep(-0.35, 0.55, snoise(dir * 420.0) * 0.6 + snoise(dir * 1300.0) * 0.4 + trees * 1.2 - 0.6);
+  // Far away, forests read as a textured canopy; near the camera real 3D
+  // trees take over and the ground beneath becomes forest floor.
+  float nearTrees = 1.0 - smoothstep(220.0, 380.0, dist);
+  float treeNoise = smoothstep(-0.35, 0.55, snoise(dir * 420.0) * 0.6 + snoise(dir * 1300.0) * 0.4 * (1.0 - nearTrees) + trees * 1.2 - 0.6);
+  treeNoise = mix(treeNoise, 0.7, nearTrees);
   float canopy = clamp(trees * 1.2, 0.0, 1.0) * mix(0.55, 1.0, treeNoise);
   vec3 canopyCol = (cBroad * broad * leaf + cConifer * conifer + cTrop * tropical + ground * broad * (1.0 - leaf) * 0.8) / max(trees, 1e-3);
   canopyCol *= 0.85 + 0.3 * treeNoise;
+  vec3 forestFloor = mix(srgb(vec3(0.24, 0.33, 0.14)), srgb(vec3(0.32, 0.33, 0.17)), smoothstep(-0.3, 0.5, macro));
+  canopyCol = mix(canopyCol, forestFloor, nearTrees * 0.85);
   vec3 col = ground;
   col = mix(col, cShrub, clamp(shrubD * 0.6, 0.0, 0.5));
   col = mix(col, cMoss, clamp(moss * 0.6, 0.0, 0.6));
@@ -178,11 +196,11 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   col = mix(col, col * vec3(1.08, 0.95, 0.75), clamp(1.0 - grassD * 1.4, 0.0, 1.0) * (1.0 - canopy) * 0.35);
 
   // --- rock on steep slopes, bare peaks
-  vec3 rockA = srgb(vec3(0.46, 0.42, 0.38));
-  vec3 rockB = srgb(vec3(0.32, 0.29, 0.27));
-  float strata = sin(h * 2.2 + fbm3(dir * 90.0) * 4.0) * 0.5 + 0.5;
-  vec3 rock = mix(rockB, rockA, strata * 0.6 + macro * 0.3 + 0.2);
-  float rockMask = smoothstep(0.16, 0.34, slope + macro * 0.07 + micro * 0.03);
+  vec3 rockA = srgb(vec3(0.55, 0.49, 0.42));
+  vec3 rockB = srgb(vec3(0.38, 0.34, 0.30));
+  float strata = sin(h * 0.9 + fbm3(dir * 60.0) * 2.5) * 0.5 + 0.5;
+  vec3 rock = mix(rockB, rockA, 0.45 + strata * 0.15 + macro * 0.3 + micro * 0.1);
+  float rockMask = smoothstep(0.34, 0.52, slope + macro * 0.07 + micro * 0.03);
   rockMask = max(rockMask, smoothstep(30.0, 42.0, h + macro * 5.0) * 0.8);
   col = mix(col, rock, rockMask);
 
@@ -211,7 +229,7 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   col = mix(col, srgb(vec3(0.45, 0.38, 0.30)), surf.a * 0.35 * (1.0 - snowAmt));
 
   // Ambient occlusion from cavity (concave valleys darker).
-  col *= clamp(1.0 - cavity * 0.06, 0.6, 1.08);
+  col *= clamp(1.0 - cavity * 0.04, 0.72, 1.06);
 
   SurfaceInfo si;
   si.albedo = col;

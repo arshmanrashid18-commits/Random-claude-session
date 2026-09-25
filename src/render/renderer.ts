@@ -16,6 +16,11 @@ import { QUALITY_PRESETS, type QualityId, type QualityPreset } from './quality';
 import { moonDirection, MOON_DISTANCE, sunDirection, TICKS_PER_DAY, TIDE_AMPLITUDE } from '../sim/constants';
 import type { StaticWorldData } from '../worker/protocol';
 import { WaterBodies } from './water';
+import { Vegetation } from './vegetation';
+import { ShadowSystem } from './shadows';
+import { Grass } from './grass';
+import { Creatures } from './creatures';
+import type { StormData } from '../worker/protocol';
 
 export interface RenderStats {
   drawCalls: number;
@@ -33,6 +38,11 @@ export class GameRenderer {
   data!: PlanetData;
   terrain!: TerrainRenderer;
   water!: WaterBodies;
+  vegetation!: Vegetation;
+  shadows: ShadowSystem;
+  grass!: Grass;
+  creatures!: Creatures;
+  private lastRenderTick = 0;
   atmosphere!: AtmospherePass;
   sky!: SkyLayer;
   post: PostChain;
@@ -73,6 +83,7 @@ export class GameRenderer {
       uVegATex: { value: null },
       uVegBTex: { value: null },
       uSurfaceTex: { value: null },
+      uFxTex: { value: null },
       uRegionN: { value: 64 },
       uNormalTex: { value: null },
       uTransmittanceLUT: { value: null },
@@ -89,7 +100,13 @@ export class GameRenderer {
       uStormParams: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
       uStormCount: { value: 0 },
       uNightLights: { value: 1 },
+      uShadowMap: { value: null },
+      uShadowMatrix: { value: new THREE.Matrix4() },
+      uShadowOn: { value: 0 },
+      uShadowTexel: { value: 1 / 2048 },
     };
+    this.shadows = new ShadowSystem(2048);
+    this.shared.uShadowMap.value = this.shadows.rt.depthTexture;
     this.hdrRT = this.makeHdrTarget(1, 1, true);
     this.compRT = this.makeHdrTarget(1, 1, false);
     this.post = new PostChain();
@@ -125,6 +142,7 @@ export class GameRenderer {
     s.uVegATex.value = this.data.vegATex;
     s.uVegBTex.value = this.data.vegBTex;
     s.uSurfaceTex.value = this.data.surfaceTex;
+    s.uFxTex.value = this.data.fxTex;
     s.uRegionN.value = world.regionN;
     s.uNormalTex.value = this.data.normalRT.texture;
     if (!s.uCloudNoise.value) s.uCloudNoise.value = generateCloudNoise(64);
@@ -137,6 +155,16 @@ export class GameRenderer {
     this.scene.add(this.terrain.oceanMesh);
     this.water = new WaterBodies(s, world, this.data);
     this.scene.add(this.water.group);
+    this.vegetation = new Vegetation(s, world.seed);
+    this.scene.add(this.vegetation.group);
+    for (const m of this.vegetation.meshes) this.shadows.register(m, this.vegetation.depthMaterial);
+    this.grass = new Grass(s, this.data.normalRT.texture);
+    this.scene.add(this.grass.mesh);
+    this.creatures = new Creatures(s);
+    this.creatures.species = world.species;
+    this.scene.add(this.creatures.group);
+    this.creatures.meshes.forEach((m, i) => this.shadows.register(m, this.creatures.depthMaterials[i]));
+    this.shadows.register(this.terrain.terrainMesh, this.terrain.depthMat);
     this.renderer.setRenderTarget(null);
     this.data.computeNormals(this.renderer);
     this.atmosphere.buildLUT(this.renderer);
@@ -166,15 +194,21 @@ export class GameRenderer {
         this.scene.remove(old.terrainMesh);
         this.scene.remove(old.oceanMesh);
         old.dispose();
+        this.shadows.unregister(old.terrainMesh);
         this.terrain = new TerrainRenderer(this.data, this.shared, { maxLevel: q.maxLevel, rangeK: q.rangeK }, q.grid);
         this.scene.add(this.terrain.terrainMesh);
         this.scene.add(this.terrain.oceanMesh);
+        this.shadows.register(this.terrain.terrainMesh, this.terrain.depthMat);
       }
     }
     if (this.atmosphere) {
       this.atmosphere.material.uniforms.uAtmoSteps.value = q.atmoSteps;
       this.atmosphere.material.uniforms.uCloudSteps.value = q.cloudSteps;
     }
+    if (this.vegetation) this.vegetation.budget = q.vegetation;
+    if (this.grass) this.grass.budget = q.grass;
+    this.shadows.enabled = q.shadowSize > 0;
+    if (q.shadowSize > 0) this.shadows.setSize(q.shadowSize);
     this.post.settings.bloom = q.bloom;
     this.post.settings.godRays = q.godRays;
     this.post.settings.fxaa = q.fxaa;
@@ -218,9 +252,16 @@ export class GameRenderer {
     const cam = this.camera.camera;
     (this.shared.uCamPos.value as THREE.Vector3).copy(cam.position);
     this.terrain.update(cam);
+    this.vegetation.update(this.camera.current.focus, this.camera.current.distance, this.data, performance.now());
+    this.grass.update(cam, this.camera.current.focus, this.data.n);
+    const dTick = this.renderTick - this.lastRenderTick;
+    this.lastRenderTick = this.renderTick;
+    this.creatures.update(cam, this.renderTick, dTick, this.data, dt);
 
     const r = this.renderer;
     r.info.reset();
+    const halfSize = Math.min(420, Math.max(28, this.camera.current.distance * 1.3 + 12));
+    this.shadows.update(r, this.scene, this.camera.current.focus, this.camera.focusHeight, halfSize, this.shared.uSunDir.value as THREE.Vector3, this.shared);
     // Sky layer.
     const moonDir = this.shared.uMoonDir.value as THREE.Vector3;
     const sidereal = -(this.renderTick / TICKS_PER_DAY) * Math.PI * 2;
@@ -245,6 +286,18 @@ export class GameRenderer {
     this.stats.triangles = r.info.render.triangles;
     this.stats.patches = this.terrain.lod.count;
     this.stats.frameMs = performance.now() - t0;
+  }
+
+  /** Feed the active storm systems to the cloud shader (up to 8, strongest first). */
+  setStorms(storms: StormData[]): void {
+    const list = [...storms].sort((a, b) => b.intensity - a.intensity).slice(0, 8);
+    const S = this.shared.uStorms.value as THREE.Vector4[];
+    const P = this.shared.uStormParams.value as THREE.Vector4[];
+    list.forEach((st, i) => {
+      S[i].set(st.x, st.y, st.z, st.radius * (st.type === 1 ? 1.4 : 1.0));
+      P[i].set(Math.min(1, st.intensity * (st.type === 1 ? 0.9 : 0.75)), st.y >= 0 ? 1 : -1, st.type, 0);
+    });
+    this.shared.uStormCount.value = list.length;
   }
 
   /** Capture the current frame as a PNG data URL (photo mode export). */

@@ -59,13 +59,20 @@ export class PlanetData {
   vegATex: THREE.DataArrayTexture;
   vegBTex: THREE.DataArrayTexture;
   surfaceTex: THREE.DataArrayTexture;
+  fxTex: THREE.DataArrayTexture;
   regionN: number;
   private normalMat: THREE.ShaderMaterial;
   private quad: THREE.Mesh;
   private quadScene = new THREE.Scene();
   private quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  /** CPU copy of region climate texture (for audio/UI queries). */
+  /** CPU copies of region textures (vegetation placement, audio, UI). */
   climateCPU: Uint8Array;
+  vegACPU: Uint8Array;
+  vegBCPU: Uint8Array;
+  surfaceCPU: Uint8Array;
+  fxCPU: Uint8Array;
+  /** Incremented whenever region textures change. */
+  regionVersion = 0;
 
   constructor(heights: Float32Array, n: number, regionN: number, maxLodLevel: number) {
     this.n = n;
@@ -125,7 +132,26 @@ export class PlanetData {
     this.vegATex = mk();
     this.vegBTex = mk();
     this.surfaceTex = mk();
+    this.fxTex = mk();
     this.climateCPU = new Uint8Array(P * P * 6 * 4);
+    this.vegACPU = new Uint8Array(P * P * 6 * 4);
+    this.vegBCPU = new Uint8Array(P * P * 6 * 4);
+    this.surfaceCPU = new Uint8Array(P * P * 6 * 4);
+    this.fxCPU = new Uint8Array(P * P * 6 * 4);
+  }
+
+  /** Bilinear sample of one channel of a padded region texture (0..1). */
+  sampleRegion(buf: Uint8Array, face: number, a: number, b: number, ch: number): number {
+    const n = this.regionN;
+    const P = n + 2;
+    const x = (a + 1) * 0.5 * n + 0.5, y = (b + 1) * 0.5 * n + 0.5;
+    let x0 = Math.floor(x), y0 = Math.floor(y);
+    if (x0 < 0) x0 = 0; else if (x0 > P - 2) x0 = P - 2;
+    if (y0 < 0) y0 = 0; else if (y0 > P - 2) y0 = P - 2;
+    const tx = Math.min(1, Math.max(0, x - x0)), ty = Math.min(1, Math.max(0, y - y0));
+    const o = (face * P * P + y0 * P + x0) * 4 + ch;
+    const v00 = buf[o], v10 = buf[o + 4], v01 = buf[o + P * 4], v11 = buf[o + P * 4 + 4];
+    return ((v00 * (1 - tx) + v10 * tx) * (1 - ty) + (v01 * (1 - tx) + v11 * tx) * ty) / 255;
   }
 
   /** Recompute normals for the given faces (all by default). */
@@ -145,7 +171,14 @@ export class PlanetData {
     (this.vegATex.image.data as Uint8Array).set(tex.vegA);
     (this.vegBTex.image.data as Uint8Array).set(tex.vegB);
     (this.surfaceTex.image.data as Uint8Array).set(tex.surface);
+    (this.fxTex.image.data as Uint8Array).set(tex.fx);
+    this.fxCPU.set(tex.fx);
+    this.fxTex.needsUpdate = true;
     this.climateCPU.set(tex.climate);
+    this.vegACPU.set(tex.vegA);
+    this.vegBCPU.set(tex.vegB);
+    this.surfaceCPU.set(tex.surface);
+    this.regionVersion++;
     this.climateTex.needsUpdate = true;
     this.vegATex.needsUpdate = true;
     this.vegBTex.needsUpdate = true;
@@ -175,6 +208,7 @@ export class PlanetData {
     this.vegATex.dispose();
     this.vegBTex.dispose();
     this.surfaceTex.dispose();
+    this.fxTex.dispose();
     this.normalMat.dispose();
   }
 }

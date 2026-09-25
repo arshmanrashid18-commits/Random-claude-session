@@ -6,8 +6,9 @@
  */
 import * as THREE from 'three';
 import type { GameRenderer } from './renderer';
+import { dirToFaceAB } from '../sim/planet/cubesphere';
 
-export type ViewpointId = 'orbit' | 'terminator' | 'coast' | 'mountains' | 'forest' | 'ground' | 'night' | 'aurora' | 'storm' | 'village' | 'volcano';
+export type ViewpointId = 'orbit' | 'terminator' | 'coast' | 'mountains' | 'forest' | 'ground' | 'night' | 'aurora' | 'storm' | 'village' | 'volcano' | 'wildlife';
 
 export interface Viewpoint {
   focus: THREE.Vector3;
@@ -66,6 +67,19 @@ function climateAt(r: GameRenderer, d: THREE.Vector3): { temp: number; moist: nu
   return { temp: c[o] / 255 * 80 - 40, moist: c[o + 1] / 255 * 4, snow: c[o + 2] / 255, cloud: c[o + 3] / 255 };
 }
 
+function vegAt(r: GameRenderer, d: THREE.Vector3): { grass: number; trees: number } {
+  const f = dirFace(d);
+  const vA = r.data.vegACPU, vB = r.data.vegBCPU;
+  const grass = r.data.sampleRegion(vA, f.face, f.a, f.b, 0);
+  const trees = r.data.sampleRegion(vA, f.face, f.a, f.b, 2) + r.data.sampleRegion(vA, f.face, f.a, f.b, 3) + r.data.sampleRegion(vB, f.face, f.a, f.b, 0);
+  return { grass, trees };
+}
+
+function dirFace(d: THREE.Vector3): { face: number; a: number; b: number } {
+  const r = dirToFaceAB(d.x, d.y, d.z);
+  return { face: r.face, a: r.a, b: r.b };
+}
+
 function relief(r: GameRenderer, d: THREE.Vector3, eps: number): number {
   const t1 = new THREE.Vector3(d.z, 0, -d.x).normalize();
   const t2 = new THREE.Vector3().crossVectors(d, t1);
@@ -114,11 +128,13 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
     }
     case 'ground': {
       const f = findBest(r, (d, h) => {
-        if (h < 2) return -1e9;
+        if (h < 2 || h > 20) return -1e9;
         const c = climateAt(r, d);
-        return relief(r, d, 0.03) * 0.5 - Math.abs(c.temp - 18) * 0.3 + c.moist;
+        const v = vegAt(r, d);
+        // An open meadow with a few trees around, not a dense forest.
+        return v.grass * 4 - Math.abs(v.trees - 0.35) * 3 + relief(r, d, 0.03) * 0.15 - Math.abs(c.temp - 17) * 0.15;
       });
-      return { focus: f, distance: 8, heading: 0.9, tiltOffset: 0.1, localTime: 0.4 };
+      return { focus: f, distance: 24, heading: 0.9, tiltOffset: 0.05, localTime: 0.36 };
     }
     case 'night': {
       const f = findBest(r, (d, h) => (h > 0 ? 1 : 0) - Math.abs(d.y) * 0.5 + relief(r, d, 0.1) * 0.01, 1500);
@@ -131,6 +147,10 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
     case 'storm': {
       const f = findBest(r, (d) => climateAt(r, d).cloud * 3 - Math.abs(Math.abs(d.y) - 0.3), 2000);
       return { focus: f, distance: 1100, heading: 0.2, tiltOffset: 0.1, localTime: 0.45 };
+    }
+    case 'wildlife': {
+      const f = r.creatures.densestSpot() ?? findBest(r, (d, h) => (h > 2 ? 1 : 0), 400);
+      return { focus: f, distance: 34, heading: 1.8, tiltOffset: 0.0, localTime: 0.4 };
     }
     case 'village':
     case 'volcano':

@@ -234,8 +234,10 @@ export function generateTerrain(
           e += cc * (0.3 + r * 1.25) * mtn + oc * (0.2 + r * 1.0) * mtn;
         }
         if (arc > 0.02) {
-          const spots = noise.ridged(x * 14, y * 14, z * 14, 4);
-          e += arc * Math.max(0, spots - 0.3) * 1.2 * mtn;
+          // Volcanic island chains: rounded cones rather than needles.
+          const spots = noise.fbm(x * 11, y * 11, z * 11, 3) * 0.5 + 0.5;
+          const cone = Math.max(0, spots - 0.52) / 0.48;
+          e += arc * Math.sqrt(cone) * 0.55 * mtn;
         }
         e -= dent;
         if (hm > 0.01) e += hm * (noise.ridged(x * 5.3 + 1.1, y * 5.3, z * 5.3, 6) * 0.5 - 0.07) * mtn;

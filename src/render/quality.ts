@@ -21,13 +21,15 @@ export interface QualityPreset {
   grass: number;
   /** Max entities drawn at full detail. */
   entityDetail: number;
+  /** Sun shadow map size (0 = off). */
+  shadowSize: number;
 }
 
 export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
-  low: { id: 'low', label: 'Low', renderScale: 0.6, maxDpr: 1, grid: 16, maxLevel: 6, rangeK: 2.0, atmoSteps: 8, cloudSteps: 10, bloom: true, godRays: false, fxaa: false, vegetation: 2500, grass: 0, entityDetail: 2000 },
-  medium: { id: 'medium', label: 'Medium', renderScale: 0.8, maxDpr: 1.25, grid: 24, maxLevel: 7, rangeK: 2.3, atmoSteps: 12, cloudSteps: 18, bloom: true, godRays: true, fxaa: true, vegetation: 7000, grass: 12000, entityDetail: 5000 },
-  high: { id: 'high', label: 'High', renderScale: 1.0, maxDpr: 1.5, grid: 32, maxLevel: 7, rangeK: 2.6, atmoSteps: 16, cloudSteps: 28, bloom: true, godRays: true, fxaa: true, vegetation: 14000, grass: 30000, entityDetail: 10000 },
-  ultra: { id: 'ultra', label: 'Ultra', renderScale: 1.0, maxDpr: 2, grid: 32, maxLevel: 8, rangeK: 3.2, atmoSteps: 24, cloudSteps: 40, bloom: true, godRays: true, fxaa: true, vegetation: 24000, grass: 60000, entityDetail: 16000 },
+  low: { id: 'low', label: 'Low', renderScale: 0.6, maxDpr: 1, grid: 16, maxLevel: 6, rangeK: 2.0, atmoSteps: 8, cloudSteps: 10, bloom: true, godRays: false, fxaa: false, vegetation: 2500, grass: 0, entityDetail: 2000, shadowSize: 0 },
+  medium: { id: 'medium', label: 'Medium', renderScale: 0.8, maxDpr: 1.25, grid: 24, maxLevel: 7, rangeK: 2.3, atmoSteps: 12, cloudSteps: 18, bloom: true, godRays: true, fxaa: true, vegetation: 7000, grass: 12000, entityDetail: 5000, shadowSize: 1024 },
+  high: { id: 'high', label: 'High', renderScale: 1.0, maxDpr: 1.5, grid: 32, maxLevel: 7, rangeK: 2.6, atmoSteps: 16, cloudSteps: 28, bloom: true, godRays: true, fxaa: true, vegetation: 14000, grass: 30000, entityDetail: 10000, shadowSize: 2048 },
+  ultra: { id: 'ultra', label: 'Ultra', renderScale: 1.0, maxDpr: 2, grid: 32, maxLevel: 8, rangeK: 3.2, atmoSteps: 24, cloudSteps: 40, bloom: true, godRays: true, fxaa: true, vegetation: 24000, grass: 60000, entityDetail: 16000, shadowSize: 4096 },
 };
 
 export const QUALITY_ORDER: QualityId[] = ['low', 'medium', 'high', 'ultra'];

@@ -79,6 +79,30 @@ float heightAtDir(vec3 d) {
   int f = dirToFaceAB(d, ab);
   return heightFaceAB(f, ab);
 }
+float hTexel(int f, int i, int j) {
+  int n = int(uHeightN);
+  return texelFetch(uHeightTex, ivec3(clamp(i, 0, n), clamp(j, 0, n), f), 0).r;
+}
+vec4 catmullRom(float t) {
+  float t2 = t * t, t3 = t2 * t;
+  return vec4(-0.5 * t3 + t2 - 0.5 * t, 1.5 * t3 - 2.5 * t2 + 1.0, -1.5 * t3 + 2.0 * t2 + 0.5 * t, 0.5 * t3 - 0.5 * t2);
+}
+// Smooth (C1) Catmull-Rom interpolation of the heightmap; removes the
+// faceted look of bilinear heights when seen up close.
+float heightFaceABCubic(int f, vec2 ab) {
+  vec2 p = clamp((ab + 1.0) * 0.5 * uHeightN, vec2(0.0), vec2(uHeightN));
+  vec2 i0 = min(floor(p), vec2(uHeightN - 1.0));
+  vec2 t = p - i0;
+  vec4 wx = catmullRom(t.x), wy = catmullRom(t.y);
+  int bi = int(i0.x), bj = int(i0.y);
+  float acc = 0.0;
+  for (int j = 0; j < 4; j++) {
+    float row = hTexel(f, bi - 1, bj - 1 + j) * wx.x + hTexel(f, bi, bj - 1 + j) * wx.y
+      + hTexel(f, bi + 1, bj - 1 + j) * wx.z + hTexel(f, bi + 2, bj - 1 + j) * wx.w;
+    acc += row * wy[j];
+  }
+  return acc;
+}
 `;
 
 /** Region (climate/vegetation/surface) texture arrays: padded (n+2)² per face. */
@@ -87,6 +111,7 @@ uniform highp sampler2DArray uClimateTex;
 uniform highp sampler2DArray uVegATex;
 uniform highp sampler2DArray uVegBTex;
 uniform highp sampler2DArray uSurfaceTex;
+uniform highp sampler2DArray uFxTex;
 uniform float uRegionN;
 vec3 regionUV(vec3 d) {
   vec2 ab;
@@ -168,14 +193,24 @@ vec3 hash33(vec3 p3) {
  */
 export const GLSL_DETAIL = /* glsl */ `
 uniform vec3 uCamPos;
-float detailFade(float dist) { return 1.0 - smoothstep(60.0, 160.0, dist); }
-float detailHeight(vec3 dir, float h, float dist) {
-  float fade = detailFade(dist);
-  if (fade <= 0.0) return 0.0;
-  vec3 p = dir * (PLANET_R * 0.22);
-  float n = snoise(p) * 0.55 + snoise(p * 2.7 + 5.1) * 0.22;
-  float land = smoothstep(-0.5, 1.2, h);
-  return n * fade * mix(0.25, 0.75, land);
+// Camera-independent so that the CPU port (src/render/groundHeight.ts)
+// can place static objects exactly on the rendered surface.
+float detailHeight(vec3 dir, float h) {
+  vec3 p = dir * (PLANET_R * 0.12);
+  float n = snoise(p) * 0.6 + snoise(p * 2.3 + 5.1) * 0.25;
+  float land = clamp((h + 0.5) / 2.0, 0.0, 1.0);
+  return n * mix(0.1, 0.4, land);
+}
+// Final ground height at a direction, identical for terrain and anything
+// standing on it (vegetation, people, buildings).
+float groundHeightFaceAB(int f, vec2 ab, vec3 dir) {
+  float h = heightFaceABCubic(f, ab);
+  return h + detailHeight(dir, h);
+}
+float groundHeight(vec3 dir) {
+  vec2 ab;
+  int f = dirToFaceAB(dir, ab);
+  return groundHeightFaceAB(f, ab, dir);
 }
 `;
 
