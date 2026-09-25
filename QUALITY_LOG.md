@@ -62,6 +62,44 @@ provenance and scenario retuning (see DECISIONS 28–34).
 | Stability | 9 | Zero console errors in all harness runs; 150-year soak green |
 | First-impression wow | 8 | Title over the live planet, terminator, village |
 
+## Pass 3 — final
+
+Screens: the full `npm run shots` set on the final code, the UI captures, two monkey runs
+and the 500-year soak trajectory.
+
+Five worst → fixes:
+1. **No hurricane in the storm view.** A forced full-strength storm plus shader patches
+   bisecting `cloudDensity` showed the spiral coverage was right but the fair-weather
+   threshold and edge erosion left it a faint haze. Hurricanes now keep their own
+   coverage past the weather mask with a density floor frayed by the noise: the storm
+   view shows a named hurricane with an eye making landfall (DECISIONS 45).
+2. **Polka dots over the poles.** Taken for a cloud lattice in Pass 2 — it was the sea-ice
+   mask, one noise octave punching regular holes. Three octaves now give pack ice,
+   floes and leads (DECISIONS 46).
+3. **Aurora as a picket fence, and over a sunlit pole.** Curtains were sheets at fixed
+   longitudes (radial spokes). They now fold along the oval, and the viewpoint looks at
+   midnight under the winter hemisphere (DECISIONS 47).
+4. **Towns at night as a saturated disc.** Far night lights are now clusters that
+   sparkle like a city seen from orbit.
+5. **Building list leak.** The 500-year soak showed crumbled ruins accumulating (17,578
+   entries by year 500) and ms/tick creeping from 5 to 7.5. Their slots are now reused;
+   the soak asserts the bound (DECISIONS 48).
+
+| Category | Score | Notes |
+|---|---|---|
+| Visual beauty | 9 | Hurricane spiral over the ocean; aurora over a moonlit continent; coast, forest, village, mountains and volcano hold up close |
+| Visual coherence | 9 | Pack ice instead of polka dots; vegetation, clearings, lakes and rivers agree near and far; models are stylised low-poly by design |
+| Emergent storytelling | 9 | Wars, conquests, refugees, plagues with named carriers, schisms, scripture; merged chronicle |
+| Moment-to-moment fun | 9 | Twenty powers with ten combos, terraforming; all eight scenarios won by play, lost by misrule and lost by idling |
+| Polish / juice | 9 | Fifteen delight touches (below), labels, banners, pulses, ambient life, audio moods |
+| Performance | 8 | Draw calls ≤ 81 and main-thread CPU ≤ 5.6 ms/frame at every preset; simulation 100× early, ~60× at year 100, ~42× with 10,000 agents; no GPU in this container to measure frame rates |
+| Stability | 9 | 500-year soak green with bounded structures; two 5-minute monkey runs and every harness run with zero console errors |
+| First-impression wow | 9 | Title over the live, lit planet; the terminator; the village diorama; the storm and aurora views |
+
+Performance stays at 8, explained: the single simulation thread cannot hold 100× once
+thousands of people and animals live (it shows the achieved rate instead), and real GPU
+frame rates cannot be measured in a container that renders WebGL on the CPU.
+
 ## Delight pass
 
 Small touches nobody asked for, each verified in a screenshot or in play:

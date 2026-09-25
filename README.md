@@ -96,6 +96,28 @@ Captured from the running game (seed 20260925, High quality) by `npm run shots` 
 | ![A meteor falls](docs/screenshots/ui/meteor-falling.png) | ![After the impact](docs/screenshots/ui/meteor-after.png) |
 | ![Chronicle](docs/screenshots/ui/chronicle.png) | ![Ecology dashboard](docs/screenshots/ui/ecology.png) |
 
+## Design notes
+
+* **Luminous stylised realism** ([ART_DIRECTION.md](ART_DIRECTION.md)): physically
+  motivated light — scattering, sun colour through the air, ocean fresnel, moonlight —
+  on simplified, readable forms. Nature is muted earth tones; people carry the
+  saturated colours of their culture; only divine acts glow cyan and gold.
+* **The god is remembered, not scored.** Every witness stores what the god did near
+  them. Love and fear both earn devotion, so a wrathful god and a gentle one are both
+  viable — but the peoples' religions, prophets and scripture remember which one you
+  were.
+* **Consequences travel.** Nothing happens only where you click: a drought empties
+  granaries and dries wells; a plague rides the trade routes; a war sends refugees into
+  a neighbour's town; a sacred grove shelters beasts from an ice age.
+* **Time is compressed but consistent.** Four ticks a second at 1×, a year in four
+  minutes; people age two life-years per world year so generations turn over within a
+  play session. Growth is logistic (each people has a carrying capacity and a
+  demographic transition), so worlds plateau instead of exploding.
+* **Scenarios are proven, not hoped.** Each is played to its end in the test suite by a
+  scripted god that wins, one that loses, and one that does nothing — and doing nothing
+  never wins.
+* Every non-obvious trade-off is recorded with its reason in [DECISIONS.md](DECISIONS.md).
+
 ## How it is built
 
 TypeScript (strict) + three.js + Vite. The simulation runs in a Web Worker on a

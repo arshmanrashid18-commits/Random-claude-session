@@ -4,7 +4,8 @@
  * real game in headless Chromium. Any console error, warning or page error
  * fails the run.
  *
- * Usage: npm run monkey [-- --minutes=5 --seed=N]
+ * Usage: npm run monkey [-- --minutes=5 --seed=N --width=1280 --height=720]
+ * (Software WebGL renders slowly: a smaller viewport fits more actions.)
  */
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
@@ -22,7 +23,7 @@ const url = `http://127.0.0.1:${server.httpServer.address().port}/?play=1&seed=2
 const browser = await chromium.launch({
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-gl=angle', '--disable-gpu-sandbox', '--autoplay-policy=no-user-gesture-required'],
 });
-const W = 1280, H = 720;
+const W = Number(args.width ?? 1280), H = Number(args.height ?? 720);
 const page = await browser.newPage({ viewport: { width: W, height: H } });
 page.setDefaultTimeout(120_000);
 const problems = [];
