@@ -258,7 +258,7 @@ function civData(w: World): CivData {
   civ.roads.forEach((r, k) => roads.set([r.ax, r.ay, r.az, r.bx, r.by, r.bz, r.level], k * 7));
   return {
     version: civ.version,
-    buildings: civ.buildings.map((b) => ({ id: b.id, type: b.type, x: b.x, y: b.y, z: b.z, rot: b.rot, progress: b.complete ? 1 : b.progress * 0.8 + (b.delivered[1] + b.delivered[2] + b.delivered[3]) / Math.max(1, sumCost(b.type)) * 0.2, complete: b.complete, ruin: b.ruin, age: b.age, style: b.style, tribe: b.tribe, settle: b.settle, growth: b.growth })),
+    buildings: civ.buildings.filter((b) => !b.gone).map((b) => ({ id: b.id, type: b.type, x: b.x, y: b.y, z: b.z, rot: b.rot, progress: b.complete ? 1 : b.progress * 0.8 + (b.delivered[1] + b.delivered[2] + b.delivered[3]) / Math.max(1, sumCost(b.type)) * 0.2, complete: b.complete, ruin: b.ruin, age: b.age, style: b.style, tribe: b.tribe, settle: b.settle, growth: b.growth })),
     roads,
     settlements: civ.settlements.map((s) => ({ id: s.id, name: s.name, tribe: s.tribe, x: s.x, y: s.y, z: s.z, tier: s.tier, pop: s.pop, alive: s.alive, radius: s.radius, stock: s.stock.map((v) => Math.round(v)), walls: s.walls })),
     tribes: civ.tribes.map((t) => ({

@@ -35,9 +35,11 @@ export const WIN: Record<string, Strategy> = {
     if (day % 3 === 2) cast(w, 'bloom', s);
   },
   'long-drought': (w, day) => {
+    // Break every drought with rain (never rain on wet ground: that is a
+    // deluge), and make the fields bloom when devotion allows.
     for (const s of live(w)) {
-      if (day % 2 === 0) cast(w, 'rain', s);
-      if (day % 4 === 1) cast(w, 'bloom', s);
+      if (w.divine.within('drought', s.x, s.y, s.z, w.tick, 0)) cast(w, 'rain', s);
+      else if (day % 4 === 1 && w.civ.devotion > 120) cast(w, 'bloom', s);
     }
   },
   ark: (w, day) => {

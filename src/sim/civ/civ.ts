@@ -27,6 +27,10 @@ import { Society } from './society';
 const INV_R = 1 / PLANET_RADIUS;
 const BRAIN = 8;
 const WALK = 0.34 * INV_R;
+/** People a tribe's land can carry before births fall away (logistic). */
+const TRIBE_CAPACITY = 800;
+/** Years before a ruin crumbles away. */
+const RUIN_YEARS = 25;
 
 export interface Ledger {
   created: number[];
@@ -57,6 +61,10 @@ export interface Building {
   built: number;
   /** Last tick anyone delivered to or worked on this site. */
   lastWork: number;
+  /** Tick it fell into ruin (set by the yearly sweep). */
+  ruinSince?: number;
+  /** Crumbled away: no longer part of any settlement or drawn. */
+  gone?: boolean;
 }
 
 export interface Settlement {
@@ -90,6 +98,8 @@ export interface Settlement {
   capturedFrom: number;
   /** Tick until which the settlement is blessed (work, health, births). */
   blessed: number;
+  /** 0 = water enough; up to 1 = the wells are failing (drought, no great river). */
+  thirst?: number;
   /** Where the current sickness came from: settlement id (-1 none) and carrier kind. */
   plagueFrom?: number;
   plagueVia?: 'traders' | 'pilgrims' | 'refugees' | 'crowding';
@@ -122,6 +132,8 @@ export interface RoadSeg {
   bx: number; by: number; bz: number;
   level: number;
   settle: number;
+  /** Corridor key (cell pair) for route roads; absent on paths to buildings. */
+  key?: string;
 }
 
 export class Civ {
@@ -129,6 +141,8 @@ export class Civ {
   settlements: Settlement[] = [];
   buildings: Building[] = [];
   roads: RoadSeg[] = [];
+  /** Corridor (cell pair) → index of its road segment in `roads`. */
+  roadIndex: Record<string, number> = {};
   people = new People();
   ledger: Ledger = { created: [0, 0, 0, 0], consumed: [0, 0, 0, 0], used: [0, 0, 0, 0], destroyed: [0, 0, 0, 0] };
   /** Recent divine acts as remembered (bounded; indices are absolute via godMemoryBase). */
@@ -181,6 +195,12 @@ export class Civ {
 
   // ------------------------------------------------------------------ ledger
   produce(r: number, a: number): void { this.ledger.created[r] += a; }
+  /** Stores lost to heat, rot or vermin (kept in the conserving ledger). */
+  spoil(s: Settlement, r: number, frac: number): void {
+    const a = s.stock[r] * frac;
+    s.stock[r] -= a;
+    this.destroy(r, a);
+  }
   private consume(r: number, a: number): void { this.ledger.consumed[r] += a; }
   private destroy(r: number, a: number): void { this.ledger.destroyed[r] += a; }
 
@@ -492,10 +512,35 @@ export class Civ {
     // Research once a day; head counts twice a day.
     if (tick % TICKS_PER_DAY === 17) this.research(tick, events);
     if (tick % 80 === 3) this.census();
+    if (tick % TICKS_PER_YEAR === 211) this.weatherRuins(tick);
     // Devotion from worship.
     if (tick % 16 === 5) this.worship();
     // Diplomacy, war, trade and religion.
     this.society.tick(this, tick, rng, planet, events, geo);
+  }
+
+  /** Ruins crumble away after a generation: gone from their settlement and from view. */
+  private weatherRuins(tick: number): void {
+    const touched = new Set<number>();
+    for (const b of this.buildings) {
+      if (!b.ruin || b.gone) continue;
+      if (b.ruinSince === undefined) { b.ruinSince = tick; continue; }
+      if (tick - b.ruinSince < TICKS_PER_YEAR * RUIN_YEARS) continue;
+      b.gone = true;
+      touched.add(b.settle);
+    }
+    if (touched.size === 0) return;
+    for (const sid of touched) {
+      const s = this.settlements[sid];
+      if (s) s.buildings = s.buildings.filter((id) => !this.buildings[id].gone);
+    }
+    // Their paths go with them.
+    const goneAt = new Set<string>();
+    for (const b of this.buildings) if (b.gone) goneAt.add(`${b.x.toFixed(5)},${b.y.toFixed(5)},${b.z.toFixed(5)}`);
+    this.roads = this.roads.filter((r) => r.key !== undefined || !goneAt.has(`${r.bx.toFixed(5)},${r.by.toFixed(5)},${r.bz.toFixed(5)}`));
+    this.roadIndex = {};
+    this.roads.forEach((r, i) => { if (r.key !== undefined) this.roadIndex[r.key] = i; });
+    this.version++;
   }
 
   private growFarms(planet: Planet): void {
@@ -540,6 +585,9 @@ export class Civ {
     P.age[i] += LIFE_YEARS_PER_YEAR / TICKS_PER_YEAR;
     let hp = P.health[i];
     if (P.hunger[i] >= 1) { P.hunger[i] = 1; hp -= 0.0022; }
+    const home = P.settle[i] >= 0 ? this.settlements[P.settle[i]] : null;
+    const thirst = home && home.thirst ? home.thirst : 0;
+    if (thirst > 0) hp -= 0.0007 * thirst;
     const c = this.hash.bucketOf[i];
     // Armies on the march live off the land.
     if (P.army[i] >= 0 && st === PState.March && P.hunger[i] > 0.6 && c >= 0 && (i + tick) % 8 === 0) {
@@ -553,13 +601,13 @@ export class Civ {
     }
     if (c >= 0 && fires.intensity[c] > 0.35) hp -= fires.intensity[c] * 0.007;
     if (P.sick[i] > 0) hp = this.diseaseStep(i, tick, rng, hp);
-    if (P.hunger[i] < 0.5 && hp < 1) hp = Math.min(1, hp + 0.0015);
+    if (P.hunger[i] < 0.5 && hp < 1) hp = Math.min(1, hp + 0.0015 * (1 - thirst));
     P.health[i] = hp;
     // Death: health, or old age.
     const age = P.age[i];
     const oldAge = (age > 48 ? 0.00012 * Math.exp((age - 48) / 9) : age < 3 ? 0.000012 : 0.000004) * LIFE_YEARS_PER_YEAR;
     if (hp <= 0 || rng.chance(oldAge)) {
-      this.personDies(i, tick, hp <= 0 ? (P.hunger[i] >= 1 ? 'starvation' : c >= 0 && fires.intensity[c] > 0.35 ? 'fire' : P.sick[i] > 0 ? 'plague' : 'hardship') : 'old age', events);
+      this.personDies(i, tick, hp <= 0 ? (P.hunger[i] >= 1 ? 'starvation' : c >= 0 && fires.intensity[c] > 0.35 ? 'fire' : P.sick[i] > 0 ? 'plague' : thirst > 0 ? 'thirst' : 'hardship') : 'old age', events);
       return;
     }
     // Pregnancy.
@@ -1312,6 +1360,12 @@ export class Civ {
       return;
     }
     const t = this.tribes[s.tribe];
+    // Drought: without a great river the springs and wells begin to fail.
+    {
+      const parched = planet.climate.rainBias[s.cell] < -0.5;
+      const river = planet.terrain.river[s.cell];
+      s.thirst = !parched || river >= 2 ? 0 : s.water ? 0.5 : 1;
+    }
     // Abandon building sites nobody has touched for two years (materials return to the store).
     for (const id of s.buildings) {
       const b = this.buildings[id];
@@ -1443,12 +1497,15 @@ export class Civ {
     // Births: couples, housing and food permitting.
     const roomy = s.pop < s.housing + 4 + (s.housing < 10 ? 14 : 0);
     const fed = s.stock[Res.Food] > s.pop * 1.2;
+    // The land a people can work carries only so many: births fall away
+    // logistically as a people nears its carrying capacity.
+    const crowding = Math.max(0.03, 1 - (t.population / TRIBE_CAPACITY) ** 2);
     if (roomy && fed) {
       for (const i of members) {
         if (P.sex[i] !== 0 || P.pregnant[i] > 0 || P.age[i] < 17 || P.age[i] > 42 || P.spouse[i] < 0) continue;
         if (P.children[i] >= 6) continue;
         // Demographic transition: families shrink as a people advances.
-        if (rng.chance((s.blessed > tick ? 0.14 : 0.07) / (1 + 0.18 * t.age))) P.pregnant[i] = 300;
+        if (rng.chance((s.blessed > tick ? 0.14 : 0.07) / (1 + 0.18 * t.age) * crowding)) P.pregnant[i] = 300;
       }
     }
     // Disease burden (drives medicine research and the chronicle).
@@ -1679,7 +1736,17 @@ export class Civ {
       if (k % 2 === 0) {
         const o = this.owner[a];
         const level = o >= 0 ? Math.min(3, this.tribes[this.settlements[o].tribe].age >> 1) : 0;
-        this.roads.push({ ax: g.centers[a * 3], ay: g.centers[a * 3 + 1], az: g.centers[a * 3 + 2], bx: g.centers[b * 3], by: g.centers[b * 3 + 1], bz: g.centers[b * 3 + 2], level, settle: o });
+        // One segment per corridor: a busier route upgrades the road in place.
+        if (!this.roadIndex) this.roadIndex = {};
+        const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+        const at = this.roadIndex[key];
+        const seg = at !== undefined ? this.roads[at] : undefined;
+        if (seg && seg.key === key) {
+          seg.level = Math.max(seg.level, level);
+        } else {
+          this.roadIndex[key] = this.roads.length;
+          this.roads.push({ ax: g.centers[a * 3], ay: g.centers[a * 3 + 1], az: g.centers[a * 3 + 2], bx: g.centers[b * 3], by: g.centers[b * 3 + 1], bz: g.centers[b * 3 + 2], level, settle: o, key });
+        }
       }
     }
     this.paths.clearCache();

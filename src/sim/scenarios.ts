@@ -7,7 +7,7 @@
 import type { World } from './world';
 import type { WorldPresetId } from './planet/presets';
 import { TICKS_PER_YEAR } from './constants';
-import { Age } from './civ/defs';
+import { Age, Res } from './civ/defs';
 import { TECH_INDEX } from './civ/tech';
 
 export type ScenarioStatus = 'active' | 'won' | 'lost';
@@ -72,7 +72,7 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'The Long Drought',
     tagline: 'Water is life.',
     brief: 'On a world of sand and shrinking seas the rains have failed. The peoples of Dune will not survive the decade alone.',
-    objective: 'The rains fail every year. After 20 years at least 200 people must live; fewer than 30 and all is lost.',
+    objective: 'The rains fail every year. Without rain the wells run dry. After 20 years at least 120 people must live; fewer than 30 and all is lost.',
     difficulty: 2,
     seed: 7117,
     preset: 'arid',
@@ -99,12 +99,16 @@ export const SCENARIOS: ScenarioDef[] = [
         }
         w.divine.boundless = was;
       }
+      // Under the unbroken drought the heat spoils what the granaries hold.
+      for (const st of w.civ.settlements) {
+        if (st.alive && w.divine.within('drought', st.x, st.y, st.z, w.tick, 0)) w.civ.spoil(st, Res.Food, 0.03);
+      }
       const pop = alivePeople(w);
-      s.progress = Math.min(1, years(w, s) / 20) * (pop >= 200 ? 1 : pop / 200);
+      s.progress = Math.min(1, years(w, s) / 20) * (pop >= 120 ? 1 : pop / 120);
       s.detail = `${pop} people · ${Math.max(0, 20 - years(w, s)).toFixed(1)} years left`;
       if (pop < 30) { s.outcome = 'The last wells are dry. The sand keeps their bones.'; return 'lost'; }
       if (years(w, s) >= 20) {
-        if (pop >= 200) { s.outcome = 'The rains came because you willed them. They will sing of it for a thousand years.'; return 'won'; }
+        if (pop >= 120) { s.outcome = 'The rains came because you willed them. They will sing of it for a thousand years.'; return 'won'; }
         s.outcome = 'They survived — barely. Too few remain to call this a victory.';
         return 'lost';
       }

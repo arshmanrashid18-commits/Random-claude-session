@@ -33,6 +33,8 @@ export interface Storm {
   life: number;
   overLand: boolean;
   landfalls: number;
+  /** Continent of the last announced landfall. */
+  lastLand?: number;
 }
 
 export interface LightningStrike {
@@ -170,11 +172,13 @@ export class Weather {
         if (overLand && !s.overLand && s.intensity > 0.55) {
           s.landfalls++;
           const cont = geo.continentOf(c);
-          events.emit(tick, 'landfall', s, 0.75, {
+          // Announce a landfall once per land, not at every wobble along a coast.
+          if (cont !== (s.lastLand ?? -2)) events.emit(tick, 'landfall', s, 0.75, {
             name: s.name,
             category: Math.max(1, Math.min(5, Math.round(s.intensity * 3.3))),
             continent: cont >= 0 ? geo.continents[cont].name : '',
           });
+          s.lastLand = cont;
         }
       } else {
         const life = s.age / s.life;

@@ -87,6 +87,12 @@ function mergeYear(list: GameEvent[]): { id: number; importance: number; text: s
     if (!groups.has(e.kind)) groups.set(e.kind, []);
     groups.get(e.kind)!.push(e);
   }
+  // The same sentence twice in one year says nothing new.
+  const seenText = new Set<string>();
+  for (let k = out.length - 1; k >= 0; k--) {
+    if (seenText.has(out[k].text)) out.splice(k, 1);
+    else seenText.add(out[k].text);
+  }
   for (const [kind, g] of groups) {
     if (g.length === 1) { const n = narrate(g[0]); out.push({ id: g[0].id, importance: g[0].importance, text: n.text || n.title }); continue; }
     const places = g.map((e) => String(e.data.continent ?? e.data.where ?? ''));

@@ -104,7 +104,7 @@ Each entry: decision — why.
     exhaust the tech tree within a session.
 34. **Scenarios must not be won by idling.** Each scenario is checked with a scripted
     winning strategy, a losing strategy and doing nothing; objectives were retuned until
-    idling loses (The Long Drought's rains fail every year; Two Faiths' peace only holds
+    idling loses (The Long Drought's rains fail every year and only rain refills the wells; Two Faiths' peace only holds
     under a divine truce; First Flame needs Bronze within 14 years; The Chosen need a
     settlement of 100 within 25 years).
 35. **The god can see at night.** Sky ambient gains a phase-weighted cool moonlight so the
@@ -123,3 +123,20 @@ Each entry: decision — why.
     storms instead of one every decade.
 40. **Demographic transition.** Birth rates fall by 1/(1 + 0.18·age) as a people advances,
     so growth levels off below the agent capacity instead of hitting it.
+41. **Each people has a carrying capacity.** The 500-year soak showed populations
+    doubling every ~20 years until they hit the 9,000-agent limit (year 125) and the
+    simulation slowed to ~15 ms/tick. Births now fall away logistically as a people nears
+    800 (factor 1 − (pop/800)²): the world plateaus near 2,900 people by year 125 and
+    stays there, at ~5 ms/tick.
+42. **Ruins crumble.** A ruin disappears from its settlement, from rendering and from the
+    clearings after 25 years, taking its path with it; route roads are one segment per
+    corridor and upgrade in place. Live buildings and roads now plateau (~2,500 each over
+    200 years) instead of growing without bound.
+43. **Landfall is news once.** A hurricane is announced once per land it strikes (it was
+    announced at every wobble along a coast), and the chronicle drops sentences that
+    repeat within a year.
+44. **Droughts bring thirst.** In a drought (rain bias below −0.5) a settlement without a
+    great river loses health; a well halves the loss; nobody heals while thirsty. The god's
+    rain ends it. Droughts are now a real threat rather than a food footnote, and The Long
+    Drought is lost by idling (everyone dies within two years) and won by breaking each
+    drought with rain (≈140 survive).

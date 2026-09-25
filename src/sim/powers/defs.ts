@@ -43,7 +43,7 @@ export const POWERS: PowerDef[] = [
   { id: 'rain', name: 'Rain', school: 'sky', cost: 20, cooldown: 24, radius: 70, target: 'any', mood: 0.5, key: 'Digit2',
     desc: 'Gather clouds and let them weep.', effect: 'Two days of rain: soils soak, rivers swell, fires die. Breaking a drought earns deep gratitude.', color: 0x7fb4ff },
   { id: 'drought', name: 'Drought', school: 'sky', cost: 45, cooldown: 160, radius: 150, target: 'land', mood: -0.5, key: 'Digit3',
-    desc: 'Close the sky over a land.', effect: 'For a year little rain falls. Plants wither, harvests fail, herds move on, fires spread.', color: 0xe0a35a },
+    desc: 'Close the sky over a land.', effect: 'For a year little rain falls. Plants wither, harvests fail, herds move on, fires spread — and far from a great river the wells run dry.', color: 0xe0a35a },
   { id: 'wildfire', name: 'Wildfire', school: 'sky', cost: 18, cooldown: 30, radius: 20, target: 'land', mood: -0.6, key: 'Digit4',
     desc: 'Set the forest ablaze.', effect: 'Ignites the land. Fire spreads with wind and dryness, leaving ash that later feeds new growth.', color: 0xff7a2e },
   { id: 'iceage', name: 'Ice Age', school: 'sky', cost: 600, cooldown: 4800, radius: 0, target: 'global', mood: -0.7, key: '',

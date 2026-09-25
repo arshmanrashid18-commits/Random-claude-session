@@ -84,8 +84,37 @@ software rasteriser. The budgets are met by construction rather than by measurem
 
 ## Final quality scores
 
-FINAL_SCORES
+Scored against the final screenshot set (docs/screenshots) and play-throughs of the
+harness; the full history of passes is in QUALITY_LOG.md.
+
+| Category | Score | Why not higher |
+|---|---|---|
+| Visual beauty | 9 | Coast, forest, village, mountain and volcano views hold up; the orbit cloud field still shows some cellular texture near the poles |
+| Visual coherence | 9 | Clearings, lakes, rivers, vegetation and biomes agree near and far; the auroral curtains are stylised rather than physical |
+| Emergent storytelling | 9 | Wars, conquests, refugees, plagues with named carriers, schisms and scripture all arise unscripted |
+| Moment-to-moment fun | 9 | Twenty powers with combos, terraforming, visible consequences; scenarios require play |
+| Polish / juice | 9 | Banners, labels, pulses, ambient life, audio moods; see the delight list |
+| Performance | 8 | Draw calls in the tens and bounded triangles per preset; simulation falls below 100× once thousands of agents live (see above); no real-GPU measurement possible here |
+| Stability | 9 | Zero console errors across all harness runs; 500-year soak; monkey test |
+| First-impression wow | 9 | Title over the live, lit planet; terminator; the village diorama |
+
+Performance stays at 8: the simulation's per-tick cost grows with population, so
+100× is only sustained in the first decades, and GPU frame rates could not be measured
+on hardware in this environment. Five loops were run in the final phase; the remaining
+gap is structural (single-threaded simulation) rather than a defect.
 
 ## Known limitations
 
-LIMITATIONS
+* **No real-GPU measurement.** This container renders WebGL on SwiftShader (CPU). The
+  60 fps / 30 fps budgets are addressed by construction (instancing, LOD, per-preset
+  budgets, quality governor) but were not measured on a GPU.
+* **Simulation speed at scale.** One worker thread runs the whole world. 100× holds in
+  the early game; with ~9,000 agents the worker delivers roughly half of that on this
+  machine, shown honestly in the HUD ("48× max").
+* **Balance is calibrated on fixed seeds.** Each scenario is proven winnable, losable
+  and not winnable by idling on its own seed; other seeds are not part of scenarios.
+* **Audio was verified structurally, not by ear.** The WebAudio graph builds and plays
+  without errors in headless Chromium, but nobody listened to it in this environment.
+* **Stylised low-poly models.** People, animals, buildings and trees are procedural
+  low-poly meshes animated in the vertex shader; there is no skeletal animation.
+* **Phase tags are local.** The git remote accepts only the development branch.
