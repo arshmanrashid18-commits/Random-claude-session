@@ -49,7 +49,7 @@ const browser = await chromium.launch({
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-gl=angle', '--disable-gpu-sandbox'],
 });
 const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
-page.setDefaultTimeout(600_000);
+page.setDefaultTimeout(1_800_000);
 const problems = [];
 page.on('console', (m) => {
   const t = m.type();
@@ -106,7 +106,7 @@ for (const s of shots) {
   await page.evaluate(() => window.__genesis.setTime(12.5));
   await page.evaluate(() => window.__genesis.renderFrames(1));
   const file = `${outDir}/${prefix}${s.name}.png`;
-  await page.screenshot({ path: file, timeout: 300_000 });
+  await page.screenshot({ path: file, timeout: 1_200_000 });
   const stats = await page.evaluate(() => window.__genesis.stats());
   console.log(`${s.name}: ${((Date.now() - ts) / 1000).toFixed(1)}s  ${JSON.stringify(stats)}`);
 }

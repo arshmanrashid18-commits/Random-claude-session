@@ -51,19 +51,19 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'The First Flame',
     tagline: 'From stone to bronze.',
     brief: 'Five small bands huddle around their fires. They do not know you yet. Teach them — gently or terribly — and carry one people out of the Stone Age.',
-    objective: 'A people reaches the Bronze Age within 14 years.',
+    objective: 'A people reaches the Bronze Age within 15 years.',
     difficulty: 1,
     seed: 20260925,
     preset: 'earthlike',
-    years: 14,
+    years: 15,
     setup(w) { w.civ.devotion = 150; },
     check(w, s) {
       const best = Math.max(...w.civ.tribes.filter((t) => t.alive).map((t) => t.known.reduce((a, b) => a + b, 0)), 0);
       s.progress = Math.min(1, best / 16);
-      s.detail = `${best} discoveries · ${Math.max(0, 14 - years(w, s)).toFixed(1)} years left`;
+      s.detail = `${best} discoveries · ${Math.max(0, 15 - years(w, s)).toFixed(1)} years left`;
       if (w.civ.tribes.some((t) => t.alive && t.age >= Age.Bronze)) { s.outcome = 'Bronze is poured for the first time. Your people will never again be only hunters.'; return 'won'; }
       if (aliveTribes(w) === 0) { s.outcome = 'The last fire has gone out.'; return 'lost'; }
-      if (years(w, s) >= 14) { s.outcome = 'Fourteen years pass, and still they work only in stone.'; return 'lost'; }
+      if (years(w, s) >= 15) { s.outcome = 'Fifteen years pass, and still they work only in stone.'; return 'lost'; }
       return 'active';
     },
   },
@@ -212,19 +212,19 @@ export const SCENARIOS: ScenarioDef[] = [
     name: 'The Chosen People',
     tagline: 'A city on a hill.',
     brief: 'Choose a people and raise them above all others. Great cities are built on full granaries, safe walls and bold ideas.',
-    objective: 'Any settlement grows to 100 people within 25 years.',
+    objective: 'Any settlement grows to 100 people within 26 years.',
     difficulty: 3,
     seed: 3141,
     preset: 'earthlike',
-    years: 25,
-    setup(w) { w.civ.devotion = 300; },
+    years: 26,
+    setup(w) { w.civ.devotion = 600; },
     check(w, s) {
       const best = Math.max(0, ...w.civ.settlements.filter((x) => x.alive).map((x) => x.pop));
       s.progress = Math.min(1, best / 100);
-      s.detail = `largest settlement ${best} · ${Math.max(0, 25 - years(w, s)).toFixed(1)} years left`;
+      s.detail = `largest settlement ${best} · ${Math.max(0, 26 - years(w, s)).toFixed(1)} years left`;
       if (best >= 100) { s.outcome = 'Streets, fields to the horizon, a temple on the hill: your chosen people flourish.'; return 'won'; }
       if (aliveTribes(w) === 0) { s.outcome = 'No one is left to build anything.'; return 'lost'; }
-      if (years(w, s) >= 25) { s.outcome = 'A generation passes, and still only villages.'; return 'lost'; }
+      if (years(w, s) >= 26) { s.outcome = 'A generation passes, and still only villages.'; return 'lost'; }
       return 'active';
     },
   },

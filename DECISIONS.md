@@ -105,8 +105,8 @@ Each entry: decision — why.
 34. **Scenarios must not be won by idling.** Each scenario is checked with a scripted
     winning strategy, a losing strategy and doing nothing; objectives were retuned until
     idling loses (The Long Drought's rains fail every year and only rain refills the wells; Two Faiths' peace only holds
-    under a divine truce; First Flame needs Bronze within 14 years; The Chosen need a
-    settlement of 100 within 25 years).
+    under a divine truce; First Flame needs Bronze within 15 years; The Chosen need a
+    settlement of 100 within 26 years).
 35. **The god can see at night.** Sky ambient gains a phase-weighted cool moonlight so the
     night side reads as a moonlit world rather than a black disc; the lens flare is
     occluded by the planet.
