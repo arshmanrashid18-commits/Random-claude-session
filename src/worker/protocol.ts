@@ -58,6 +58,8 @@ export interface RegionTextures {
   surface: Uint8Array;
   /** R: current rain rate, G: fog, B: fire intensity, A: flood water. */
   fx: Uint8Array;
+  /** R: owning tribe + 1 (0 = none), G: settlement tier, B: war front, A: unused. Nearest-filtered. */
+  owner: Uint8Array;
 }
 
 export interface StormData {
@@ -77,6 +79,7 @@ export interface StormData {
  * (species/kind 8 bits | state 8 bits | size 8 bits | flags 8 bits).
  */
 export interface EntitySnapshot {
+  kind: 'animals' | 'people';
   tick: number;
   count: number;
   pos: Float32Array;
@@ -99,7 +102,62 @@ export interface FrameData {
   strikes: { x: number; y: number; z: number; power: number }[];
   events: GameEvent[];
   animals: EntitySnapshot | null;
+  people: EntitySnapshot | null;
   stats: WorldStats | null;
+  devotion: number;
+  devotionRate: number;
+}
+
+export interface BuildingData {
+  id: number;
+  type: number;
+  x: number; y: number; z: number;
+  rot: number;
+  progress: number;
+  complete: boolean;
+  ruin: boolean;
+  age: number;
+  style: number;
+  tribe: number;
+  settle: number;
+  growth: number;
+}
+
+export interface SettlementData {
+  id: number;
+  name: string;
+  tribe: number;
+  x: number; y: number; z: number;
+  tier: number;
+  pop: number;
+  alive: boolean;
+  radius: number;
+  stock: number[];
+  walls: boolean;
+}
+
+export interface TribeData {
+  id: number;
+  name: string;
+  adjective: string;
+  color: number;
+  color2: number;
+  flag: { bg: number; fg: number; pattern: number; symbol: number; symColor: number };
+  alive: boolean;
+  age: number;
+  population: number;
+  religion: string;
+  deity: string;
+  capital: number;
+  techCount: number;
+}
+
+export interface CivData {
+  version: number;
+  buildings: BuildingData[];
+  roads: Float32Array; // ax,ay,az,bx,by,bz,level per segment
+  settlements: SettlementData[];
+  tribes: TribeData[];
 }
 
 export interface WorldStats {
@@ -126,6 +184,7 @@ export type WorkerToMain =
   | { type: 'frame'; frame: FrameData }
   | { type: 'textures'; tex: RegionTextures; tick: number }
   | { type: 'species'; species: SpeciesInfo[] }
+  | { type: 'civ'; civ: CivData }
   | { type: 'advanced'; id: number; tick: number }
   | { type: 'hash'; id: number; hash: number }
   | { type: 'error'; message: string };

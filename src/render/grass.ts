@@ -109,7 +109,7 @@ void main() {
   // Grass colour follows the climate like the terrain beneath it.
   float temp = clim.r * 80.0 - 40.0;
   float moist = clim.g * 4.0;
-  vec3 lush = pow(vec3(0.30, 0.52, 0.17), vec3(2.2));
+  vec3 lush = pow(vec3(0.31, 0.47, 0.17), vec3(2.2));
   vec3 dry = pow(vec3(0.70, 0.64, 0.36), vec3(2.2));
   vec3 cold = pow(vec3(0.50, 0.52, 0.36), vec3(2.2));
   vec3 c = mix(dry, lush, smoothstep(0.6, 1.8, moist));

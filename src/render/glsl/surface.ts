@@ -135,8 +135,8 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   vec3 redSand = srgb(vec3(0.80, 0.56, 0.36));
   vec3 dryGrass = srgb(vec3(0.72, 0.66, 0.38));
   vec3 savanna = srgb(vec3(0.70, 0.60, 0.34));
-  vec3 lush = srgb(vec3(0.33, 0.55, 0.20));
-  vec3 meadow = srgb(vec3(0.45, 0.60, 0.26));
+  vec3 lush = srgb(vec3(0.31, 0.48, 0.19));
+  vec3 meadow = srgb(vec3(0.44, 0.54, 0.25));
   vec3 tundra = srgb(vec3(0.52, 0.52, 0.40));
   vec3 soil = srgb(vec3(0.42, 0.34, 0.25));
 

@@ -1,7 +1,7 @@
 /**
  * Main-thread handle to the simulation worker.
  */
-import type { EntitySnapshot, FrameData, FrameHeader, MainToWorker, RegionTextures, SpeciesInfo, StaticWorldData, WorkerToMain, WorldStats } from './protocol';
+import type { CivData, EntitySnapshot, FrameData, FrameHeader, MainToWorker, RegionTextures, SpeciesInfo, StaticWorldData, WorkerToMain, WorldStats } from './protocol';
 import type { WorldPresetId } from '../sim/planet/presets';
 import type { GameEvent } from '../sim/events';
 
@@ -19,6 +19,9 @@ export class SimClient {
   onFrame: (frame: FrameData) => void = () => {};
   /** Called with a new animal snapshot; must return a snapshot to recycle (or null). */
   onAnimals: (snap: EntitySnapshot) => EntitySnapshot | null = (s) => s;
+  onPeople: (snap: EntitySnapshot) => EntitySnapshot | null = (s) => s;
+  onCiv: (civ: CivData) => void = () => {};
+  civ: CivData | null = null;
   onError: (msg: string) => void = () => {};
   private nextId = 1;
   private pending = new Map<number, (v: number) => void>();
@@ -47,13 +50,18 @@ export class SimClient {
           const recycle = this.onAnimals(f.animals);
           if (recycle) this.send({ type: 'returnSnapshot', snap: recycle }, [recycle.pos.buffer, recycle.info.buffer]);
         }
+        if (f.people) {
+          const recycle = this.onPeople(f.people);
+          if (recycle) this.send({ type: 'returnSnapshot', snap: recycle }, [recycle.pos.buffer, recycle.info.buffer]);
+        }
         this.onFrame(f);
         break;
       }
       case 'species': this.species = msg.species; break;
+      case 'civ': this.civ = msg.civ; this.onCiv(msg.civ); break;
       case 'textures':
         this.onTextures(msg.tex, msg.tick);
-        this.send({ type: 'returnTextures', tex: msg.tex }, [msg.tex.climate.buffer, msg.tex.vegA.buffer, msg.tex.vegB.buffer, msg.tex.surface.buffer, msg.tex.fx.buffer]);
+        this.send({ type: 'returnTextures', tex: msg.tex }, [msg.tex.climate.buffer, msg.tex.vegA.buffer, msg.tex.vegB.buffer, msg.tex.surface.buffer, msg.tex.fx.buffer, msg.tex.owner.buffer]);
         break;
       case 'advanced': this.resolve(msg.id, msg.tick); break;
       case 'hash': this.resolve(msg.id, msg.hash); break;

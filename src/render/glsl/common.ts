@@ -112,6 +112,7 @@ uniform highp sampler2DArray uVegATex;
 uniform highp sampler2DArray uVegBTex;
 uniform highp sampler2DArray uSurfaceTex;
 uniform highp sampler2DArray uFxTex;
+uniform highp sampler2DArray uOwnerTex;
 uniform float uRegionN;
 vec3 regionUV(vec3 d) {
   vec2 ab;

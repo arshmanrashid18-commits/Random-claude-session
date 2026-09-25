@@ -65,10 +65,11 @@ function buildModel(type: VegType): THREE.BufferGeometry {
         x += Math.sin(lean) * 1.1;
         y += Math.cos(lean) * 1.1;
       }
-      const frond = lin(0x3a6b28);
-      for (let k = 0; k < 8; k++) {
-        const a = (k / 8) * Math.PI * 2;
-        b.quad(0.7, 3.0, V3(x, y, 0), E(-1.15, a, 0), { color: frond, sway: 0.9, jitter: 0.25 }, -0.35);
+      const frond = lin(0x3f6a2a), frond2 = lin(0x55782f);
+      for (let k = 0; k < 9; k++) {
+        const a = (k / 9) * Math.PI * 2 + (k % 2) * 0.2;
+        const up = k % 3 === 0;
+        b.leaf(up ? 2.4 : 3.1, 0.42, up ? 0.9 : 0.45, up ? 1.3 : 1.9, V3(x, y, 0), a, { color: k % 2 ? frond : frond2, sway: 0.9, jitter: 0.2 });
       }
       b.blob(0.22, 0, V3(x + 0.1, y - 0.2, 0.1), V3(1, 1, 1), { color: lin(0x6b4e2a) });
       break;

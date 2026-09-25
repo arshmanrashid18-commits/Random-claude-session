@@ -82,7 +82,9 @@ in float vDist;
 void main() {
   vec3 dir = normalize(vWorld);
   float across = abs(vRiver.x);
-  float depth = (1.0 - across * across) * (0.6 + vWidth * 0.25);
+  // Optical depth for colour: rivers read as a clear green-blue channel,
+  // not as shallow surf (no shore foam across the whole ribbon).
+  float depth = (1.0 - across * across) * (2.2 + vWidth * 0.9) + 0.45;
   vec4 c = shadeWater(vWorld, dir, depth, vDist, 1.0);
   // Flow streaks moving downstream.
   float streak = snoise(vec3(vRiver.y * 0.35 - uTime * 1.4, vRiver.x * 2.5, 0.0));

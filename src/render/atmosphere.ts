@@ -196,6 +196,11 @@ void main() {
     int N = uAtmoSteps;
     float seg = max(t1 - t0, 0.0);
     float dt = seg / float(N);
+    // Aerial perspective is compressed for nearby surfaces: the atmosphere is
+    // scaled for the planet, so at village range it would read as fog. Haze
+    // ramps up with distance and reaches full physical strength by ~1100 u.
+    float hazeK = sky ? 1.0 : clamp(sceneDist / 1100.0, 0.07, 1.0);
+    float dtE = dt * hazeK;
     float mu = dot(rd, uSunDir);
     float pR = phaseR(mu), pM = phaseM(mu, MIE_G);
     vec3 tau = vec3(0.0);
@@ -212,16 +217,16 @@ void main() {
       float h = max(r - PLANET_R, 0.0);
       float dR = exp(-h / H_R), dM = exp(-h / H_M);
       vec3 ext = BETA_R * dR + BETA_M * 1.1 * dM + BETA_O * ozoneDensity(h) * dR;
-      tau += ext * dt * 0.5;
+      tau += ext * dtE * 0.5;
       float muS = dot(p / r, uSunDir);
       vec3 Ts = transmittanceToSun(r, muS);
       vec3 T = exp(-tau);
-      vec3 s = T * Ts * (BETA_R * dR * pR + BETA_M * dM * pM) * dt;
+      vec3 s = T * Ts * (BETA_R * dR * pR + BETA_M * dM * pM) * dtE;
       // Faint airglow keeps the night side from being pure black.
       s += T * BETA_R * dR * dt * vec3(0.0006, 0.0009, 0.0016);
       inscatter += s;
       if (uAurora > 0.0) aur += T * auroraEmission(p) * dt;
-      tau += ext * dt * 0.5;
+      tau += ext * dtE * 0.5;
       if (!cloudPassed && t >= cloudDepth) {
         cloudPassed = true;
         inscatterToCloud = inscatter;

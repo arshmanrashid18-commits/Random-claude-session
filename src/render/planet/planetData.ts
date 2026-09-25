@@ -60,6 +60,7 @@ export class PlanetData {
   vegBTex: THREE.DataArrayTexture;
   surfaceTex: THREE.DataArrayTexture;
   fxTex: THREE.DataArrayTexture;
+  ownerTex: THREE.DataArrayTexture;
   regionN: number;
   private normalMat: THREE.ShaderMaterial;
   private quad: THREE.Mesh;
@@ -71,6 +72,7 @@ export class PlanetData {
   vegBCPU: Uint8Array;
   surfaceCPU: Uint8Array;
   fxCPU: Uint8Array;
+  ownerCPU: Uint8Array;
   /** Incremented whenever region textures change. */
   regionVersion = 0;
 
@@ -133,11 +135,15 @@ export class PlanetData {
     this.vegBTex = mk();
     this.surfaceTex = mk();
     this.fxTex = mk();
+    this.ownerTex = mk();
+    this.ownerTex.minFilter = THREE.NearestFilter;
+    this.ownerTex.magFilter = THREE.NearestFilter;
     this.climateCPU = new Uint8Array(P * P * 6 * 4);
     this.vegACPU = new Uint8Array(P * P * 6 * 4);
     this.vegBCPU = new Uint8Array(P * P * 6 * 4);
     this.surfaceCPU = new Uint8Array(P * P * 6 * 4);
     this.fxCPU = new Uint8Array(P * P * 6 * 4);
+    this.ownerCPU = new Uint8Array(P * P * 6 * 4);
   }
 
   /** Bilinear sample of one channel of a padded region texture (0..1). */
@@ -174,6 +180,9 @@ export class PlanetData {
     (this.fxTex.image.data as Uint8Array).set(tex.fx);
     this.fxCPU.set(tex.fx);
     this.fxTex.needsUpdate = true;
+    (this.ownerTex.image.data as Uint8Array).set(tex.owner);
+    this.ownerCPU.set(tex.owner);
+    this.ownerTex.needsUpdate = true;
     this.climateCPU.set(tex.climate);
     this.vegACPU.set(tex.vegA);
     this.vegBCPU.set(tex.vegB);
@@ -209,6 +218,7 @@ export class PlanetData {
     this.vegBTex.dispose();
     this.surfaceTex.dispose();
     this.fxTex.dispose();
+    this.ownerTex.dispose();
     this.normalMat.dispose();
   }
 }

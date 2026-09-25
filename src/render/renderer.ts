@@ -20,6 +20,8 @@ import { Vegetation } from './vegetation';
 import { ShadowSystem } from './shadows';
 import { Grass } from './grass';
 import { Creatures } from './creatures';
+import { PeopleRenderer } from './people';
+import { BuildingsRenderer } from './buildings';
 import type { StormData } from '../worker/protocol';
 
 export interface RenderStats {
@@ -42,6 +44,8 @@ export class GameRenderer {
   shadows: ShadowSystem;
   grass!: Grass;
   creatures!: Creatures;
+  people!: PeopleRenderer;
+  buildings!: BuildingsRenderer;
   private lastRenderTick = 0;
   atmosphere!: AtmospherePass;
   sky!: SkyLayer;
@@ -84,6 +88,8 @@ export class GameRenderer {
       uVegBTex: { value: null },
       uSurfaceTex: { value: null },
       uFxTex: { value: null },
+      uOwnerTex: { value: null },
+      uBorders: { value: 0.35 },
       uRegionN: { value: 64 },
       uNormalTex: { value: null },
       uTransmittanceLUT: { value: null },
@@ -143,6 +149,7 @@ export class GameRenderer {
     s.uVegBTex.value = this.data.vegBTex;
     s.uSurfaceTex.value = this.data.surfaceTex;
     s.uFxTex.value = this.data.fxTex;
+    s.uOwnerTex.value = this.data.ownerTex;
     s.uRegionN.value = world.regionN;
     s.uNormalTex.value = this.data.normalRT.texture;
     if (!s.uCloudNoise.value) s.uCloudNoise.value = generateCloudNoise(64);
@@ -164,6 +171,12 @@ export class GameRenderer {
     this.creatures.species = world.species;
     this.scene.add(this.creatures.group);
     this.creatures.meshes.forEach((m, i) => this.shadows.register(m, this.creatures.depthMaterials[i]));
+    this.people = new PeopleRenderer(s);
+    this.scene.add(this.people.mesh);
+    this.shadows.register(this.people.mesh, this.people.depthMaterial);
+    this.buildings = new BuildingsRenderer(s);
+    this.scene.add(this.buildings.group);
+    this.buildings.onNewMesh = (m) => this.shadows.register(m, this.buildings.depthMaterial);
     this.shadows.register(this.terrain.terrainMesh, this.terrain.depthMat);
     this.renderer.setRenderTarget(null);
     this.data.computeNormals(this.renderer);
@@ -257,6 +270,7 @@ export class GameRenderer {
     const dTick = this.renderTick - this.lastRenderTick;
     this.lastRenderTick = this.renderTick;
     this.creatures.update(cam, this.renderTick, dTick, this.data, dt);
+    this.people.update(cam, this.renderTick, dTick, this.data, dt, this.shared.uSunDir.value as THREE.Vector3);
 
     const r = this.renderer;
     r.info.reset();

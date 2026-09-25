@@ -185,6 +185,48 @@ export class MeshBuilder {
     return this;
   }
 
+  /**
+   * A drooping, folded leaf (palm frond, banana leaf): the midrib rises at
+   * `lift` radians and bends down by `droop` along its length; the blade
+   * tapers at both ends and is folded into a shallow V. Double-sided.
+   * Built along local +Z, then rotated about the trunk by `yaw`.
+   */
+  leaf(len: number, width: number, lift: number, droop: number, at: THREE.Vector3, yaw: number, o: PartOpts, segs = 8): this {
+    const pos: number[] = [];
+    const idx: number[] = [];
+    let px = 0, py = 0, pz = 0;
+    const dl = len / segs;
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const pitch = lift - droop * t * t;
+      const w = width * Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.15 + 0.04)), 0.6) * (1 - 0.25 * t);
+      const fold = w * 0.45;
+      // Side vector is +X; the blade edges droop below the midrib.
+      pos.push(px - w, py - fold, pz, px, py, pz, px + w, py - fold, pz);
+      if (i < segs) {
+        const b = i * 3;
+        idx.push(b, b + 3, b + 1, b + 1, b + 3, b + 4, b + 1, b + 4, b + 2, b + 2, b + 4, b + 5);
+      }
+      py += Math.sin(pitch) * dl;
+      pz += Math.cos(pitch) * dl;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const m = new THREE.Matrix4().compose(at, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)), new THREE.Vector3(1, 1, 1));
+    this.addGeometry(g, m, o);
+    const g2 = g.clone();
+    const ia = g2.getIndex()!.array as Uint16Array;
+    for (let i = 0; i < ia.length; i += 3) { const t = ia[i]; ia[i] = ia[i + 2]; ia[i + 2] = t; }
+    const n = g2.getAttribute('normal');
+    for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+    this.addGeometry(g2, m, o);
+    g.dispose();
+    g2.dispose();
+    return this;
+  }
+
   build(): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));

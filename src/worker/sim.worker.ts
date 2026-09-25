@@ -6,7 +6,9 @@
 import { World } from '../sim/world';
 import { TICKS_PER_SECOND_1X } from '../sim/constants';
 import { buildPadMap, packRGBA } from '../sim/planet/regiontex';
-import type { EntitySnapshot, FrameData, MainToWorker, RegionTextures, SpeciesInfo, StaticWorldData, WorkerToMain } from './protocol';
+import type { CivData, EntitySnapshot, FrameData, MainToWorker, RegionTextures, SpeciesInfo, StaticWorldData, WorkerToMain } from './protocol';
+import { BUILDINGS } from '../sim/civ/defs';
+const BUILDING_COSTS = BUILDINGS.map((b) => b.cost);
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -26,6 +28,11 @@ let tpsTicks = 0;
 let tps = 0;
 const spareTextures: RegionTextures[] = [];
 const spareSnaps: EntitySnapshot[] = [];
+const sparePeople: EntitySnapshot[] = [];
+let lastPeopleTick = -1;
+let lastCivVersion = -1;
+let lastCivProgress = -1;
+let lastCivTime = 0;
 let lastTexTime = 0;
 let texDirty = true;
 let lastSnapTick = -1;
@@ -34,11 +41,11 @@ let speciesCount = 0;
 
 function makeTextures(n: number): RegionTextures {
   const size = (n + 2) * (n + 2) * 6 * 4;
-  return { climate: new Uint8Array(size), vegA: new Uint8Array(size), vegB: new Uint8Array(size), surface: new Uint8Array(size), fx: new Uint8Array(size) };
+  return { climate: new Uint8Array(size), vegA: new Uint8Array(size), vegB: new Uint8Array(size), surface: new Uint8Array(size), fx: new Uint8Array(size), owner: new Uint8Array(size) };
 }
 
-function makeSnapshot(cap: number): EntitySnapshot {
-  return { tick: 0, count: 0, pos: new Float32Array(cap * 3), info: new Uint32Array(cap * 2) };
+function makeSnapshot(cap: number, kind: 'animals' | 'people'): EntitySnapshot {
+  return { kind, tick: 0, count: 0, pos: new Float32Array(cap * 3), info: new Uint32Array(cap * 2) };
 }
 
 function fillTextures(w: World, t: RegionTextures): void {
@@ -48,7 +55,19 @@ function fillTextures(w: World, t: RegionTextures): void {
   packRGBA(pm, t.climate, (c) => (cl.temp[c] + 40) / 80, (c) => cl.meanRain[c] / 4, (c) => cl.snow[c], (c) => cl.cloud[c]);
   packRGBA(pm, t.vegA, (c) => pd[c * 8], (c) => pd[c * 8 + 1], (c) => pd[c * 8 + 2], (c) => pd[c * 8 + 3]);
   packRGBA(pm, t.vegB, (c) => pd[c * 8 + 4], (c) => pd[c * 8 + 5], (c) => pd[c * 8 + 6], (c) => pd[c * 8 + 7]);
-  packRGBA(pm, t.surface, (c) => w.fires.scar[c], (c) => cl.ash[c], () => 0, () => 0);
+  const civ = w.civ;
+  const dev = (c: number) => {
+    const o = civ.owner[c];
+    if (o < 0) return 0;
+    const st = civ.settlements[o];
+    if (!st.alive) return 0;
+    // Development falls off from the settlement centre.
+    const g = w.planet.region;
+    const d = Math.acos(Math.min(1, st.x * g.centers[c * 3] + st.y * g.centers[c * 3 + 1] + st.z * g.centers[c * 3 + 2])) * 1000;
+    return Math.max(0, 1 - d / (st.radius + 10)) * Math.min(1, 0.25 + st.pop / 120);
+  };
+  packRGBA(pm, t.surface, (c) => w.fires.scar[c], (c) => cl.ash[c], () => 0, dev);
+  packRGBA(pm, t.owner, (c) => (civ.owner[c] >= 0 && civ.settlements[civ.owner[c]].alive ? (civ.settlements[civ.owner[c]].tribe + 1) / 255 : 0), (c) => (civ.owner[c] >= 0 ? civ.settlements[civ.owner[c]].tier / 255 : 0), () => 0, () => 0);
   packRGBA(pm, t.fx, (c) => cl.rain[c] * 2, (c) => fogAt(w, c), (c) => w.fires.intensity[c], () => 0);
 }
 
@@ -122,6 +141,46 @@ function fillAnimals(w: World, s: EntitySnapshot): void {
   s.tick = w.tick;
 }
 
+function fillPeople(w: World, s: EntitySnapshot): void {
+  const P = w.civ.people;
+  let n = 0;
+  for (let i = 0; i < P.count; i++) {
+    if (!P.alive[i]) continue;
+    s.pos[n * 3] = P.x[i];
+    s.pos[n * 3 + 1] = P.y[i];
+    s.pos[n * 3 + 2] = P.z[i];
+    const age = P.age[i] < 13 ? 0 : P.age[i] < 60 ? 1 : 2;
+    const packed = (P.state[i] & 31) | ((P.job[i] & 15) << 5) | (((P.carryRes[i] + 1) & 7) << 9) | ((P.tribe[i] & 63) << 12) | (age << 18) | ((P.role[i] & 7) << 20) | ((P.sex[i] & 1) << 23);
+    s.info[n * 2] = P.uid[i];
+    s.info[n * 2 + 1] = packed >>> 0;
+    n++;
+  }
+  s.count = n;
+  s.tick = w.tick;
+}
+
+function civData(w: World): CivData {
+  const civ = w.civ;
+  civ.census();
+  const roads = new Float32Array(civ.roads.length * 7);
+  civ.roads.forEach((r, k) => roads.set([r.ax, r.ay, r.az, r.bx, r.by, r.bz, r.level], k * 7));
+  return {
+    version: civ.version,
+    buildings: civ.buildings.map((b) => ({ id: b.id, type: b.type, x: b.x, y: b.y, z: b.z, rot: b.rot, progress: b.complete ? 1 : b.progress * 0.8 + (b.delivered[1] + b.delivered[2] + b.delivered[3]) / Math.max(1, sumCost(b.type)) * 0.2, complete: b.complete, ruin: b.ruin, age: b.age, style: b.style, tribe: b.tribe, settle: b.settle, growth: b.growth })),
+    roads,
+    settlements: civ.settlements.map((s) => ({ id: s.id, name: s.name, tribe: s.tribe, x: s.x, y: s.y, z: s.z, tier: s.tier, pop: s.pop, alive: s.alive, radius: s.radius, stock: s.stock.map((v) => Math.round(v)), walls: s.walls })),
+    tribes: civ.tribes.map((t) => ({
+      id: t.id, name: t.name, adjective: t.adjective, color: t.color, color2: t.color2, flag: t.flag, alive: t.alive, age: t.age,
+      population: t.population, religion: t.religion.name, deity: t.religion.deity, capital: t.capital, techCount: t.known.reduce((a, b) => a + b, 0),
+    })),
+  };
+}
+
+function sumCost(type: number): number {
+  const c = BUILDING_COSTS[type];
+  return c[1] + c[2] + c[3];
+}
+
 function stepWorld(n: number): void {
   if (!world) return;
   const t0 = performance.now();
@@ -170,6 +229,23 @@ function sendFrame(now: number): void {
     speciesCount = w.animals.defs.length;
     post({ type: 'species', species: speciesInfo(w) });
   }
+  let people: EntitySnapshot | null = null;
+  if (w.tick !== lastPeopleTick && sparePeople.length > 0) {
+    people = sparePeople.pop()!;
+    fillPeople(w, people);
+    transfer.push(people.pos.buffer, people.info.buffer);
+    lastPeopleTick = w.tick;
+  }
+  // Buildings/roads/settlements when they change (and construction progress periodically).
+  let progressSum = 0;
+  for (const b of w.civ.buildings) if (!b.complete) progressSum += b.progress + b.delivered[1] + b.delivered[2];
+  if (w.civ.version !== lastCivVersion || (progressSum !== lastCivProgress && now - lastCivTime > 400)) {
+    lastCivVersion = w.civ.version;
+    lastCivProgress = progressSum;
+    lastCivTime = now;
+    const civ = civData(w);
+    post({ type: 'civ', civ }, [civ.roads.buffer]);
+  }
   const strikes = w.weather.strikeLog.splice(0);
   const frame: FrameData = {
     header: { tick: w.tick, tps, simMs: simMsAvg, speed, paused },
@@ -177,7 +253,10 @@ function sendFrame(now: number): void {
     strikes,
     events: w.events.drain(),
     animals,
+    people,
     stats,
+    devotion: w.civ.devotion,
+    devotionRate: w.civ.devotionRate,
   };
   post({ type: 'frame', frame }, transfer);
 }
@@ -215,7 +294,7 @@ function sendTextures(): void {
   fillTextures(world, t);
   lastTexTime = performance.now();
   texDirty = false;
-  post({ type: 'textures', tex: t, tick: world.tick }, [t.climate.buffer, t.vegA.buffer, t.vegB.buffer, t.surface.buffer, t.fx.buffer]);
+  post({ type: 'textures', tex: t, tick: world.tick }, [t.climate.buffer, t.vegA.buffer, t.vegB.buffer, t.surface.buffer, t.fx.buffer, t.owner.buffer]);
 }
 
 ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
@@ -228,7 +307,10 @@ ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
         spareTextures.length = 0;
         spareTextures.push(makeTextures(world.planet.region.n), makeTextures(world.planet.region.n));
         spareSnaps.length = 0;
-        for (let i = 0; i < 3; i++) spareSnaps.push(makeSnapshot(world.animals.cap));
+        for (let i = 0; i < 3; i++) spareSnaps.push(makeSnapshot(world.animals.cap, 'animals'));
+        sparePeople.length = 0;
+        for (let i = 0; i < 3; i++) sparePeople.push(makeSnapshot(world.civ.people.cap, 'people'));
+        lastCivVersion = -1;
         speciesCount = world.animals.defs.length;
         const { data, transfer } = staticData(world);
         post({ type: 'ready', data }, transfer);
@@ -242,6 +324,10 @@ ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
         break;
       case 'advance': {
         stepWorld(msg.ticks);
+        // Flush a frame first so the main thread has fresh entities/civ state
+        // by the time the advance promise resolves.
+        lastCivTime = 0;
+        sendFrame(performance.now());
         post({ type: 'advanced', id: msg.id, tick: world ? world.tick : 0 });
         if (spareTextures.length > 0) sendTextures();
         break;
@@ -253,7 +339,8 @@ ctx.onmessage = (e: MessageEvent<MainToWorker>) => {
         spareTextures.push(msg.tex);
         break;
       case 'returnSnapshot':
-        spareSnaps.push(msg.snap);
+        if (msg.snap.kind === 'people') sparePeople.push(msg.snap);
+        else spareSnaps.push(msg.snap);
         break;
     }
   } catch (err) {

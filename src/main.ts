@@ -38,6 +38,7 @@ sim.onReady = (data) => {
   loading.setStage('Lighting the sky', 0.95);
   renderer.init(data);
   resize();
+  if (sim.civ) sim.onCiv(sim.civ);
   loading.done();
   readyResolve();
   sim.setSpeed(1, params.get('harness') === '1');
@@ -46,6 +47,12 @@ sim.onTextures = (tex) => {
   if (renderer.ready) renderer.data.updateRegion(tex);
 };
 sim.onAnimals = (snap) => (renderer.ready ? renderer.creatures.pushSnapshot(snap) : snap);
+sim.onPeople = (snap) => (renderer.ready ? renderer.people.pushSnapshot(snap) : snap);
+sim.onCiv = (civ) => {
+  if (!renderer.ready) return;
+  renderer.buildings.sync(civ, renderer.data);
+  renderer.people.tribes = civ.tribes;
+};
 sim.onFrame = (f) => {
   if (!renderer.ready) return;
   renderer.setStorms(f.storms);

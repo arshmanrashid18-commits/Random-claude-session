@@ -33,7 +33,7 @@ const DEFAULT_SHOTS = [
   { name: 'aurora', view: 'aurora' },
   { name: 'storm', view: 'storm' },
   { name: 'wildlife', view: 'wildlife', advance: 60 },
-  { name: 'village', view: 'village' },
+  { name: 'village', view: 'village', advance: 2880 },
   { name: 'volcano', view: 'volcano' },
 ];
 const only = args.only ? args.only.split(',') : null;

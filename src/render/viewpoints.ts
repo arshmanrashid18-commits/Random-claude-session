@@ -152,7 +152,16 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
       const f = r.creatures.densestSpot() ?? findBest(r, (_d, h) => (h > 2 ? 1 : 0), 400);
       return { focus: f, distance: 34, heading: 1.8, tiltOffset: 0.0, localTime: 0.4 };
     }
-    case 'village':
+    case 'village': {
+      const civ = r.buildings.latest;
+      const best = civ?.settlements.filter((st) => st.alive).sort((a, b) => b.pop - a.pop)[0];
+      if (best) {
+        const f = new THREE.Vector3(best.x, best.y, best.z).normalize();
+        return { focus: f, distance: 36 + best.radius * 0.9, heading: 2.4, tiltOffset: 0.05, localTime: 0.37 };
+      }
+      const f = findBest(r, (d, h) => (h > 2 ? 1 : 0) - Math.abs(d.y), 800);
+      return { focus: f, distance: 120, heading: 0.5, tiltOffset: 0, localTime: 0.4 };
+    }
     case 'volcano':
     default: {
       const f = findBest(r, (d, h) => (h > 2 ? 1 : 0) - Math.abs(d.y), 800);
