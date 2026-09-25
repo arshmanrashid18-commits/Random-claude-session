@@ -142,7 +142,16 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
       return { focus: f, distance: 30, heading: 0.9, tiltOffset: -0.12, localTime: 0.36 };
     }
     case 'night': {
-      const f = findBest(r, (d, h) => (h > 0 ? 1 : 0) - Math.abs(d.y) * 0.5 + relief(r, d, 0.1) * 0.01, 1500);
+      // Where the peoples live, so their lights show.
+      const sets = r.buildings.latest?.settlements.filter((st) => st.alive) ?? [];
+      const f = findBest(r, (d, h) => {
+        let lights = 0;
+        for (const st of sets) {
+          const c = d.x * st.x + d.y * st.y + d.z * st.z;
+          if (c > 0.6) lights += st.pop * Math.exp(-(1 - c) * 12);
+        }
+        return (h > 0 ? 1 : 0) - Math.abs(d.y) * 0.5 + relief(r, d, 0.1) * 0.01 + lights * 0.02;
+      }, 1500);
       return { focus: f, distance: 1700, heading: 0.3, tiltOffset: 0.25, localTime: 0.02 };
     }
     case 'aurora': {
@@ -158,7 +167,7 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
     }
     case 'wildlife': {
       const f = r.creatures.densestSpot() ?? findBest(r, (_d, h) => (h > 2 ? 1 : 0), 400);
-      return { focus: f, distance: 34, heading: 1.8, tiltOffset: 0.0, localTime: 0.4 };
+      return { focus: f, distance: 34, heading: 1.8, tiltOffset: 0.0, localTime: 0.47 };
     }
     case 'village': {
       const civ = r.buildings.latest;
@@ -173,7 +182,7 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
     case 'volcano': {
       // An erupting volcano (divine or otherwise), framed at dusk for the glow.
       const v = r.effects.find((e) => e.power === 'volcano');
-      if (v) return { focus: new THREE.Vector3(v.x, v.y, v.z).normalize(), distance: 150, heading: 2.6, tiltOffset: 0.02, localTime: 0.76 };
+      if (v) return { focus: new THREE.Vector3(v.x, v.y, v.z).normalize(), distance: 170, heading: 2.6, tiltOffset: 0.35, localTime: 0.68 };
       const f = findBest(r, (d, h) => (h > 2 ? 1 : 0) - Math.abs(d.y), 800);
       return { focus: f, distance: 120, heading: 0.5, tiltOffset: 0, localTime: 0.4 };
     }

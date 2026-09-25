@@ -80,3 +80,33 @@ Each entry: decision — why.
     world is rebuilt from the save before the worker starts); the monkey harness waits for
     the new page instead of counting the navigation as a failure. Console errors on either
     page still fail it.
+28. **Two life-years per world year.** A world year is one seasonal cycle (4 min at 1×).
+    With one life-year per world year a generation took the whole first hour, so
+    settlements stayed child-heavy villages. People now age two years per world year
+    (mortality scaled to match), so villages become towns in ~20 world years and cities
+    within a long session. Seasons, crops and weather keep their own clock.
+29. **Marriages cross settlements.** Small bands exhaust their marriage market quickly
+    (and founders with unknown mothers were wrongly treated as siblings). A woman with no
+    match at home is betrothed to a single man of a sister settlement, who walks there
+    along a real path.
+30. **Diplomacy has temperament.** Each pair of peoples gets a fixed cultural affinity at
+    first contact (±0.4) so relations polarise into friends and rivals; seafaring peoples
+    make contact further away. Before, relations hovered near zero and neither pacts nor
+    wars ever triggered.
+31. **Armies march on their stomachs.** Campaigns cross hundreds of units, so soldiers
+    carry provisions (armies are only as large as the stores can feed), forage on the way,
+    force-march at 1.5×, rejoin their column after fleeing fire, and may sail if the
+    attacker knows sailing and both towns are coastal. Unreachable campaigns give up.
+32. **Plague has provenance.** Crowded towns without sanitation breed outbreaks; sick
+    traders, pilgrims and refugees carry them on. The chronicle names the carrier and the
+    town it came from.
+33. **Research grows sub-linearly with population** (adults^0.75) so large peoples do not
+    exhaust the tech tree within a session.
+34. **Scenarios must not be won by idling.** Each scenario is checked with a scripted
+    winning strategy, a losing strategy and doing nothing; objectives were retuned until
+    idling loses (The Long Drought's rains fail every year; Two Faiths' peace only holds
+    under a divine truce; First Flame needs Bronze within 12 years; The Chosen need a
+    settlement of 100 within 25 years).
+35. **The god can see at night.** Sky ambient gains a phase-weighted cool moonlight so the
+    night side reads as a moonlit world rather than a black disc; the lens flare is
+    occluded by the planet.

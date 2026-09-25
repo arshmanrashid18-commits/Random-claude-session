@@ -252,6 +252,9 @@ export class PeopleRenderer {
     this.arr = arr;
     this.cap = cap;
     this.buf = new THREE.InstancedInterleavedBuffer(arr, STRIDE, 1).setUsage(THREE.DynamicDrawUsage);
+    // Growing instance buffers: dispose first so three.js forgets the cached
+    // drawable instance count (it is computed once per geometry).
+    this.geo.dispose();
     this.geo.setAttribute('aDir', new THREE.InterleavedBufferAttribute(this.buf, 3, 0));
     this.geo.setAttribute('aMotion', new THREE.InterleavedBufferAttribute(this.buf, 4, 3));
     this.geo.setAttribute('aLook', new THREE.InterleavedBufferAttribute(this.buf, 4, 7));

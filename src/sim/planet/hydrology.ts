@@ -210,6 +210,9 @@ export class Hydrology {
           const nb = g.neighbors[cur * 8 + k];
           if (this.lakeId[nb] !== -1 || this.h[nb] < 0) continue;
           if (this.filled[nb] - this.h[nb] < 0.05) continue;
+          // A chain of basins stepping down a valley is several lakes, each
+          // at its own spill level — not one sheet at the highest level.
+          if (Math.abs(this.filled[nb] - this.filled[cur]) > 0.02) continue;
           this.lakeId[nb] = id;
           stack.push(nb);
         }

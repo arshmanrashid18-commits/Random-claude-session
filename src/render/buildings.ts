@@ -584,6 +584,9 @@ export class BuildingsRenderer {
     while (cap < n) cap *= 2;
     bt.arr = new Float32Array(cap * STRIDE);
     bt.buf = new THREE.InstancedInterleavedBuffer(bt.arr, STRIDE, 1).setUsage(THREE.DynamicDrawUsage);
+    // Growing instance buffers: dispose first so three.js forgets the cached
+    // drawable instance count (it is computed once per geometry).
+    bt.geo.dispose();
     bt.geo.setAttribute('aDir', new THREE.InterleavedBufferAttribute(bt.buf, 3, 0));
     bt.geo.setAttribute('aInst', new THREE.InterleavedBufferAttribute(bt.buf, 4, 3));
     bt.geo.setAttribute('aCol', new THREE.InterleavedBufferAttribute(bt.buf, 2, 7));
@@ -635,6 +638,7 @@ export class BuildingsRenderer {
     if (this.fieldArr.length < fields.length * 7) {
       this.fieldArr = new Float32Array(Math.max(16, fields.length * 2) * 7);
       this.fieldBuf = new THREE.InstancedInterleavedBuffer(this.fieldArr, 7, 1).setUsage(THREE.DynamicDrawUsage);
+      this.fieldGeo.dispose(); // forget the cached instance count (see ensure())
       this.fieldGeo.setAttribute('aDir', new THREE.InterleavedBufferAttribute(this.fieldBuf, 3, 0));
       this.fieldGeo.setAttribute('aInst', new THREE.InterleavedBufferAttribute(this.fieldBuf, 4, 3));
     }
@@ -653,6 +657,7 @@ export class BuildingsRenderer {
     if (this.scaffoldArr.length < scaff.length * 7 || this.scaffoldArr.length === 0) {
       this.scaffoldArr = new Float32Array(Math.max(16, scaff.length * 2) * 7);
       const buf = new THREE.InstancedInterleavedBuffer(this.scaffoldArr, 7, 1).setUsage(THREE.DynamicDrawUsage);
+      this.scaffoldGeo.dispose(); // forget the cached instance count (see ensure())
       this.scaffoldGeo.setAttribute('aDir', new THREE.InterleavedBufferAttribute(buf, 3, 0));
       this.scaffoldGeo.setAttribute('aInst', new THREE.InterleavedBufferAttribute(buf, 4, 3));
     }

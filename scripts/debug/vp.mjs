@@ -4,7 +4,7 @@ import { createServer } from 'vite';
 const ids = (process.argv[2] ?? 'forest').split(',');
 const server = await createServer({ server: { port: 0, host: '127.0.0.1', hmr: false, watch: { ignored: ['**/*'] } }, logLevel: 'error' });
 await server.listen();
-const url = `http://127.0.0.1:${server.httpServer.address().port}/?harness=1&seed=20260925&quality=low`;
+const url = `http://127.0.0.1:${server.httpServer.address().port}/?harness=1&seed=20260925&quality=${process.env.Q ?? "low"}`;
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-gl=angle', '--disable-gpu-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
 page.setDefaultTimeout(300_000);
@@ -33,9 +33,14 @@ for (const id of ids) {
       const t = d.sampleRegion(d.vegACPU, f, a, b, 2) + d.sampleRegion(d.vegACPU, f, a, b, 3) + d.sampleRegion(d.vegBCPU, f, a, b, 0);
       if (t > best) best = t;
     }
-    return { veg, bestTrees: best, id, focus0: f0.toArray().map((x) => +x.toFixed(4)), focus: c.focus.toArray().map((x) => +x.toFixed(4)), dist: c.distance, tilt: c.tiltOffset, vegCount: R.vegetation.count, h: d.heightAt(c.focus.x, c.focus.y, c.focus.z) };
+    const V = R.vegetation;
+    const counts = V.geos.map((g) => g.instanceCount);
+    return { counts, budget: V.budget, veg, bestTrees: best, id, focus0: f0.toArray().map((x) => +x.toFixed(4)), focus: c.focus.toArray().map((x) => +x.toFixed(4)), dist: c.distance, tilt: c.tiltOffset, vegCount: R.vegetation.count, h: d.heightAt(c.focus.x, c.focus.y, c.focus.z) };
   }, id);
   console.log(JSON.stringify(r));
+  await page.evaluate(() => window.__genesis.hud(false));
+  if (process.env.NOTERRAIN) await page.evaluate(async () => { window.__genesis.game.renderer.terrain.terrainMesh.visible = false; await window.__genesis.renderFrames(2); });
+  await page.screenshot({ path: `/tmp/claude-0/vp-${id}.png` });
 }
 await browser.close();
 await server.close();

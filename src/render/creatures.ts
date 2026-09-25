@@ -346,6 +346,9 @@ export class Creatures {
 
   private allocate(plan: string, cap: number): void {
     const geo = this.geos.get(plan)!;
+    // Growing instance buffers: dispose first so three.js forgets the cached
+    // drawable instance count (it is computed once per geometry).
+    geo.dispose();
     const arr = new Float32Array(cap * STRIDE);
     const buf = new THREE.InstancedInterleavedBuffer(arr, STRIDE, 1).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aDir', new THREE.InterleavedBufferAttribute(buf, 3, 0));

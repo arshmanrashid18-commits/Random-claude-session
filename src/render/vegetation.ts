@@ -18,6 +18,8 @@ import { hash4 } from '../core/rng';
 import { groundHeight } from './groundHeight';
 import type { PlanetData } from './planet/planetData';
 import { DEPTH_FS, type SharedUniforms } from './planet/terrain';
+import type { CivData } from '../worker/protocol';
+import { BType, BUILDINGS } from '../sim/civ/defs';
 
 export const VEG_TYPES = ['broadleaf', 'conifer', 'palm', 'cactus', 'bush', 'snag', 'rock', 'reeds', 'birch'] as const;
 export type VegType = (typeof VEG_TYPES)[number];
@@ -263,7 +265,16 @@ export class Vegetation {
     while (cap < n) cap *= 2;
     const arr = new Float32Array(cap * STRIDE);
     const buf = new THREE.InstancedInterleavedBuffer(arr, STRIDE, 1).setUsage(THREE.DynamicDrawUsage);
-    const geo = this.geos[i];
+    // A fresh geometry: three.js caches the drawable instance count per
+    // geometry, so growing the buffers in place would keep drawing only the
+    // old capacity.
+    const old = this.geos[i];
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.index = old.index;
+    for (const name of ['position', 'normal', 'color', 'aSway']) geo.setAttribute(name, old.getAttribute(name));
+    this.meshes[i].geometry = geo;
+    old.dispose();
+    this.geos[i] = geo;
     geo.setAttribute('aDir', new THREE.InterleavedBufferAttribute(buf, 3, 0));
     geo.setAttribute('aGround', new THREE.InterleavedBufferAttribute(buf, 1, 3));
     geo.setAttribute('aXf', new THREE.InterleavedBufferAttribute(buf, 2, 4));
@@ -282,6 +293,33 @@ export class Vegetation {
   invalidate(): void {
     this.invalid = true;
   }
+
+  /** Ground cleared by people: settlement cores, building plots and fields (x,y,z unit dir, r world units). */
+  private clearings: Float32Array = new Float32Array(0);
+  private clearCount = 0;
+  private near: number[] = [];
+  private civVersion = -1;
+  setClearings(civ: CivData): void {
+    if (civ.version === this.civVersion) return;
+    this.civVersion = civ.version;
+    const n = civ.settlements.length + civ.buildings.length;
+    if (this.clearings.length < n * 4) this.clearings = new Float32Array(n * 4 + 256);
+    let k = 0;
+    const c = this.clearings;
+    for (const st of civ.settlements) {
+      if (!st.alive) continue;
+      c[k * 4] = st.x; c[k * 4 + 1] = st.y; c[k * 4 + 2] = st.z; c[k * 4 + 3] = 10 + st.radius * 0.35; k++;
+    }
+    for (const b of civ.buildings) {
+      if (b.ruin) continue;
+      const l = Math.hypot(b.x, b.y, b.z) || 1;
+      c[k * 4] = b.x / l; c[k * 4 + 1] = b.y / l; c[k * 4 + 2] = b.z / l;
+      c[k * 4 + 3] = BUILDINGS[b.type].radius * (b.type === BType.Farm ? 1.15 : 1.6) + 1.2; k++;
+    }
+    this.clearCount = k;
+    this.clearDirty = true;
+  }
+  private clearDirty = false;
 
   /** Lake surface level per hydro cell (NaN where there is no lake). */
   private lakeLevel: Float32Array | null = null;
@@ -312,16 +350,25 @@ export class Vegetation {
     this.material.uniforms.uVegFar.value = radius;
     const moved = focus.angleTo(this.lastFocus) * PLANET_RADIUS;
     const needs = force || moved > radius * 0.12 || Math.abs(radius - this.lastRadius) > this.lastRadius * 0.25 ||
-      (data.regionVersion !== this.lastVersion && now - this.lastBuild > 3000);
+      (data.regionVersion !== this.lastVersion && now - this.lastBuild > 3000) || (this.clearDirty && now - this.lastBuild > 1000);
     if (!needs || (!force && now - this.lastBuild < 250)) return;
     this.lastBuild = now;
     this.lastFocus.copy(focus);
     this.lastRadius = radius;
     this.lastVersion = data.regionVersion;
+    this.clearDirty = false;
     this.rebuild(focus, radius, data);
   }
 
   private rebuild(focus: THREE.Vector3, radius: number, data: PlanetData): void {
+    // Clearings that can matter for this rebuild.
+    this.near.length = 0;
+    const cr = this.clearings;
+    for (let k = 0; k < this.clearCount; k++) {
+      const dx = cr[k * 4] - focus.x / focus.length(), dy = cr[k * 4 + 1] - focus.y / focus.length(), dz = cr[k * 4 + 2] - focus.z / focus.length();
+      const lim = (radius + cr[k * 4 + 3]) / PLANET_RADIUS;
+      if (dx * dx + dy * dy + dz * dz < lim * lim) this.near.push(k);
+    }
     const n = data.n;
     const cellWorld = ((Math.PI / 2) * PLANET_RADIUS) / n;
     const win = Math.ceil(radius / cellWorld) + 2;
@@ -355,10 +402,9 @@ export class Vegetation {
         }
       }
     }
-    if (cands.length > this.budget) {
-      cands.sort((p, q) => p.dist - q.dist);
-      cands.length = this.budget;
-    }
+    // Nearest first, so any truncation always drops the farthest plants.
+    cands.sort((p, q) => p.dist - q.dist);
+    if (cands.length > this.budget) cands.length = this.budget;
     const counts = new Array(VEG_TYPES.length).fill(0);
     for (const c of cands) counts[c.type]++;
     counts.forEach((cnt, i) => this.ensureCapacity(i, cnt));
@@ -430,6 +476,15 @@ export class Vegetation {
     const x = d[0], y = d[1], z = d[2];
     const h = groundHeight(heights, data.n, x, y, z);
     if (h < -0.2 && type !== 7 && type !== 6) return;
+    // People clear their ground: no trees or bushes in villages, plots and fields.
+    if (type !== 6 && type !== 7) {
+      const cr = this.clearings;
+      for (const k of this.near) {
+        const dx = cr[k * 4] - x, dy = cr[k * 4 + 1] - y, dz = cr[k * 4 + 2] - z;
+        const rr = cr[k * 4 + 3] / PLANET_RADIUS;
+        if (dx * dx + dy * dy + dz * dz < rr * rr) return;
+      }
+    }
     // Nothing grows under a lake; only reeds stand in its shallows.
     const lake = this.lakeAt(face, a, b);
     if (lake === lake && h < lake + 0.4 && !(type === 7 && h > lake - 0.6)) return;

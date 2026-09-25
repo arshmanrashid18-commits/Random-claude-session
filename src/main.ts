@@ -156,6 +156,7 @@ sim.onPeople = (snap) => (renderer.ready ? renderer.people.pushSnapshot(snap) : 
 sim.onCiv = (civ) => {
   if (!renderer.ready) return;
   renderer.buildings.sync(civ, renderer.data);
+  renderer.vegetation.setClearings(civ);
   renderer.setTribes(civ.tribes);
   game.onCiv(civ);
 };

@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import { createServer } from 'vite';
 const server = await createServer({ server: { port: 0, host: '127.0.0.1', hmr: false, watch: { ignored: ['**/*'] } }, logLevel: 'error', root: '/home/user/Random-claude-session' });
 await server.listen();
-const url = `http://127.0.0.1:${server.httpServer.address().port}/?harness=1&quality=low`;
+const url = `http://127.0.0.1:${server.httpServer.address().port}/?harness=1&quality=${process.env.Q ?? "low"}`;
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--use-gl=angle'] });
 const page = await browser.newPage({ viewport: { width: 320, height: 200 } });
 page.setDefaultTimeout(300000);

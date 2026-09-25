@@ -303,8 +303,10 @@ void main() {
       result = inscatter * uSunIntensity + behind;
     }
   }
-  if (uRainbow > 0.001 && rd.y * 0.0 + dot(rd, uSunDir) < 0.0) {
-    float reach = sky ? 1.0 : clamp(sceneDist / 180.0, 0.0, 1.0);
+  // Rainbows belong to observers inside the rain, never to the view from orbit.
+  float rbAlt = 1.0 - smoothstep(160.0, 320.0, length(uCamPos) - PLANET_R);
+  if (uRainbow * rbAlt > 0.001 && dot(rd, uSunDir) < 0.0) {
+    float reach = (sky ? 1.0 : clamp(sceneDist / 180.0, 0.0, 1.0)) * rbAlt;
     result += rainbow(rd) * uRainbow * reach * uSunIntensity * 0.035;
   }
   outColor = vec4(result, 1.0);

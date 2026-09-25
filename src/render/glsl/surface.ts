@@ -68,7 +68,9 @@ float cloudDensity(vec3 p, float lod) {
   vec3 warp = vec3(a0 - 0.5, a1 - 0.5, a2 - a0) * (0.7 + swirl * 0.8);
   vec3 q = vec3(p.x, p.y * 1.7, p.z) * 0.0044 + warp + uCloudWind * uTime;
   vec4 n = texture(uCloudNoise, q);
-  float base = n.r * 0.65 + n.g * 0.35;
+  // A mid-scale field breaks the periodic cell lattice under heavy cover.
+  float mid = texture(uCloudNoise, q * 0.27 + vec3(0.13, 0.57, 0.31)).a;
+  float base = (n.r * 0.65 + n.g * 0.35) * (0.62 + 0.7 * mid);
   // Height profile: flat-ish bases, rounded tops; storms tower.
   float prof = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(mix(0.45, 1.0, cov), 1.0, hf));
   float d = remap(base * prof, 1.0 - cov * 0.92, 1.0, 0.0, 1.0);

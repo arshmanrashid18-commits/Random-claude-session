@@ -29,10 +29,10 @@ const DEFAULT_SHOTS = [
   { name: 'mountains', view: 'mountains' },
   { name: 'forest', view: 'forest' },
   { name: 'ground', view: 'ground' },
-  { name: 'night', view: 'night' },
   { name: 'aurora', view: 'aurora' },
   { name: 'wildlife', view: 'wildlife', advance: 60 },
   { name: 'village', view: 'village', advance: 9600 },
+  { name: 'night', view: 'night' },
   { name: 'storm', view: 'storm', waitFor: 'hurricane' },
   { name: 'volcano', view: 'volcano', erupt: true },
 ];
@@ -97,7 +97,9 @@ for (const s of shots) {
       await g.command({ kind: 'power', power: 'volcano', x: f.x, y: f.y, z: f.z });
     });
     await page.evaluate(() => window.__genesis.advance(70));
-    await page.evaluate(() => window.__genesis.renderFrames(2));
+    // Let the plume, ash and lava particles build up.
+    await page.evaluate((v) => window.__genesis.view(v), 'volcano');
+    await page.evaluate(() => window.__genesis.renderFrames(30));
   }
   await page.evaluate((v) => { window.__genesis.view(v); window.__genesis.setTime(12.5); }, s.view);
   await page.evaluate(() => window.__genesis.renderFrames(4));

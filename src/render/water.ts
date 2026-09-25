@@ -131,36 +131,60 @@ export class WaterBodies {
   rebuild(world: StaticWorldData, data: PlanetData): void {
     if (this.lakeMesh) { this.group.remove(this.lakeMesh); this.lakeMesh.geometry.dispose(); }
     if (this.riverMesh) { this.group.remove(this.riverMesh); this.riverMesh.geometry.dispose(); }
-    this.lakeMesh = this.buildLakes(world);
+    this.lakeMesh = this.buildLakes(world, data);
     this.riverMesh = this.buildRivers(world, data);
     if (this.lakeMesh) this.group.add(this.lakeMesh);
     if (this.riverMesh) this.group.add(this.riverMesh);
   }
 
-  private buildLakes(world: StaticWorldData): THREE.Mesh | null {
+  private buildLakes(world: StaticWorldData, data: PlanetData): THREE.Mesh | null {
     const { cells, levels } = world.lakes;
     if (cells.length === 0) return null;
     const n = world.hydroN;
     const fs = n * n;
-    const pos = new Float32Array(cells.length * 4 * 3);
-    const lvl = new Float32Array(cells.length * 4);
-    const idx: number[] = [];
-    const d = [0, 0, 0];
-    const half = (1 / n) * 1.45;
+    // Edge-exact quads (no overlap, so no double blending) plus a rim of one
+    // cell around each lake at its level: hidden under higher ground, it
+    // fills the gaps where the shore dips between coarse cells.
+    const level = new Map<number, number>();
+    for (let k = 0; k < cells.length; k++) level.set(cells[k], levels[k]);
+    const rim = new Map<number, number>();
+    const dr = [0, 0, 0];
     for (let k = 0; k < cells.length; k++) {
       const c = cells[k];
+      const f = Math.floor(c / fs), rem = c - f * fs;
+      const j = Math.floor(rem / n), i = rem - j * n;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const ii = i + di, jj = j + dj;
+        if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+        const nb = f * fs + jj * n + ii;
+        if (level.has(nb)) continue;
+        // Only shore that is about as high as the water: never a plate
+        // floating over lower ground (e.g. the next basin down a valley).
+        faceABToDir(f, -1 + (2 * ii + 1) / n, -1 + (2 * jj + 1) / n, dr, 0);
+        if (data.heightAt(dr[0], dr[1], dr[2]) < levels[k] - 0.4) continue;
+        rim.set(nb, Math.max(rim.get(nb) ?? -Infinity, levels[k]));
+      }
+    }
+    const all: [number, number][] = [...level.entries(), ...rim.entries()];
+    const pos = new Float32Array(all.length * 4 * 3);
+    const lvl = new Float32Array(all.length * 4);
+    const idx: number[] = [];
+    const d = [0, 0, 0];
+    const half = 1 / n;
+    const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+    for (let k = 0; k < all.length; k++) {
+      const [c, lv] = all[k];
       const f = Math.floor(c / fs);
       const rem = c - f * fs;
       const j = Math.floor(rem / n), i = rem - j * n;
       const ca = -1 + (2 * i + 1) / n, cb = -1 + (2 * j + 1) / n;
-      const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
-      const r = PLANET_RADIUS + levels[k];
+      const r = PLANET_RADIUS + lv;
       for (let q = 0; q < 4; q++) {
         faceABToDir(f, ca + corners[q][0] * half, cb + corners[q][1] * half, d, 0);
         pos[(k * 4 + q) * 3] = d[0] * r;
         pos[(k * 4 + q) * 3 + 1] = d[1] * r;
         pos[(k * 4 + q) * 3 + 2] = d[2] * r;
-        lvl[k * 4 + q] = levels[k];
+        lvl[k * 4 + q] = lv;
       }
       const b = k * 4;
       idx.push(b, b + 1, b + 3, b, b + 3, b + 2);

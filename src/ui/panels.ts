@@ -58,6 +58,43 @@ export class Modal {
 }
 
 // ------------------------------------------------------------------ chronicle
+/** Weather that recurs across many lands in one year reads as one sentence. */
+const MERGE: Record<string, (places: string) => string> = {
+  drought: (p) => `Drought grips ${p}.`,
+  'drought-end': (p) => `The droughts over ${p} break.`,
+  wildfire: (p) => `Wildfires sweep across ${p}.`,
+  blizzard: () => 'Blizzards howl across the high latitudes.',
+};
+
+function placeList(names: string[]): string {
+  const u = [...new Set(names.filter(Boolean))];
+  if (u.length === 0) return 'many lands';
+  if (u.length === 1) return u[0];
+  if (u.length <= 4) return `${u.slice(0, -1).join(', ')} and ${u[u.length - 1]}`;
+  return `${u.slice(0, 3).join(', ')} and ${u.length - 3} other lands`;
+}
+
+function mergeYear(list: GameEvent[]): { id: number; importance: number; text: string }[] {
+  const out: { id: number; importance: number; text: string }[] = [];
+  const groups = new Map<string, GameEvent[]>();
+  for (const e of list) {
+    const mergeable = MERGE[e.kind] && !(e.kind === 'drought' && e.data.divine);
+    if (!mergeable) {
+      const n = narrate(e);
+      out.push({ id: e.id, importance: e.importance, text: n.text || n.title });
+      continue;
+    }
+    if (!groups.has(e.kind)) groups.set(e.kind, []);
+    groups.get(e.kind)!.push(e);
+  }
+  for (const [kind, g] of groups) {
+    if (g.length === 1) { const n = narrate(g[0]); out.push({ id: g[0].id, importance: g[0].importance, text: n.text || n.title }); continue; }
+    const places = g.map((e) => String(e.data.continent ?? e.data.where ?? ''));
+    out.push({ id: g[0].id, importance: Math.max(...g.map((e) => e.importance)), text: MERGE[kind](placeList(places)) });
+  }
+  return out;
+}
+
 export class ChroniclePanel extends Modal {
   events: GameEvent[] = [];
   onGoto: (e: GameEvent) => void = () => {};
@@ -97,9 +134,8 @@ export class ChroniclePanel extends Modal {
       const years = new Map<number, GameEvent[]>();
       for (const e of list) { const y = yearOfTick(e.tick); if (!years.has(y)) years.set(y, []); years.get(y)!.push(e); }
       for (const y of [...years.keys()].sort((a, b) => b - a)) {
-        const sentences = years.get(y)!.sort((a, b) => b.importance - a.importance).slice(0, 8).map((e) => {
-          const n = narrate(e);
-          return `<span class="e" data-ev="${e.id}">${esc(n.text || n.title)}</span>`;
+        const sentences = mergeYear(years.get(y)!).sort((a, b) => b.importance - a.importance).slice(0, 8).map((m) => {
+          return `<span class="e" data-ev="${m.id}">${esc(m.text)}</span>`;
         });
         html += `<p><b style="color:var(--gold)">Year ${y}.</b> ${sentences.join(' ')}</p>`;
       }

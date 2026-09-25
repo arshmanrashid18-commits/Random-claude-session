@@ -327,8 +327,10 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   // Whitecaps: streaky, only under strong storm winds.
   float windy = smoothstep(0.55, 0.9, storm);
   if (windy > 0.0) {
-    float caps = smoothstep(0.72, 0.95, snoise(vec3(wp.x * 0.12, wp.y * 0.5, wp.z * 0.12) + uTime * 0.3));
-    foam = max(foam, caps * windy * 0.6 * (1.0 - smoothstep(150.0, 800.0, dist)));
+    // Wind-torn foam: thin broken streaks, not blobs.
+    float caps = smoothstep(0.78, 0.97, snoise(vec3(wp.x * 0.22, wp.y * 0.9, wp.z * 0.22) + uTime * 0.3));
+    caps *= smoothstep(0.1, 0.8, snoise(wp * 1.3 + uTime * 0.5) * 0.5 + 0.5);
+    foam = max(foam, caps * windy * 0.4 * (1.0 - smoothstep(150.0, 800.0, dist)));
   }
   vec3 foamCol = vec3(0.9, 0.95, 1.0) * (sunCol * max(mu, 0.0) * 0.3 + skyAmbient(dir, dir, L) * uSunIntensity * 0.06);
   vec3 col = bodyLit * alpha + refl * fres + spec;
