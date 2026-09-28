@@ -143,6 +143,39 @@ dispositions:
 
 Pass 5 below re-scores after these fixes, with the same reviewer brief.
 
+## Pass 5 — second adversarial review
+
+Same reviewer brief, fresh agent, no knowledge of what changed. Scores barely moved:
+
+| Category | Pass 4 review | Pass 5 review |
+|---|---|---|
+| Visual beauty | 5 | 5 |
+| Visual coherence | 4 | 3 |
+| Polish / juice (visible) | 4 | 4 |
+| First-impression wow | 4 | 4 |
+
+Its verdict: "from orbit pleasant; at mid and ground zoom a good hobby or jam project,
+not a studio". The Pass 4 fixes removed the bugs it had named (no finding repeated
+verbatim), but the reviewer's core objection is the art itself: a near-photographic globe
+beside chunky toy props, and a bleached palette. Findings and dispositions:
+
+| Finding | Verdict | Fix |
+|---|---|---|
+| River a milky double ribbon over the village | real | ribbon no wider than its channel, optically deeper |
+| Starfield over sunlit ground; rainbow across space; rainbow over near foliage | real | sky glow above the horizon for low cameras; rainbows only against a bright sky or distant land |
+| Bleached sand everywhere; mountains read as dunes | real | grass at moderate moisture, gravel on dry uplands, rock in the art direction's greys |
+| Volcano: blown-out snow; straight-edged "ice sheets"; square smoke; pixel checker lava | real | snow albedo lowered; lake fringes fade toward their outer side; smoke windowed; veins thinner |
+| Meteor: crater a flat teal disc; fires as cones | partly | distant fires now soft glows; the disc is the crater lake the hydrology fills (kept) |
+| Night side grey-olive; one light cluster; aurora a flat squiggle | real | half the moonlight; a floor on distant town lights; taller curtains |
+| Green/magenta flecks at the limb; dark ring round the planet | real / physical | flecks were aurora curtains edge-on against space → faded for far cameras; the ring is the atmosphere's extinction of starlight (kept) |
+| Chronicle under the power bar; inspector showing through; ragged header; black cooldown square | real | modal placement, opaque panels, header layout, lighter cooldown sweep |
+| Lake white outline; reeds and fences aliasing | real / limit | faint lake lap instead of an outline; thin geometry aliasing is a limit of FXAA on SwiftShader |
+| Hurricane like a "6" | seed | two hurricanes spinning side by side in this world at that moment (kept) |
+| Roofs uniform straw, no banners | real | hut apex caps and house pennants in the people's colour |
+| Title "S" collides with the planet | real | planet framed right of the wordmark |
+
+Pass 6 re-scores after these fixes.
+
 ## Delight pass
 
 Small touches nobody asked for, each verified in a screenshot or in play:

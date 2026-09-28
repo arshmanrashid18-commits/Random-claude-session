@@ -352,7 +352,11 @@ void main() {
         // the ray's elevation above the geometric horizon.
         float r0 = length(ro);
         float aboveHz = dot(rd, up0) + sqrt(max(0.0, 1.0 - (PLANET_R * PLANET_R) / (r0 * r0)));
-        domeW = max(domeW, exp(-max(aboveHz, 0.0) * 3.2) * (1.0 - smoothstep(60.0, 420.0, camAltA)));
+        // From above the shell it must be gone by the shell's limb (the ray's
+        // closest approach reaching the top of the air), or it ends in a hard edge.
+        float shellH = ATMO_R - PLANET_R;
+        float limbFade = camAltA < shellH ? 1.0 : 1.0 - smoothstep(0.3 * shellH, 0.92 * shellH, minR - PLANET_R);
+        domeW = max(domeW, exp(-max(aboveHz, 0.0) * 3.2) * (1.0 - smoothstep(60.0, 420.0, camAltA)) * limbFade);
         skyGlow = dayK * domeW;
         vec3 add = dome * dayK * lowK * domeW * 0.06;
         inscatter += add;
