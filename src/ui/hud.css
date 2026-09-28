@@ -257,6 +257,9 @@
   transition: transform 0.4s var(--ease-out);
 }
 .modal-wrap.open .modal { transform: none; }
+/* Modal panels sit over the HUD's own panels: nearly opaque so nothing
+   (inspector figures, labels) shows through the charts and prose. */
+.modal.panel, .modal-wrap .panel.modal { background: rgba(10, 13, 21, 0.95); }
 .modal-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px 10px; border-bottom: 1px solid var(--panel-border); }
 .modal-head h2 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 26px; color: var(--gold-bright); letter-spacing: 0.04em; }
 .modal-head .grow { flex: 1; }

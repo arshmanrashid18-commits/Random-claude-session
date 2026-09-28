@@ -295,9 +295,9 @@ float seabed(float h, vec3 dir) {
   if (k <= 0.0) return h;
   vec3 p = dir * PLANET_R;
   // Warp where the sea floor is read (up to ~20 u sideways) so steep shelf
-  // contours meander; never lift it into the shore band.
+  // contours meander; offshore it never rises into the surf zone (foam).
   vec3 w = vec3(snoise(p * 0.02), snoise(p * 0.02 + 7.3), snoise(p * 0.02 + 13.1));
-  float hw = min(heightAtDir(normalize(dir + w * 0.018)), -0.3);
+  float hw = min(heightAtDir(normalize(dir + w * 0.018)), -1.2);
   return mix(h, hw, k) + (snoise(p * 0.035) * 0.65 + snoise(p * 0.11 + 3.7) * 0.35) * 1.4 * k;
 }
 `;
