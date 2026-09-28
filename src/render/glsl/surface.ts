@@ -228,6 +228,17 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   vec3 ground = mix(desert, grass, max(wetness, clamp(vA.r * 0.9, 0.0, 1.0)));
   ground = mix(ground, tundra, 1.0 - smoothstep(-6.0, 3.0, temp + macro * 2.0));
   ground *= 0.9 + macro * 0.18 + micro * 0.08;
+  // Mid-scale variation (10–40 u), the scale a god's camera sees most: lusher
+  // and drier patches, a little bare soil, so open ground is never one flat tone.
+  if (dist < 1500.0) {
+    vec3 pm = dir * PLANET_R;
+    float m1 = snoise(pm * 0.035) * 0.6 + snoise(pm * 0.11 + 4.1) * 0.4;
+    float m2 = snoise(pm * 0.06 + 9.3);
+    float midK = 1.0 - smoothstep(600.0, 1500.0, dist);
+    ground *= 1.0 + m1 * 0.14 * midK;
+    ground = mix(ground, ground * vec3(0.9, 1.07, 0.84), smoothstep(0.2, 0.8, m2) * 0.5 * midK);
+    ground = mix(ground, soil, smoothstep(0.55, 0.9, m1) * 0.22 * midK);
+  }
 
   // --- vegetation canopy (from the plant simulation)
   float grassD = vA.r, shrubD = vA.g, broad = vA.b, conifer = vA.a;

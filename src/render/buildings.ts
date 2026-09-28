@@ -363,6 +363,10 @@ void main() {
   float lit = vWindow * night * (1.0 - vRuin) * step(0.999, vProgress);
   vec3 c = shadeObject(vWorld, normalize(vNormal), col, 0.0, lit, vec3(6.0, 3.4, 1.4));
   c += vec3(1.2, 1.0, 0.6) * fresh * 0.4;
+  // From afar at night a lit house is a point of lamplight, part of the town's
+  // glow (unlit, the buildings were black shapes punched through it).
+  float farN = night * smoothstep(250.0, 900.0, distance(vWorld, uCamPos)) * (1.0 - vRuin);
+  c = mix(c, vec3(1.6, 0.95, 0.42), farN * 0.8);
   outColor = vec4(c, 1.0);
 }
 `;

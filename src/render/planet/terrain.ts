@@ -190,7 +190,9 @@ void main() {
     float veins = 1.0 - smoothstep(0.0, 0.11, abs(n1 * 0.7 + n2 * 0.3));
     float fresh = smoothstep(0.55, 0.95, si.emissive);
     float flatK = smoothstep(0.45, 0.8, dot(N, dir));
-    float cover = smoothstep(0.02, 0.35, si.emissive);
+    // The field comes from coarse cells: noise frays its edge so a flow never
+    // ends in the straight line of a cell boundary.
+    float cover = smoothstep(0.02, 0.35, si.emissive + (n1 * 0.6 + n2 * 0.4) * 0.2 - 0.04);
     color = mix(color, vec3(0.03, 0.025, 0.022) * (0.4 + ndl), cover * 0.85);
     float glow = mix(veins, 1.0, fresh * 0.65 * flatK) * cover * mix(0.12, 1.0, flatK);
     color += vec3(3.4, 0.95, 0.2) * glow * (0.75 + 0.25 * snoise(q * 2.2 + uTime * 0.6));
@@ -329,7 +331,9 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   vec4 clim = texture(uClimateTex, ruv);
   float temp = clim.r * 80.0 - 40.0;
   float storm = clim.a;
-  vec3 N = waterNormal(dir, wp, dist, 0.6 + storm * 1.6);
+  // Storm seas are rough; lakes and rivers only ripple (storm-rough normals
+  // mirrored a pale sky and turned every river into a white strip).
+  vec3 N = waterNormal(dir, wp, dist, lakeMode > 0.5 ? 0.45 + storm * 0.3 : 0.6 + storm * 1.6);
   float NdV = max(dot(N, V), 0.0);
   float fres = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
   vec3 R = reflect(-V, N);
@@ -352,7 +356,7 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   float band = sin(depth * 5.5 - uTime * 1.6 + snoise(wp * 0.08) * 2.0);
   // lakeMode: 0 sea, 1 lake, 2 river (rivers have no shore waves: their foam
   // bands along both banks made the channel read as a milky sheet).
-  float shoreK = lakeMode > 1.5 ? 0.0 : 1.0 - lakeMode * 0.7;
+  float shoreK = lakeMode > 1.5 ? 0.0 : lakeMode > 0.5 ? 0.08 : 1.0;
   float shoreFoam = smoothstep(0.75, 1.0, band) * (1.0 - smoothstep(0.0, 1.8, depth)) * shoreK;
   // Lakes have little surf: a faint lap at the shore, not a white outline.
   float edgeFoam = (1.0 - smoothstep(0.0, 0.35, depth)) * (lakeMode > 1.5 ? 0.0 : lakeMode > 0.5 ? 0.25 : 1.0);

@@ -135,17 +135,20 @@ vec3 auroraEmission(vec3 p) {
   // Auroral oval: a wobbling ring around each magnetic pole.
   float lon = atan(d.z, d.x);
   float hemi = d.y > 0.0 ? 1.0 : 5.0;
-  float ovalLat = 1.16 + 0.05 * sin(lon * 3.0 + uTime * 0.05) + 0.03 * snoise(vec3(lon * 2.0, uTime * 0.03, hemi));
+  // Noise on a ring, not on the longitude itself (which jumps at ±180° and
+  // drew a vertical seam through the curtains).
+  vec2 ring = vec2(cos(lon), sin(lon));
+  float ovalLat = 1.16 + 0.05 * sin(lon * 3.0 + uTime * 0.05) + 0.03 * snoise(vec3(ring * 2.0, uTime * 0.03 + hemi));
   // Curtains run along the oval and fold back and forth across it; a fainter
   // second curtain trails poleward of the first.
-  float fold = 0.035 * snoise(vec3(lon * 7.0 + uTime * 0.04, hemi, uTime * 0.05))
-             + 0.012 * snoise(vec3(lon * 23.0, hemi + 2.0, uTime * 0.08));
+  float fold = 0.035 * snoise(vec3(ring * 7.0 + vec2(uTime * 0.04, 0.0), hemi + uTime * 0.05))
+             + 0.012 * snoise(vec3(ring * 23.0, hemi + 2.0 + uTime * 0.08));
   float x = lat - ovalLat - fold;
   float sheet = exp(-pow(x / 0.012, 2.0)) + 0.45 * exp(-pow((x - 0.035) / 0.01, 2.0));
   if (sheet < 0.01) return vec3(0.0);
   // Fine vertical rays within the curtain, and slow surges of brightness along it.
-  float rays = 0.5 + 0.5 * snoise(vec3(lon * 110.0, uTime * 0.2, hemi));
-  float surge = 0.3 + 0.7 * smoothstep(-0.4, 0.6, snoise(vec3(lon * 3.0 - uTime * 0.02, hemi + 7.0, 0.0)));
+  float rays = 0.5 + 0.5 * snoise(vec3(ring * 110.0, uTime * 0.2 + hemi));
+  float surge = 0.3 + 0.7 * smoothstep(-0.4, 0.6, snoise(vec3(ring * 3.0 - vec2(uTime * 0.02, 0.0), hemi + 7.0)));
   // Tall curtains: bright lower edge, glow reaching far up.
   float vert = smoothstep(0.0, 0.06, hf) * (exp(-hf * 3.0) * 0.6 + exp(-hf * 1.1) * 0.4);
   vec3 green = vec3(0.15, 1.0, 0.45);

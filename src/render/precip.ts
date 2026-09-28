@@ -50,7 +50,7 @@ void main() {
   vec3 p = base + side * position.x * wid + (uSnow > 0.5 ? cross(side, normalize(toCam)) * position.y * wid : fall * position.y * len);
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
   float d = length(toCam);
-  vAlpha = smoothstep(uRadius, uRadius * 0.4, length(xz)) * smoothstep(0.5, 3.0, d) * mix(1.0 - smoothstep(0.7, 0.93, endOn), 1.0, uSnow);
+  vAlpha = smoothstep(uRadius, uRadius * 0.4, length(xz)) * smoothstep(0.5, 3.0, d) * mix(1.0 - smoothstep(0.55, 0.85, endOn), 1.0, uSnow);
   vUv = position.xy;
   vSnow = uSnow;
 }
@@ -127,7 +127,9 @@ export class Precipitation {
     const ground = Math.max(0, data.heightAt(up.x, up.y, up.z));
     const alt = r - PLANET_RADIUS - ground;
     // Fade out above the clouds and far from the ground.
-    const altK = 1 - Math.min(1, Math.max(0, (alt - 60) / 80));
+    // Rain is seen from within or just above it: from higher up, drops falling
+    // away from the eye read as a scatter of stars over the dark sea.
+    const altK = 1 - Math.min(1, Math.max(0, (alt - 30) / 40));
     const target = rain > 0.08 ? rain : 0;
     this.intensity += (target - this.intensity) * Math.min(1, dt * 1.5);
     const visible = this.intensity * altK;

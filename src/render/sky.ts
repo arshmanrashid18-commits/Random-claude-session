@@ -54,7 +54,7 @@ float starLayer(vec3 d, float res, float density, float seed, out vec3 col) {
       float dist = length(sd - d);
       float mag = pow(hash13(vec3(c * 1.7, seed + float(f))), 14.0);
       float size = uPixelAngle * (0.7 + mag * 1.6);
-      float b = exp(-(dist * dist) / (size * size)) * (0.015 + mag * 1.6);
+      float b = exp(-(dist * dist) / (size * size)) * (0.015 + mag * 0.9); // bright enough to twinkle, not to bloom into discs
       if (b > best) {
         best = b;
         col = starColor(hash13(vec3(c * 3.1, seed * 1.3 + float(f))));

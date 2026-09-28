@@ -98,9 +98,10 @@ for (const s of shots) {
       await g.command({ kind: 'power', power: 'volcano', x: f.x, y: f.y, z: f.z });
     });
     await page.evaluate(() => window.__genesis.advance(70));
-    // Let the plume, ash and lava particles build up.
+    // Let the plume, ash and lava particles build up (effects age per
+    // rendered frame, ≤ 0.1 s each: ~6 s of eruption).
     await page.evaluate((v) => window.__genesis.view(v), 'volcano');
-    await page.evaluate(() => window.__genesis.renderFrames(30));
+    await page.evaluate(() => window.__genesis.renderFrames(60));
   }
   await page.evaluate((v) => { window.__genesis.view(v); window.__genesis.setTime(12.5); }, s.view);
   await page.evaluate(() => window.__genesis.renderFrames(4));

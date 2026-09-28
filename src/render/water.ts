@@ -68,10 +68,14 @@ void main() {
   float keep = 1.0;
   if (vFringe > 0.5) {
     if (ground < 0.0) discard;
-    keep = 1.0 - smoothstep(0.4, 0.9, depth);
-    // Fade out across the fringe toward its outer side, so flat ground at the
-    // lake's level never draws the quad's straight edge; noise makes it wander.
-    keep *= smoothstep(0.05, 0.7, vInside + snoise(vWorld * 0.15) * 0.18);
+    // Only water well below the lake's level fades (the valley past the
+    // outlet): real extensions of the lake keep its full tint (a fade here
+    // drew straight-edged patches of lighter water inside lakes).
+    keep = 1.0 - smoothstep(1.4, 2.4, depth);
+    // Shallow water fades out toward the fringe's outer side, so flat ground at
+    // the lake's level never draws the quad's straight edge; noise makes it wander.
+    float outer = smoothstep(0.05, 0.7, vInside + snoise(vWorld * 0.15) * 0.18);
+    keep *= mix(outer, 1.0, smoothstep(0.15, 0.6, depth));
     if (keep <= 0.0) discard;
   }
   // A frozen lake lies under the same snow as the land around it: bare ice

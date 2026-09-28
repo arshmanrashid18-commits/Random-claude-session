@@ -463,7 +463,7 @@ canvas.chart { width: 100%; height: 180px; display: block; }
 .objective.lost { border-color: rgba(255, 122, 92, 0.5); }
 
 /* ---------------------------------------------------------------- tutorial */
-.tutorial { position: fixed; left: 50%; bottom: 128px; transform: translateX(-50%); width: min(520px, 90vw); padding: 14px 18px 12px; text-align: center; z-index: 12; transition: opacity 0.5s, transform 0.5s var(--ease-out); }
+.tutorial { position: fixed; left: 50%; bottom: 128px; transform: translateX(-50%); width: min(460px, 90vw); padding: 14px 18px 12px; text-align: center; z-index: 12; transition: opacity 0.5s, transform 0.5s var(--ease-out); }
 .tutorial.pop { animation: tupop 0.6s var(--ease-out); }
 .tutorial.gone { opacity: 0; transform: translateX(-50%) translateY(10px); }
 @keyframes tupop { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%); } }
@@ -479,6 +479,8 @@ canvas.chart { width: 100%; height: 180px; display: block; }
 /* ---------------------------------------------------------------- map labels */
 .labels { position: fixed; inset: 0; pointer-events: none !important; overflow: hidden; transition: opacity 0.4s; }
 body.modal-open .labels { opacity: 0; }
+/* The inspector steps aside too: stacked behind a panel it only adds clutter. */
+body.modal-open .inspector { opacity: 0; pointer-events: none; }
 .hud-hidden .labels, .title-mode .labels { opacity: 0; }
 .maplabel {
   position: absolute;
