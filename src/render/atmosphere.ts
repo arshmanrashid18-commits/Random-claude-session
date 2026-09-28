@@ -234,7 +234,11 @@ void main() {
             float hf = clamp((r - CLOUD_R0) / (CLOUD_R1 - CLOUD_R0), 0.0, 1.0);
             vec3 ambTop = mix(vec3(0.02, 0.025, 0.04), vec3(0.35, 0.45, 0.62), smoothstep(-0.15, 0.3, muS));
             vec3 amb = ambTop * mix(0.45, 1.0, hf) * uSunIntensity * 0.06;
-            vec3 lit = sunL * beer * mix(1.0, powder, 0.5) * phase * 0.09 + amb;
+            // Multiple scattering: light that bounced inside the cloud escapes
+            // far more easily than the direct beam (softer extinction, no
+            // phase peak). Without it sunlit tops were dimmer than desert.
+            float ms = exp(-ld * 0.45) * 0.55 + exp(-ld * 0.12) * 0.25;
+            vec3 lit = sunL * (beer * mix(1.0, powder, 0.5) * phase + ms * 1.2) * 0.09 + amb;
             float ext = dens * 0.55 * dt;
             float a = 1.0 - exp(-ext);
             cloudCol += cloudT * a * lit;

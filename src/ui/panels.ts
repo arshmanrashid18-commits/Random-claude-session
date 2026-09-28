@@ -7,7 +7,7 @@ import { el, flagSvg, hex } from './components';
 import { icon } from './icons';
 import { narrate, yearOfTick } from './narrate';
 import type { GameEvent } from '../sim/events';
-import type { EcologyData, TribeData, CivData } from '../worker/protocol';
+import type { EcologyData, TribeData, CivData, SpeciesInfo } from '../worker/protocol';
 import { BIOME_COLORS, BIOME_NAMES } from '../sim/climate/biomes';
 import { dirToFaceAB } from '../sim/planet/cubesphere';
 import { ACTIONS, keyLabel, type KeyMap } from './keys';
@@ -149,8 +149,18 @@ export class ChroniclePanel extends Modal {
       for (const e of list) { const y = yearOfTick(e.tick); if (!years.has(y)) years.set(y, []); years.get(y)!.push(e); }
       for (const y of [...years.keys()].sort((a, b) => b - a)) {
         // The most important sentences of the year, told in the order they
-        // happened (cause before effect: the god's cast before the crater).
-        const sentences = mergeYear(years.get(y)!).sort((a, b) => b.importance - a.importance).slice(0, 8).sort((a, b) => a.id - b.id).map((m) => {
+        // happened (cause before effect: the god's cast before the crater, and
+        // before the omens it raises in the same instant).
+        const evs = years.get(y)!;
+        const byId = new Map(evs.map((e) => [e.id, e]));
+        const order = (id: number): [number, number, number] => {
+          const e = byId.get(id);
+          return e ? [e.tick, e.kind === 'power' ? 0 : 1, id] : [Infinity, 1, id];
+        };
+        const sentences = mergeYear(evs).sort((a, b) => b.importance - a.importance).slice(0, 8).sort((a, b) => {
+          const A = order(a.id), B = order(b.id);
+          return A[0] - B[0] || A[1] - B[1] || A[2] - B[2];
+        }).map((m) => {
           return `<span class="e" data-ev="${m.id}">${esc(m.text)}</span>`;
         });
         html += `<p><b style="color:var(--gold)">Year ${y}.</b> ${sentences.join(' ')}</p>`;
@@ -180,7 +190,29 @@ export class ChroniclePanel extends Modal {
 }
 
 // ------------------------------------------------------------------ ecology
-const SPECIES_COLORS = ['#e3b56b', '#d9d0b5', '#9a6a45', '#e8c48a', '#c9a064', '#b8b0a0', '#9ab2c8', '#6f5a48', '#8e9aa8', '#e0a040', '#6b4a36', '#e8c050', '#e07a3a'];
+/**
+ * Species line styles. Eight categorical hues, validated on the dark panel
+ * surface (lightness band, chroma, colour-blind and normal-vision separation,
+ * 3:1 contrast), in fixed order and never cycled within a group: herbivores
+ * draw solid lines, predators dashed ones in the same hue order, and a species
+ * born by speciation keeps its ancestor's hue with a dotted line.
+ */
+const SPECIES_HUES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+function speciesStyle(list: SpeciesInfo[], i: number): { color: string; dash: number[] } {
+  let root = i;
+  for (let g = 0; g < 32 && list[root] && list[root].parent >= 0; g++) root = list[root].parent;
+  const carn = (k: number) => list[k]?.diet === 'carnivore';
+  let rank = 0;
+  for (let k = 0; k < root; k++) if (list[k].parent < 0 && carn(k) === carn(root)) rank++;
+  const color = SPECIES_HUES[Math.min(rank, SPECIES_HUES.length - 1)];
+  const derived = root !== i;
+  const dash = carn(root) ? (derived ? [2, 5, 10, 5] : [10, 6]) : (derived ? [2, 5] : []);
+  return { color, dash };
+}
+function speciesSwatch(list: SpeciesInfo[], i: number): string {
+  const st = speciesStyle(list, i);
+  return `<svg width="20" height="6" aria-hidden="true"><line x1="0" y1="3" x2="20" y2="3" stroke="${st.color}" stroke-width="2.5" stroke-dasharray="${st.dash.join(' ')}"/></svg>`;
+}
 const DEATH_CAUSES = ['starvation', 'thirst', 'old age', 'predators', 'disease', 'fire', 'climate', 'disaster'];
 
 export class EcologyPanel extends Modal {
@@ -233,7 +265,7 @@ export class EcologyPanel extends Modal {
         <div class="card"><h4>Plant cover</h4><div class="big">${Math.round(d.plantCover * 100)}%</div><div class="muted">of all land</div></div>
         <div class="card"><h4>Evolution</h4><div class="big">${born} <span class="muted">new</span> · ${extinct} <span class="muted">lost</span></div><div class="muted">since the beginning</div></div>
       </div>
-      <div class="card" style="margin-bottom:14px"><h4>Populations over time</h4><canvas class="chart pop" width="1640" height="360"></canvas><div class="legend">${d.species.map((s, i) => `<span data-sp="${i}" class="${this.hidden.has(i) ? 'off' : ''}"><i style="background:${SPECIES_COLORS[s.parent >= 0 ? s.parent % SPECIES_COLORS.length : i % SPECIES_COLORS.length]}"></i>${esc(s.name)} ${d.alive[i] ?? 0}</span>`).join('')}</div></div>
+      <div class="card" style="margin-bottom:14px"><h4>Populations over time</h4><canvas class="chart pop" width="1640" height="360"></canvas><div class="legend">${d.species.map((s, i) => `<span data-sp="${i}" class="${this.hidden.has(i) ? 'off' : ''}">${speciesSwatch(d.species, i)}${esc(s.name)} ${d.alive[i] ?? 0}</span>`).join('')}</div></div>
       <div class="grid2">
         <div class="card"><h4>The living map</h4><canvas class="chart map" width="640" height="320" style="height:auto;aspect-ratio:2/1"></canvas><div class="legend">${BIOME_NAMES.map((n, i) => `<span><i style="background:${BIOME_COLORS[i]};height:8px"></i>${n}</span>`).join('')}</div></div>
         <div class="card"><h4>How they die</h4>${this.deathTable(d)}<h4 style="margin-top:12px">Evolution</h4>${d.records.slice(-6).reverse().map((r) => `<div class="muted">Year ${Math.floor(r.tick / TICKS_PER_YEAR) + 1}: ${r.kind === 'extinction' ? `the ${esc(r.name)} died out` : `the ${esc(r.name)} arose from the ${esc(r.parent ?? '')}${r.where ? ` in ${esc(r.where)}` : ''}`}</div>`).join('') || '<div class="muted">No species has yet been born or lost.</div>'}</div>
@@ -270,10 +302,10 @@ export class EcologyPanel extends Modal {
     c.fillText(`last ${years.toFixed(0)} years`, W - 190, H - 4);
     d.history.forEach((h, i) => {
       if (this.hidden.has(i) || h.length < 2) return;
-      const s = d.species[i];
-      c.strokeStyle = SPECIES_COLORS[s.parent >= 0 ? s.parent % SPECIES_COLORS.length : i % SPECIES_COLORS.length];
-      c.lineWidth = s.diet === 'carnivore' ? 3.5 : 2.5;
-      c.setLineDash(s.parent >= 0 ? [10, 6] : []);
+      const st = speciesStyle(d.species, i);
+      c.strokeStyle = st.color;
+      c.lineWidth = 2.5;
+      c.setLineDash(st.dash);
       c.beginPath();
       h.forEach((v, k) => {
         const x = 60 + ((k + (n - h.length)) / (n - 1)) * (W - 70);
@@ -299,12 +331,20 @@ export class EcologyPanel extends Modal {
         const lon = ((x + 0.5) / W) * Math.PI * 2 - Math.PI;
         const dx = Math.cos(lat) * Math.cos(lon), dy = Math.sin(lat), dz = -Math.cos(lat) * Math.sin(lon);
         const f = dirToFaceAB(dx, dy, dz);
-        const i = Math.min(n - 1, Math.max(0, Math.floor((f.a + 1) * 0.5 * n)));
-        const j = Math.min(n - 1, Math.max(0, Math.floor((f.b + 1) * 0.5 * n)));
-        const b = d.biomes[f.face * n * n + j * n + i];
-        const col = cols[b] ?? [0, 0, 0];
+        // Blend the four nearest cells' colours: soft biome boundaries instead
+        // of the grid's hard blocks.
+        const fi = (f.a + 1) * 0.5 * n - 0.5, fj = (f.b + 1) * 0.5 * n - 0.5;
+        const i0 = Math.floor(fi), j0 = Math.floor(fj);
+        const tx = fi - i0, ty = fj - j0;
+        let r = 0, g = 0, bl = 0;
+        for (let q = 0; q < 4; q++) {
+          const ii = Math.min(n - 1, Math.max(0, i0 + (q & 1))), jj = Math.min(n - 1, Math.max(0, j0 + (q >> 1)));
+          const w = (q & 1 ? tx : 1 - tx) * (q >> 1 ? ty : 1 - ty);
+          const col = cols[d.biomes[f.face * n * n + jj * n + ii]] ?? [0, 0, 0];
+          r += col[0] * w; g += col[1] * w; bl += col[2] * w;
+        }
         const o = (y * W + x) * 4;
-        img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
+        img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = bl; img.data[o + 3] = 255;
       }
     }
     c.putImageData(img, 0, 0);

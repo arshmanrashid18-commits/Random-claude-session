@@ -163,3 +163,24 @@ Each entry: decision — why.
     compacting, a crumbled ruin's slot goes on a sorted free list that new buildings take
     lowest-first (deterministic across save/load), and anyone still pointing at it as a
     home or workplace is cleared. The soak now asserts the list stays bounded.
+49. **An adversarial reviewer, and its verdict stands.** A separate agent with a brutal
+    brief scored the build 4–5 where I had scored 9. Every finding was verified by
+    cropping, picking and bisecting before acting; most were real bugs (Pass 4 in
+    QUALITY_LOG lists each with its root cause). Self-assessment is no longer taken as
+    evidence; the reviewer re-scores after each round.
+50. **Straight shelf edges are fixed in shading, not in the generator.** The seam in the
+    shallows is a real step in the height field: the generator's shelves follow
+    bilinearly upsampled coarse fields. Smoothing the generator would reshape every
+    world and invalidate all eight calibrated scenarios, so the shading adds a gentle
+    seabed relief below the shoreline, in both the terrain and the water depth, never at
+    the coastline itself.
+51. **Night is seen with night eyes.** The final pass desaturates and cools the dim end
+    of the image (a scotopic shift), so the moonlit night side reads blue-black and
+    lamps and fires stay amber, as the art direction asks.
+52. **Nature muted at the source, culture untouched.** Trees, grass and land lose ~15%
+    saturation in their own shaders and the global grade is neutral, instead of a global
+    desaturation that would dull flags, roofs and banners too.
+53. **Thirteen species, eight hues.** The ecology chart uses a validated eight-hue
+    categorical palette (dark surface) with composite encoding: herbivores solid,
+    predators dashed in the same hue order, descendants dotted in their ancestor's hue —
+    never a ninth generated hue.

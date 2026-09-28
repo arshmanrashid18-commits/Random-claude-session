@@ -259,6 +259,9 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
 
   // Ambient occlusion from cavity (concave valleys darker).
   col *= clamp(1.0 - cavity * 0.04, 0.72, 1.06);
+  // Land is slightly desaturated (earth tones, per the art direction); the sea
+  // floor keeps its colour for the shallows.
+  if (h > 0.0) col = mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, 0.85);
 
   SurfaceInfo si;
   si.albedo = col;

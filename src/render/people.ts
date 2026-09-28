@@ -83,6 +83,7 @@ in float aSlot;
 in vec3 color;
 uniform float uNight;
 uniform float uTime;
+uniform vec3 uCamPos;
 out vec3 vWorld;
 out vec3 vNormal;
 out vec3 vColor;
@@ -165,7 +166,10 @@ void main() {
   if (ageC > 1.5) lp = rotX(lp, vec3(0.0, 0.8, 0.0), 0.12 * step(0.8, lp.y));
   if (sleeping) { lp = rotZ(lp, vec3(0.0), 1.5708); lp.y += 0.15; nl = rotZ(nl, vec3(0.0), 1.5708); }
   float sc = ageC < 0.5 && tag < 16.5 ? 0.62 : 1.0;
-  lp *= sc;
+  // Figures grow a little with viewing distance (up to 1.6×) so a village seen
+  // from above reads as people at work, not specks; true scale up close.
+  float legible = clamp(distance(aDir * PLANET_R, uCamPos) / 110.0, 1.0, 1.6);
+  lp *= sc * legible;
   vec3 up = aDir;
   vec3 ax, az;
   tangentFrame(up, aMotion.y, ax, az);

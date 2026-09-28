@@ -62,7 +62,7 @@ provenance and scenario retuning (see DECISIONS 28–34).
 | Stability | 9 | Zero console errors in all harness runs; 150-year soak green |
 | First-impression wow | 8 | Title over the live planet, terminator, village |
 
-## Pass 3 — final
+## Pass 3 — self-scored (inflated; see Pass 4)
 
 Screens: the full `npm run shots` set on the final code, the UI captures, two monkey runs
 and the 500-year soak trajectory.
@@ -99,6 +99,49 @@ Five worst → fixes:
 Performance stays at 8, explained: the single simulation thread cannot hold 100× once
 thousands of people and animals live (it shows the achieved rate instead), and real GPU
 frame rates cannot be measured in a container that renders WebGL on the CPU.
+
+## Pass 4 — adversarial review
+
+An independent reviewer (a separate agent with no stake in the work, told to be brutal)
+looked at every landscape and interface capture. Its scores were far below mine:
+
+| Category | Pass 3 (self) | Reviewer |
+|---|---|---|
+| Visual beauty | 9 | 5 |
+| Visual coherence | 9 | 4 |
+| Polish / juice (visible) | 9 | 4 |
+| First-impression wow | 9 | 4 |
+
+The Pass 3 scores were inflated: several of the reviewer's findings were real rendering
+bugs I had looked at and not seen. Each finding was checked by cropping and zooming;
+dispositions:
+
+| Finding | Verdict | Root cause → fix |
+|---|---|---|
+| Grey sky slab with a hard edge (mountains, volcano) | real bug | the low-camera sky dome was added at full strength to any ray that clips the 90-u shell → weighted by the lowest altitude the ray passes through; the limb now fades into space |
+| Fog "rectangle" with straight cuts (mountains) | real | edge-on cloud deck seen through a gap between silhouettes; the march ran to the far side of the shell with a fixed step count → march ends where the deck has dissolved, before the camera's own horizon; erosion LOD continuous; tops billow; haze by distance along the ray, not by what the ray hits |
+| Straight seam in the shallows (coast) | real | not a face or LOD seam (tested by tinting faces, then by picking heights: a 1-u step in 5 px): the generator's shelf follows bilinearly upsampled coarse fields → gentle seabed relief below the shoreline in both terrain and water shading; terrain also shaded by the height field rather than the LOD mesh |
+| Stair-stepped lakes, pale overlays (storm) | real | one quad per hydrology cell → a fringe ring clipped per pixel against the terrain so shores follow contours; distant lakes read as deep water |
+| White halos round every coast (storm) | real | shore foam aliasing from orbit → fades beyond ~300–1,000 u |
+| Faceted limb (storm) | real | coarse patches at the silhouette → silhouette-aware LOD in selection and geomorph |
+| Meteor invisible while falling | real | approach fixed in world space came in low from the horizon, usually outside the view → falls from beyond the target, high in the watcher's sky |
+| White square blob at impact | real | additive HDR stack (160 flames at 5×) and an unwindowed gaussian whose tail drew the quad → windowed sprites, dimmer orange fireball with its own smoke |
+| Perfect beige ring over the ocean | real | a uniform band → a shock front: sharp leading edge, trailing dust, uneven round the ring, fading faster |
+| "Candy corn" flames | real | identical HDR teardrops → varied size and heat, flickering outlines, yellow cores reddening |
+| Lava as an orange rectangle, brown plume (volcano) | real | uniform glow over a coarse region cell, even down cliffs → dark crust with glowing veins in world-space noise, steep faces crust over; ash paler and varied |
+| Milky river through the village | real | rivers were shaded with shore-wave foam along both banks → rivers have no shore waves |
+| Neon greens vs the art direction | real | nature desaturated at the source (trees, grass, land); global saturation neutral; culture colours untouched |
+| Night side murky brown-green | real | a scotopic shift: dim areas lose colour and cool toward blue; lamps and fires stay warm |
+| Sticker-like starburst (night) | real | six long rays → short, uneven, two sets |
+| Labels showing through panels; ghosted nameplate | real | labels hidden while a panel is open; close-range fade now only among the rooftops |
+| Chronicle effect before cause; repeated era names | real | the year's top sentences are told in the order they happened; era names rotate per theme |
+| Scenario cards misaligned and clipped | real | cards align to the top; the panel gets the room on sub-pages |
+| "∞ boundless" in the captures | real | the capture script used the cheat; it now casts on the devotion the world earned |
+| Moon shading ignores the sun | not a bug | the moon's normal is in world space; in the orbit shot the sun is behind the camera, so both planet and moon are full |
+| Pale trunks without canopy (forest) | intended | snags — standing dead trees — are one of the vegetation types |
+| Meteor captures frozen at the first instant | harness | simulation ticks jump instantly while effects age per rendered frame; captures now render enough frames for their moment |
+
+Pass 5 below re-scores after these fixes, with the same reviewer brief.
 
 ## Delight pass
 

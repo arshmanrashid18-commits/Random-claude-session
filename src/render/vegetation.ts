@@ -229,6 +229,8 @@ void main() {
   // Snow settles on upward-facing surfaces.
   float snow = vTint.z * smoothstep(0.05, 0.6, vUpness);
   col = mix(col, vec3(0.85, 0.88, 0.92), snow);
+  // Nature is slightly desaturated so civilisation's colours pop against it.
+  col = mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, 0.82);
   vec3 N = normalize(vNormal);
   vec3 c = shadeObject(vWorld, N, col, vFoliage * (1.0 - snow), 0.0, vec3(0.0));
   outColor = vec4(c, 1.0);

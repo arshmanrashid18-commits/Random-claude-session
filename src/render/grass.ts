@@ -115,6 +115,7 @@ void main() {
   vec3 c = mix(dry, lush, smoothstep(0.6, 1.8, moist));
   c = mix(c, cold, 1.0 - smoothstep(-4.0, 6.0, temp));
   c *= 0.8 + hs.x * 0.4;
+  c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 0.82);
   vColor = c * mix(0.45, 1.15, aT);
   vT = aT;
   gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0);

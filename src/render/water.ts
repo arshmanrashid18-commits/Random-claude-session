@@ -100,7 +100,7 @@ void main() {
   // Optical depth for colour: rivers read as a clear green-blue channel,
   // not as shallow surf (no shore foam across the whole ribbon).
   float depth = (1.0 - across * across) * (2.2 + vWidth * 0.9) + 0.45;
-  vec4 c = shadeWater(vWorld, dir, depth, vDist, 1.0);
+  vec4 c = shadeWater(vWorld, dir, depth, vDist, 2.0);
   // Flow streaks moving downstream.
   float streak = snoise(vec3(vRiver.y * 0.35 - uTime * 1.4, vRiver.x * 2.5, 0.0));
   streak = smoothstep(0.55, 0.9, streak) * (1.0 - smoothstep(150.0, 600.0, vDist));

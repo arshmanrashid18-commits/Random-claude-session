@@ -179,8 +179,21 @@ void main() {
   vec3 color = direct + amb;
   // Underwater light absorption (seabed seen through the ocean surface).
   if (h < 0.0) color *= exp(-vec3(0.35, 0.12, 0.06) * min(-h, 30.0) * 0.35);
-  // Emissive lava glow.
-  color += vec3(4.0, 1.2, 0.25) * si.emissive * (0.7 + 0.3 * snoise(dir * 900.0 + uTime * 0.3));
+  // Lava: a dark crust split by glowing veins; fresh flows glow through, and
+  // steep faces drain and crust over (a uniform glow over a region cell read as
+  // an orange rectangle painted down the cliffs).
+  if (si.emissive > 0.01) {
+    vec3 q = dir * PLANET_R;
+    float n1 = snoise(q * 0.32 + vec3(0.0, uTime * 0.04, 0.0));
+    float n2 = snoise(q * 1.05 - vec3(uTime * 0.07, 0.0, 0.0));
+    float veins = 1.0 - smoothstep(0.0, 0.16, abs(n1 * 0.7 + n2 * 0.3));
+    float fresh = smoothstep(0.55, 0.95, si.emissive);
+    float flatK = smoothstep(0.45, 0.8, dot(N, dir));
+    float cover = smoothstep(0.02, 0.35, si.emissive);
+    color = mix(color, vec3(0.03, 0.025, 0.022) * (0.4 + ndl), cover * 0.85);
+    float glow = mix(veins, 1.0, fresh * 0.65) * cover * mix(0.25, 1.0, flatK);
+    color += vec3(3.4, 0.95, 0.2) * glow * (0.75 + 0.25 * snoise(q * 2.2 + uTime * 0.6));
+  }
   vec3 ruv = regionUV(dir);
   // Floodwater: a muddy, reflective sheet over drowned land.
   float flood = texture(uFxTex, ruv).a;
@@ -325,15 +338,18 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   vec3 spec = sunCol * ggx * fres * max(dot(N, L), 0.0) * 0.9;
   // Water body colour: absorption with depth.
   vec3 deep = vec3(0.006, 0.028, 0.07);
-  vec3 shallow = mix(vec3(0.03, 0.26, 0.28), vec3(0.05, 0.20, 0.16), lakeMode);
+  vec3 shallow = mix(vec3(0.03, 0.26, 0.28), vec3(0.05, 0.20, 0.16), min(lakeMode, 1.0));
   vec3 body = mix(deep, shallow, exp(-depth * 0.16));
   float light = max(mu, 0.0) * 0.8 + 0.08 * smoothstep(-0.2, 0.2, mu);
   vec3 bodyLit = body * (sunCol * light * 0.35 + skyAmbient(dir, dir, L) * uSunIntensity * 0.05);
   float alpha = 1.0 - exp(-depth * 0.55);
   // Shore waves: bands of constant depth marching toward land.
   float band = sin(depth * 5.5 - uTime * 1.6 + snoise(wp * 0.08) * 2.0);
-  float shoreFoam = smoothstep(0.75, 1.0, band) * (1.0 - smoothstep(0.0, 1.8, depth)) * (1.0 - lakeMode * 0.7);
-  float edgeFoam = 1.0 - smoothstep(0.0, 0.35, depth);
+  // lakeMode: 0 sea, 1 lake, 2 river (rivers have no shore waves: their foam
+  // bands along both banks made the channel read as a milky sheet).
+  float shoreK = lakeMode > 1.5 ? 0.0 : 1.0 - lakeMode * 0.7;
+  float shoreFoam = smoothstep(0.75, 1.0, band) * (1.0 - smoothstep(0.0, 1.8, depth)) * shoreK;
+  float edgeFoam = (1.0 - smoothstep(0.0, 0.35, depth)) * (lakeMode > 1.5 ? 0.0 : 1.0);
   float foamNoise = 0.6 + 0.4 * snoise(wp * 0.9 + uTime * 0.2);
   // Surf is a close-up detail: from orbit it would alias into dotted white rims.
   float foam = clamp((shoreFoam + edgeFoam * 0.8) * foamNoise, 0.0, 1.0) * (1.0 - smoothstep(300.0, 1000.0, dist));

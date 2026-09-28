@@ -200,8 +200,11 @@ vec3 flare(vec2 uv) {
   acc += exp(-pow((hr - 0.28) / 0.012, 2.0)) * vec3(0.4, 0.5, 0.7) * 0.03;
   // Starburst streak.
   float ang = atan(hd.y, hd.x);
-  float burst = pow(abs(cos(ang * 3.0)), 30.0) * exp(-hr * 9.0) + exp(-hr * 30.0) * 0.4;
-  acc += burst * vec3(1.0, 0.9, 0.75) * 0.25;
+  // Short and uneven: two sets of rays of different lengths (a single set of
+  // six long rays read as a sticker over the scene).
+  float rays = pow(abs(cos(ang * 3.0)), 40.0) * 0.6 * exp(-hr * 18.0) + pow(abs(cos(ang * 5.0 + 0.7)), 60.0) * 0.4 * exp(-hr * 26.0);
+  float burst = rays + exp(-hr * 30.0) * 0.4;
+  acc += burst * vec3(1.0, 0.9, 0.75) * 0.18;
   return acc * uSunVisible * uFlare;
 }
 
@@ -248,6 +251,12 @@ void main() {
   col += texture(tRays, uv).rgb;
   col += flare(uv);
   col *= uExposure;
+  // Night vision: the dim world loses its colour and cools toward blue, as the
+  // eye does in moonlight (the moonlit night side read as murky brown-green);
+  // lamps and fires stay warm because they are bright.
+  float lumN = luma(col);
+  float scot = 1.0 - smoothstep(0.004, 0.05, lumN);
+  col = mix(col, vec3(lumN) * vec3(0.62, 0.8, 1.2), scot * 0.75);
   col = acesFitted(col);
   // Grading in display space.
   col = linearToSRGB(col);
@@ -344,7 +353,7 @@ export class PostChain {
       tColor: { value: null }, tBloom: { value: this.black }, tRays: { value: this.black }, tDepth: { value: null },
       uExposure: { value: 0.55 }, uBloomStrength: { value: 0.09 }, uVignette: { value: 0.45 }, uGrain: { value: 0.022 },
       uCA: { value: 0 }, uTime: { value: 0 }, uSunUv: { value: new THREE.Vector2() }, uSunVisible: { value: 0 }, uFlare: { value: 1 },
-      uAspect: { value: 1 }, uSaturation: { value: 1.06 }, uContrast: { value: 1.04 }, uTint: { value: new THREE.Vector3(1, 1, 1) },
+      uAspect: { value: 1 }, uSaturation: { value: 1.0 }, uContrast: { value: 1.04 }, uTint: { value: new THREE.Vector3(1, 1, 1) },
       uFilter: { value: 0 }, uFade: { value: 0 }, uFadeColor: { value: new THREE.Vector3(0, 0, 0) }, uColorblind: { value: 0 },
     });
     this.fxaa = mk(FXAA_FS, { tInput: { value: null }, uTexel: { value: new THREE.Vector2() } });

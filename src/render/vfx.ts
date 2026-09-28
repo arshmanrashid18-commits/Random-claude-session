@@ -443,8 +443,8 @@ export class Vfx {
   private reticleFill: GroundRing;
   private selection: GroundRing;
   private seen = new Map<number, { phase: number; lastEmit: number }>();
-  /** Approach direction of each falling meteor, fixed when it first appears. */
-  private meteorEntry = new Map<number, THREE.Vector3>();
+  /** Approach (direction, starting distance) of each falling meteor, fixed when it first appears. */
+  private meteorEntry = new Map<number, { dir: THREE.Vector3; dist: number }>();
   private emitAcc = 0;
   private rng = 1;
   /** Screen flash (0..1) requested by impacts; read by the renderer. */
@@ -705,7 +705,7 @@ export class Vfx {
     this.shock(center, 160, 2.2, 0xffc26b, 6);
     this.shock(center, 340, 4, 0xc8a27a, 3);
     // The flash: brief, and windowed so it never reads as a white disc.
-    this.add.emit(this.time, p0.x, p0.y, p0.z, 0, 0, 0, 0.5, 12, 34, 0, 0, 4.5, 3.2, 1.8, 1, Shape.Glow, 0);
+    this.add.emit(this.time, p0.x, p0.y, p0.z, 0, 0, 0, 0.22, 10, 26, 0, 0, 4.2, 2.4, 1.0, 1, Shape.Glow, 0);
     const east = new V(up.z, 0, -up.x).normalize();
     const north = new V().crossVectors(up, east);
     // Fireball: yellow-orange tongues that redden and give way to smoke (few
@@ -748,18 +748,21 @@ export class Vfx {
         const k = Math.min(1, Math.max(0, (tickNow - e.start) / fall));
         const g = Math.max(0, groundHeight(data.heights, data.n, up.x, up.y, up.z));
         const ground = up.clone().multiplyScalar(PLANET_RADIUS + g);
-        // It falls from beyond the target and high in the watcher's sky, so
-        // the whole descent crosses the view (fixed once, then held).
-        let entry = this.meteorEntry.get(e.id);
-        if (!entry) {
-          const away = ground.clone().sub(c.camera.position);
-          away.addScaledVector(up, -away.dot(up));
-          if (away.lengthSq() < 1e-6) away.set(e.dx, e.dy, e.dz).addScaledVector(up, -new V(e.dx, e.dy, e.dz).dot(up));
-          if (away.lengthSq() < 1e-6) away.set(up.z, 0, -up.x);
-          entry = away.normalize().multiplyScalar(0.62).addScaledVector(up, 0.78).normalize();
-          this.meteorEntry.set(e.id, entry);
+        // It enters at the top edge of the watcher's view and falls to the
+        // target, so the whole descent crosses the frame whatever the camera's
+        // tilt (fixed when first seen, then held).
+        let path = this.meteorEntry.get(e.id);
+        if (!path) {
+          const screenUp = new V().setFromMatrixColumn(c.camera.matrixWorld, 1);
+          screenUp.addScaledVector(up, -screenUp.dot(up));
+          if (screenUp.lengthSq() < 1e-6) screenUp.set(up.z, 0, -up.x);
+          const dir = screenUp.normalize().multiplyScalar(0.8).addScaledVector(up, 0.6).normalize();
+          const camDist = c.camera.position.distanceTo(ground);
+          path = { dir, dist: Math.min(620, Math.max(80, camDist * 0.55)) };
+          this.meteorEntry.set(e.id, path);
         }
-        const dist = (1 - k) * 620 + 2;
+        const entry = path.dir;
+        const dist = (1 - k) * path.dist + 2;
         const p = ground.clone().addScaledVector(entry, dist);
         // Head: a white-gold point wrapped in an orange glow.
         this.add.emit(this.time, p.x, p.y, p.z, 0, 0, 0, 0.14, 5 + (1 - k) * 6, 4, 0, 0, 6, 5, 3.5, 1, Shape.Glow, 0);
@@ -782,7 +785,9 @@ export class Vfx {
           for (let i = 0; i < n; i++) {
             // Ash column.
             const v = up.clone().multiplyScalar(6 + this.rand() * 8).addScaledVector(east, this.sym() * 1.5).addScaledVector(north, this.sym() * 1.5);
-            this.alpha.emit(this.time, top.x, top.y, top.z, v.x, v.y, v.z, 10 + this.rand() * 8, 3, 22, -0.05, 0.12, 0.16, 0.14, 0.13, 0.85, Shape.Smoke, this.rand());
+            // Ash: dark at the vent, paler grey as it billows and thins.
+            const ash = 0.17 + this.rand() * 0.14;
+            this.alpha.emit(this.time, top.x, top.y, top.z, v.x, v.y, v.z, 10 + this.rand() * 8, 3, 24 + this.rand() * 8, -0.05, 0.12, ash, ash * 0.97, ash * 0.95, 0.75, Shape.Smoke, this.rand());
             // Lava bombs.
             if (this.rand() < 0.5) {
               const b = up.clone().multiplyScalar(8 + this.rand() * 14).addScaledVector(east, this.sym() * 7).addScaledVector(north, this.sym() * 7);

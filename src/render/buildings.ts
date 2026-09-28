@@ -72,18 +72,24 @@ function block(P: Parts, pal: Palette, g: number, style: number, w: number, d: n
   if (g === 0 && style !== 1) {
     // Round wattle hut with a conical thatch roof.
     b.cylinder(w * 0.55, w * 0.6, h, 10, V(x, 0, z), P.p({ color: wall, jitter: 0.1, ao: 0.3 }));
+    // A band painted in the people's colour under the eaves: civilisation's
+    // accents are what make a village pop against the land.
+    b.cylinder(w * 0.565, w * 0.575, 0.22, 10, V(x, h * 0.62, z), P.p({ slot: 1 }));
     b.cone(w * 0.85, h * 1.2, 10, V(x, h - 0.05, z), P.p({ color: roofC, jitter: 0.12 }));
-    b.box(0.5, 0.9, 0.12, V(x, 0, z + w * 0.58), P.p({ color: trim }));
+    b.box(0.5, 0.9, 0.12, V(x, 0, z + w * 0.58), P.p({ slot: 2 }));
     return;
   }
   b.box(w, h, d, V(x, 0, z), P.p({ color: wall, jitter: 0.04, ao: 0.25 }));
   if (g === 3) {
     // Timber framing.
     for (const sx of [-1, 1]) b.box(0.12, h, 0.12, V(x + sx * w / 2, 0, z + d / 2), P.p({ color: trim }));
-    b.box(w, 0.12, 0.08, V(x, h * 0.55, z + d / 2 + 0.02), P.p({ color: trim }));
+    b.box(w, 0.12, 0.08, V(x, h * 0.55, z + d / 2 + 0.02), P.p({ slot: 1 }));
   }
   if (g === 4) b.box(w + 0.05, 0.15, d + 0.05, V(x, h * 0.62, z), P.p({ color: wall2 }));
-  b.box(0.45, Math.min(1.0, h * 0.7), 0.1, V(x, 0, z + d / 2 + 0.02), P.p({ color: trim }));
+  // The door and its lintel in the people's colours.
+  const doorH = Math.min(1.0, h * 0.7);
+  b.box(0.45, doorH, 0.1, V(x, 0, z + d / 2 + 0.02), P.p({ slot: 2 }));
+  b.box(0.62, 0.1, 0.12, V(x, doorH, z + d / 2 + 0.03), P.p({ slot: 1 }));
   const win = lin(0x2a2420);
   if (w > 1.8) for (const sx of [-1, 1]) b.box(0.32, 0.36, 0.08, V(x + sx * w * 0.3, h * 0.45, z + d / 2 + 0.03), P.p({ slot: 7, color: win }));
   roofFor(P, g === 0 ? 2 : style, w, d, h, Math.max(0.8, Math.min(w, d) * 0.5), roofC, trim);
