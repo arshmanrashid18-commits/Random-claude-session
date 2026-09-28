@@ -138,7 +138,7 @@
 .pw.poor .cost { color: var(--danger); }
 .pw .cost { position: absolute; right: 3px; bottom: 1px; font-size: 9px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .pw .key { position: absolute; left: 4px; top: 2px; font-size: 9px; color: var(--text-faint); font-family: var(--font-mono); }
-.pw .cd { position: absolute; inset: 0; background: conic-gradient(rgba(5, 7, 13, 0.78) var(--cd, 0%), transparent 0); pointer-events: none; }
+.pw .cd { position: absolute; inset: 0; background: conic-gradient(rgba(5, 7, 13, 0.55) var(--cd, 0%), transparent 0); pointer-events: none; }
 .pw.ready-flash { animation: readyflash 0.7s var(--ease-out); }
 @keyframes readyflash { 0% { box-shadow: 0 0 0 0 var(--pw); } 40% { box-shadow: 0 0 22px 4px color-mix(in srgb, var(--pw) 60%, transparent); } 100% { box-shadow: none; } }
 
@@ -215,11 +215,15 @@
   scrollbar-width: thin;
 }
 .inspector.hidden { opacity: 0; transform: translateX(-20px); pointer-events: none; }
-.insp-head { display: flex; align-items: flex-start; gap: 10px; }
+.insp-head { display: flex; align-items: flex-start; gap: 10px; position: relative; }
+/* The tools float in the corner so the name and subtitle get the full width
+   (squeezed, a two-line subtitle wrapped into four ragged lines). */
+.insp-head .tools-r { position: absolute; top: 0; right: 0; }
+.insp-head .name { padding-right: 60px; }
 .insp-head .swatch { width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center; color: #0b0f18; }
 .insp-head .name { font-family: var(--font-display); font-size: 22px; line-height: 1.05; color: var(--text); }
 .insp-head .sub { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
-.insp-head .tools-r { margin-left: auto; display: flex; gap: 2px; }
+.insp-head .tools-r { display: flex; gap: 2px; }
 .insp-sec { margin-top: 12px; }
 .insp-sec h4 { margin: 0 0 6px; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-faint); font-weight: 500; }
 .meter { display: grid; grid-template-columns: 76px 1fr 34px; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); margin: 3px 0; }
@@ -246,11 +250,14 @@
   pointer-events: none;
   transition: opacity 0.3s;
   z-index: 20;
+  /* Centred between the top bar and the power bar, never under either. */
+  padding: 64px 16px 104px;
+  box-sizing: border-box;
 }
 .modal-wrap.open { opacity: 1; pointer-events: auto; }
 .modal {
   width: min(880px, calc(100vw - 32px));
-  max-height: calc(100vh - 80px);
+  max-height: calc(100vh - 176px);
   display: flex;
   flex-direction: column;
   transform: translateY(14px) scale(0.985);

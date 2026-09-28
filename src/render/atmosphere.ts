@@ -146,11 +146,12 @@ vec3 auroraEmission(vec3 p) {
   // Fine vertical rays within the curtain, and slow surges of brightness along it.
   float rays = 0.5 + 0.5 * snoise(vec3(lon * 110.0, uTime * 0.2, hemi));
   float surge = 0.3 + 0.7 * smoothstep(-0.4, 0.6, snoise(vec3(lon * 3.0 - uTime * 0.02, hemi + 7.0, 0.0)));
-  float vert = smoothstep(0.0, 0.08, hf) * exp(-hf * 3.0);
+  // Tall curtains: bright lower edge, glow reaching far up.
+  float vert = smoothstep(0.0, 0.06, hf) * (exp(-hf * 3.0) * 0.6 + exp(-hf * 1.1) * 0.4);
   vec3 green = vec3(0.15, 1.0, 0.45);
   vec3 violet = vec3(0.6, 0.2, 0.95);
   vec3 col = mix(green, violet, smoothstep(0.3, 0.85, hf));
-  return col * sheet * rays * surge * vert * night * uAurora * 0.16;
+  return col * sheet * rays * surge * vert * night * uAurora * 0.2;
 }
 
 void main() {
@@ -169,6 +170,8 @@ void main() {
 
   vec2 ta = raySphere(ro, rd, ATMO_R);
   vec3 result = sceneCol;
+  // How bright the sky dome is along this ray (0 = space): rainbows need it.
+  float skyGlow = 0.0;
   if (ta.y > 0.0) {
     float t0 = max(ta.x, 0.0);
     // Ground intersection bounds the sky ray even if the depth buffer is empty.
@@ -312,6 +315,9 @@ void main() {
           aur += Tm * auroraEmission(ro + rd * (a0 + (float(i) + aj) * ad)) * ad;
         }
       }
+      // From far out, curtains against space are edge-on slivers at the limb
+      // (they read as colour fringing): only over the night side there.
+      if (sky) aur *= 1.0 - smoothstep(500.0, 1400.0, length(ro) - PLANET_R);
     }
     vec3 Tfull = exp(-tau);
     vec3 background = sceneCol;
@@ -324,7 +330,7 @@ void main() {
     // would read as dusk: deepen the scattering for upward rays near the surface.
     if (sky) {
       float camAltA = length(ro) - PLANET_R;
-      float lowK = 1.0 - smoothstep(40.0, 320.0, camAltA);
+      float lowK = 1.0 - smoothstep(40.0, 420.0, camAltA);
       if (lowK > 0.0) {
         vec3 up0 = normalize(ro);
         float elev = max(dot(rd, up0), 0.0);
@@ -341,6 +347,13 @@ void main() {
         float rdo = dot(ro, rd);
         float minR = rdo >= 0.0 ? length(ro) : sqrt(max(dot(ro, ro) - rdo * rdo, 0.0));
         float domeW = exp(-max(minR - PLANET_R, 0.0) / 22.0);
+        // A god hovering a few hundred units up still sees a sky above the
+        // horizon (not a starfield over sunlit ground): the glow fades with
+        // the ray's elevation above the geometric horizon.
+        float r0 = length(ro);
+        float aboveHz = dot(rd, up0) + sqrt(max(0.0, 1.0 - (PLANET_R * PLANET_R) / (r0 * r0)));
+        domeW = max(domeW, exp(-max(aboveHz, 0.0) * 3.2) * (1.0 - smoothstep(60.0, 420.0, camAltA)));
+        skyGlow = dayK * domeW;
         vec3 add = dome * dayK * lowK * domeW * 0.06;
         inscatter += add;
         inscatterToCloud += add;
@@ -381,7 +394,8 @@ void main() {
   if (uRainbow * rbAlt > 0.001 && dot(rd, uSunDir) < 0.0) {
     // Against the open sky only from near the ground (never against space).
     float camAltR = length(uCamPos) - PLANET_R;
-    float reach = (sky ? 1.0 - smoothstep(40.0, 110.0, camAltR) : clamp(sceneDist / 180.0, 0.0, 1.0)) * rbAlt;
+    // Against a bright sky (never black space), or in front of distant land.
+    float reach = (sky ? (1.0 - smoothstep(40.0, 110.0, camAltR)) * smoothstep(0.25, 0.7, skyGlow) : clamp((sceneDist - 250.0) / 350.0, 0.0, 1.0)) * rbAlt;
     result += rainbow(rd) * uRainbow * reach * uSunIntensity * 0.035;
   }
   outColor = vec4(result, 1.0);

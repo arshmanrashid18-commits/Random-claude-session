@@ -21,7 +21,7 @@ Legend: [x] done and verified (test, screenshot or measurement) · [~] in progre
 
 ## Phase 2 — Climate, biomes, weather, day/night, seasons, terraforming
 - [x] Climate model + emergent biomes (in sim)
-- [x] Weather: fronts, hurricanes (named), blizzards, lightning, droughts
+- [x] Weather: fronts, hurricanes (named), blizzards, lightning, droughts, dawn fog
 - [x] Rain/snow particles, rainbows
 - [x] Terraforming brushes (raise, lower, smooth, flatten, flood, drain, biome paint)
 - [x] Incremental hydrology/climate updates after edits
@@ -55,9 +55,9 @@ Legend: [x] done and verified (test, screenshot or measurement) · [~] in progre
 ## Phase 8 — Performance and robustness
 - [x] Sim profiling and optimisation (LUT cellOf, half-rate animal needs, climate LUTs)
 - [x] 500-year soak, scenario soak, 5-minute monkey test
-- [~] Bench documentation (`scripts/bench.mts`), quality presets verified
+- [x] Bench documentation (`scripts/bench.mts`, `scripts/perf.mjs`; tables in FINAL_REPORT), quality presets measured
 
 ## Phase 9 — Polish + delight
-- [~] Visual quality loop (QUALITY_LOG.md)
+- [~] Visual quality loop (QUALITY_LOG.md; adversarial reviewer from Pass 4)
 - [x] Delight touches (see QUALITY_LOG.md)
-- [ ] README with screenshots, FINAL_REPORT.md
+- [x] README with screenshots, FINAL_REPORT.md (final scores after the last review)

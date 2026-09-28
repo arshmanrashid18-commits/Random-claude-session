@@ -220,7 +220,8 @@ void main() {
     // From afar the fine specks would alias: coarser clusters of lights take
     // over (a flat constant here made each town one saturated disc).
     float farGlow = smoothstep(200.0, 900.0, vDist);
-    float speckFar = smoothstep(0.25, 0.85, snoise(dir * 320.0) * 0.55 + snoise(dir * 90.0) * 0.45 + surf.a * 0.7);
+    // (with a floor, so even a small village shows from orbit)
+    float speckFar = max(smoothstep(0.25, 0.85, snoise(dir * 320.0) * 0.55 + snoise(dir * 90.0) * 0.45 + surf.a * 0.7), 0.3);
     float lights = surf.a * mix(speck, speckFar, farGlow) * night * uNightLights;
     // Brighter from afar so towns read as a glow on the night side.
     color += vec3(3.2, 1.9, 0.8) * lights * mix(0.9, 1.7, farGlow);
@@ -353,7 +354,8 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   // bands along both banks made the channel read as a milky sheet).
   float shoreK = lakeMode > 1.5 ? 0.0 : 1.0 - lakeMode * 0.7;
   float shoreFoam = smoothstep(0.75, 1.0, band) * (1.0 - smoothstep(0.0, 1.8, depth)) * shoreK;
-  float edgeFoam = (1.0 - smoothstep(0.0, 0.35, depth)) * (lakeMode > 1.5 ? 0.0 : 1.0);
+  // Lakes have little surf: a faint lap at the shore, not a white outline.
+  float edgeFoam = (1.0 - smoothstep(0.0, 0.35, depth)) * (lakeMode > 1.5 ? 0.0 : lakeMode > 0.5 ? 0.25 : 1.0);
   float foamNoise = 0.6 + 0.4 * snoise(wp * 0.9 + uTime * 0.2);
   // Surf is a close-up detail: from orbit it would alias into dotted white rims.
   float foam = clamp((shoreFoam + edgeFoam * 0.8) * foamNoise, 0.0, 1.0) * (1.0 - smoothstep(300.0, 1000.0, dist));

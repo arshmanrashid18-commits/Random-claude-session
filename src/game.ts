@@ -449,8 +449,14 @@ export class Game {
       cam.current.focus.copy(cam.target.focus);
       cam.target.heading = 0.25;
       cam.current.heading = 0.25;
+      // Frame the planet right of the wordmark (it collided with the title).
+      const pc = cam.camera, W = window.innerWidth, H = window.innerHeight;
+      if (!pc.view || pc.view.offsetX !== -W * 0.13 || pc.view.fullWidth !== W || pc.view.fullHeight !== H) {
+        pc.setViewOffset(W, H, -W * 0.13, 0, W, H);
+      }
       return;
     }
+    if (cam.camera.view?.enabled) cam.camera.clearViewOffset();
     if (!this.enabled) return;
     this.tutorial?.update(dt);
     // Held keys move the camera.

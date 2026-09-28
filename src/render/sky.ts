@@ -198,6 +198,11 @@ export class SkyLayer {
     this.camera.quaternion.copy(main.quaternion);
     this.camera.fov = main.fov;
     this.camera.aspect = main.aspect;
+    // Same view offset as the main camera (the title framing), so the moon and
+    // stars stay registered with the planet.
+    const v = main.view;
+    if (v && v.enabled) this.camera.setViewOffset(v.fullWidth, v.fullHeight, v.offsetX, v.offsetY, v.width, v.height);
+    else if (this.camera.view?.enabled) this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
     this.camera.updateMatrixWorld();
     this.skyMat.uniforms.uInvProj.value.copy(this.camera.projectionMatrixInverse);

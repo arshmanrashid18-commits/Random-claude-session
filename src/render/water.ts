@@ -15,15 +15,18 @@ import type { PlanetData } from './planet/planetData';
 const LAKE_VS = /* glsl */ `
 in float aLevel;
 in float aFringe;
+in float aInside;
 out vec3 vWorld;
 out float vLevel;
 out float vDist;
 out float vFringe;
+out float vInside;
 uniform vec3 uCamPos;
 void main() {
   vWorld = position;
   vLevel = aLevel;
   vFringe = aFringe;
+  vInside = aInside;
   vDist = distance(position, uCamPos);
   gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
 }
@@ -51,6 +54,7 @@ in vec3 vWorld;
 in float vLevel;
 in float vDist;
 in float vFringe;
+in float vInside;
 void main() {
   vec3 dir = normalize(vWorld);
   // The same ground the terrain draws (cubic + detail), so the shore is the
@@ -65,6 +69,9 @@ void main() {
   if (vFringe > 0.5) {
     if (ground < 0.0) discard;
     keep = 1.0 - smoothstep(0.4, 0.9, depth);
+    // Fade out across the fringe toward its outer side, so flat ground at the
+    // lake's level never draws the quad's straight edge; noise makes it wander.
+    keep *= smoothstep(0.05, 0.7, vInside + snoise(vWorld * 0.15) * 0.18);
     if (keep <= 0.0) discard;
   }
   // Seen from afar a lake reads as deep water, not a pale film.
@@ -101,7 +108,7 @@ void main() {
   float across = abs(vRiver.x);
   // Optical depth for colour: rivers read as a clear green-blue channel,
   // not as shallow surf (no shore foam across the whole ribbon).
-  float depth = (1.0 - across * across) * (2.2 + vWidth * 0.9) + 0.45;
+  float depth = (1.0 - across * across) * (3.6 + vWidth * 1.1) + 0.8;
   vec4 c = shadeWater(vWorld, dir, depth, vDist, 2.0);
   // Flow streaks moving downstream.
   float streak = snoise(vec3(vRiver.y * 0.35 - uTime * 1.4, vRiver.x * 2.5, 0.0));
@@ -175,9 +182,13 @@ export class WaterBodies {
       if (data.heightAt(d[0], d[1], d[2]) < 0) continue; // never over the sea
       all.push([c, lv, 1]);
     }
+    const lakeSet = new Set<number>();
+    for (let k = 0; k < cells.length; k++) lakeSet.add(cells[k]);
+    const isLake = (f: number, i: number, j: number) => i >= 0 && j >= 0 && i < n && j < n && lakeSet.has(f * fs + j * n + i);
     const pos = new Float32Array(all.length * 4 * 3);
     const lvl = new Float32Array(all.length * 4);
     const fr = new Float32Array(all.length * 4);
+    const ins = new Float32Array(all.length * 4);
     const idx: number[] = [];
     const half = 1 / n;
     const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
@@ -195,6 +206,9 @@ export class WaterBodies {
         pos[(k * 4 + q) * 3 + 2] = d[2] * r;
         lvl[k * 4 + q] = lv;
         fr[k * 4 + q] = isFringe;
+        // Does this corner touch a lake cell? (lake cells: always)
+        const vi = i + (corners[q][0] > 0 ? 1 : 0), vj = j + (corners[q][1] > 0 ? 1 : 0);
+        ins[k * 4 + q] = !isFringe || isLake(f, vi - 1, vj - 1) || isLake(f, vi, vj - 1) || isLake(f, vi - 1, vj) || isLake(f, vi, vj) ? 1 : 0;
       }
       const b = k * 4;
       idx.push(b, b + 1, b + 3, b, b + 3, b + 2);
@@ -203,6 +217,7 @@ export class WaterBodies {
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('aLevel', new THREE.BufferAttribute(lvl, 1));
     geo.setAttribute('aFringe', new THREE.BufferAttribute(fr, 1));
+    geo.setAttribute('aInside', new THREE.BufferAttribute(ins, 1));
     geo.setIndex(idx);
     const mesh = new THREE.Mesh(geo, this.lakeMat);
     mesh.frustumCulled = false;
@@ -255,7 +270,9 @@ export class WaterBodies {
         const sl = Math.hypot(sx, sy, sz) || 1;
         sx /= sl; sy /= sl; sz /= sl;
         if (k > 0) along += Math.hypot(x - px[(k - 1) * 3], y - px[(k - 1) * 3 + 1], z - px[(k - 1) * 3 + 2]) * PLANET_RADIUS;
-        const w = wv[k] * 0.5 * 1.25 / PLANET_RADIUS;
+        // No wider than the carved channel: a broad ribbon lay over paths and
+        // fields, which showed through it like a milky film.
+        const w = wv[k] * 0.5 * 0.8 / PLANET_RADIUS;
         // Keep water slightly above the local ground (and never float far above it).
         const ground = data.heightAt(x, y, z);
         const l2 = Math.min(Math.max(lv[k], ground + 0.12), ground + 0.6);

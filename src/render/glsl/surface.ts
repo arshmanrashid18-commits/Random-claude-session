@@ -125,7 +125,9 @@ vec3 skyAmbient(vec3 up, vec3 N, vec3 sunDir) {
   float hemi = 0.55 + 0.45 * dot(N, up);
   float phase = 0.5 - 0.5 * dot(sunDir, uMoonDir);
   float moonUp = smoothstep(-0.08, 0.25, dot(up, uMoonDir));
-  vec3 moon = vec3(0.07, 0.095, 0.17) * (0.45 + 0.55 * phase) * moonUp * (1.0 - day) * (0.3 + 1.5 * max(dot(N, uMoonDir), 0.0));
+  // Moonlight keeps the land just legible; the night side stays dark enough
+  // for the lamps of civilisation to carry it.
+  vec3 moon = vec3(0.035, 0.05, 0.095) * (0.45 + 0.55 * phase) * moonUp * (1.0 - day) * (0.3 + 1.5 * max(dot(N, uMoonDir), 0.0));
   return sky * hemi + moon;
 }
 `;
@@ -191,16 +193,17 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   float micro = dist < 400.0 ? snoise(dir * 2600.0) * (1.0 - smoothstep(80.0, 400.0, dist)) : 0.0;
 
   // --- ground layer from climate
-  vec3 sand = srgb(vec3(0.86, 0.74, 0.52));
+  vec3 sand = srgb(vec3(0.80, 0.70, 0.52));
   vec3 redSand = srgb(vec3(0.80, 0.56, 0.36));
-  vec3 dryGrass = srgb(vec3(0.72, 0.66, 0.38));
+  vec3 dryGrass = srgb(vec3(0.62, 0.60, 0.36));
   vec3 savanna = srgb(vec3(0.70, 0.60, 0.34));
   vec3 lush = srgb(vec3(0.31, 0.48, 0.19));
   vec3 meadow = srgb(vec3(0.44, 0.54, 0.25));
   vec3 tundra = srgb(vec3(0.52, 0.52, 0.40));
   vec3 soil = srgb(vec3(0.42, 0.34, 0.25));
 
-  float wetness = smoothstep(0.35, 1.5, moist + macro * 0.25);
+  // Grass takes the land at moderate moisture; sand is for true deserts.
+  float wetness = smoothstep(0.2, 1.1, moist + macro * 0.25);
   float warm = smoothstep(8.0, 24.0, temp + macro * 3.0);
   vec3 desert = mix(sand, redSand, smoothstep(-0.2, 0.6, fbm3(dir * 21.0)) * 0.6);
   vec3 grass = mix(meadow, lush, smoothstep(1.0, 2.5, moist));
@@ -219,6 +222,9 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   }
   // Dry and cold is steppe and bare soil, not sand; living grass wins where the plant sim grows it.
   desert = mix(mix(tundra, soil, 0.4), desert, smoothstep(2.0, 14.0, temp + macro * 3.0));
+  // Dry uplands are gravel and stone, not dune sand (mountainsides read as sand).
+  vec3 gravel = mix(srgb(vec3(0.52, 0.48, 0.42)), srgb(vec3(0.44, 0.40, 0.35)), smoothstep(-0.3, 0.5, macro));
+  desert = mix(desert, gravel, smoothstep(5.0, 18.0, h + macro * 4.0) * 0.85);
   vec3 ground = mix(desert, grass, max(wetness, clamp(vA.r * 0.9, 0.0, 1.0)));
   ground = mix(ground, tundra, 1.0 - smoothstep(-6.0, 3.0, temp + macro * 2.0));
   ground *= 0.9 + macro * 0.18 + micro * 0.08;
@@ -258,8 +264,9 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   col = mix(col, col * vec3(1.08, 0.95, 0.75), clamp(1.0 - grassD * 1.4, 0.0, 1.0) * (1.0 - canopy) * 0.35);
 
   // --- rock on steep slopes, bare peaks
-  vec3 rockA = srgb(vec3(0.55, 0.49, 0.42));
-  vec3 rockB = srgb(vec3(0.38, 0.34, 0.30));
+  // Rock in the art direction's greys (#948A7D / #6B635C).
+  vec3 rockA = srgb(vec3(0.58, 0.54, 0.49));
+  vec3 rockB = srgb(vec3(0.42, 0.39, 0.36));
   float strata = sin(h * 0.9 + fbm3(dir * 60.0) * 2.5) * 0.5 + 0.5;
   vec3 rock = mix(rockB, rockA, 0.45 + strata * 0.15 + macro * 0.3 + micro * 0.1);
   float rockMask = smoothstep(0.34, 0.52, slope + macro * 0.07 + micro * 0.03);
@@ -281,7 +288,7 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   snowAmt *= 1.0 - smoothstep(0.35, 0.6, slope);
   snowAmt = smoothstep(0.25, 0.65, snowAmt + macro * 0.2 + micro * 0.05);
   if (h < -0.3) snowAmt *= 0.0;
-  vec3 snowCol = srgb(vec3(0.93, 0.95, 0.98));
+  vec3 snowCol = srgb(vec3(0.83, 0.86, 0.91)); // bright, but only sunlit snow nears white
   col = mix(col, snowCol, snowAmt);
 
   // --- surface effects: burn scars, ash, development

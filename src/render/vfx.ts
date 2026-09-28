@@ -115,7 +115,9 @@ void main() {
     fadeOut = 1.0 - smoothstep(0.4, 1.0, vK);
   } else if (vShape == 2.0) {
     float n = vnoise(uv * 2.5 + vSeed * 31.0) * 0.6 + vnoise(uv * 5.0 - vSeed * 13.0) * 0.4;
-    a = smoothstep(1.0, 0.2, r + (n - 0.5) * 0.6);
+    // The noise erodes the outline, but a window keeps it inside the quad
+    // (without it each puff showed its square border).
+    a = smoothstep(1.0, 0.2, r + (n - 0.5) * 0.6) * (1.0 - smoothstep(0.72, 0.98, r));
     // Smoke pales as it rises and spreads (sunlit, thinning tops), and each
     // puff is lighter on its upper side: a plume, not a flat dark smudge.
     col *= (0.8 + n * 0.4) * (0.75 + vK * 0.9) * (1.0 + clamp(uv.y, -1.0, 1.0) * 0.18);
@@ -874,9 +876,12 @@ export class Vfx {
           const up = new V(d[0], d[1], d[2]);
           const p = up.clone().multiplyScalar(PLANET_RADIUS + g + 0.2);
           const v = up.clone().multiplyScalar(1.5 + this.rand() * 2).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(0.4));
-          // Tongues of varied size and heat, not one repeated cone.
+          // Tongues of varied size and heat, not one repeated cone; from afar a
+          // burning field is a soft glow (a crowd of tiny flames read as cones).
           const heat = 0.6 + this.rand() * 0.6;
-          this.add.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 0.5 + this.rand() * 0.9, (0.6 + this.rand() * 1.6) * (0.8 + fire), 0.3, 0, 0.6, 2.6 * heat, 1.05 * heat, 0.28 * heat, 0.9, Shape.Flame, this.rand());
+          const far = p.distanceTo(cam) > 160;
+          if (far) this.add.emit(this.time, p.x, p.y, p.z, v.x * 0.3, v.y * 0.3, v.z * 0.3, 0.6 + this.rand() * 0.8, (1.6 + this.rand() * 2.4) * (0.8 + fire), 1.0, 0, 0.6, 1.5 * heat, 0.55 * heat, 0.14 * heat, 0.7, Shape.Glow, this.rand());
+          else this.add.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 0.5 + this.rand() * 0.9, (0.6 + this.rand() * 1.6) * (0.8 + fire), 0.3, 0, 0.6, 2.6 * heat, 1.05 * heat, 0.28 * heat, 0.9, Shape.Flame, this.rand());
           if (this.rand() < 0.35) {
             const s = up.clone().multiplyScalar(3 + this.rand() * 3);
             this.alpha.emit(this.time, p.x, p.y, p.z, s.x, s.y, s.z, 6 + this.rand() * 5, 2, 12, -0.02, 0.15, 0.2, 0.18, 0.17, 0.55 * fire, Shape.Smoke, this.rand());

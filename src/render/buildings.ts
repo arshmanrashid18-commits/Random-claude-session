@@ -76,6 +76,8 @@ function block(P: Parts, pal: Palette, g: number, style: number, w: number, d: n
     // accents are what make a village pop against the land.
     b.cylinder(w * 0.565, w * 0.575, 0.22, 10, V(x, h * 0.62, z), P.p({ slot: 1 }));
     b.cone(w * 0.85, h * 1.2, 10, V(x, h - 0.05, z), P.p({ color: roofC, jitter: 0.12 }));
+    // A painted cap at the apex: the people's colour, seen from above.
+    b.cone(w * 0.26, h * 0.36, 10, V(x, h - 0.05 + h * 1.2 * 0.7, z), P.p({ slot: 1 }));
     b.box(0.5, 0.9, 0.12, V(x, 0, z + w * 0.58), P.p({ slot: 2 }));
     return;
   }
@@ -92,7 +94,11 @@ function block(P: Parts, pal: Palette, g: number, style: number, w: number, d: n
   b.box(0.62, 0.1, 0.12, V(x, doorH, z + d / 2 + 0.03), P.p({ slot: 1 }));
   const win = lin(0x2a2420);
   if (w > 1.8) for (const sx of [-1, 1]) b.box(0.32, 0.36, 0.08, V(x + sx * w * 0.3, h * 0.45, z + d / 2 + 0.03), P.p({ slot: 7, color: win }));
-  roofFor(P, g === 0 ? 2 : style, w, d, h, Math.max(0.8, Math.min(w, d) * 0.5), roofC, trim);
+  const roofH = Math.max(0.8, Math.min(w, d) * 0.5);
+  roofFor(P, g === 0 ? 2 : style, w, d, h, roofH, roofC, trim);
+  // A pennant in the people's colour flies from the roof.
+  b.box(0.07, 1.2, 0.07, V(x - w * 0.28, h + roofH * 0.55, z), P.p({ color: trim }));
+  b.quad(0.55, 0.34, V(x - w * 0.28 + 0.28, h + roofH * 0.55 + 1.02, z), E(0, 0, Math.PI / 2), P.p({ slot: 1, sway: 1 }));
   if (g === 4 && style !== 2) b.box(0.3, 1.1, 0.3, V(x + w * 0.3, h + 0.2, z - d * 0.2), P.p({ color: lin(0x6a3a2a) }));
 }
 
