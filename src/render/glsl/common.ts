@@ -281,3 +281,19 @@ vec3 linearToSRGB(vec3 c) {
 }
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 `;
+
+/**
+ * Visual sea-floor relief: the generator's shelves follow contours of
+ * bilinearly upsampled coarse fields, which run in straight segments that kink
+ * at coarse-cell corners. Below the shoreline (never at it) both the seabed
+ * colour and the water depth see the same gentle noise, so shelf edges wander
+ * like sand bars. Requires GLSL_NOISE.
+ */
+export const GLSL_SEABED = /* glsl */ `
+float seabed(float h, vec3 dir) {
+  float k = smoothstep(-0.3, -1.6, h);
+  if (k <= 0.0) return h;
+  vec3 p = dir * PLANET_R;
+  return h + (snoise(p * 0.035) * 0.65 + snoise(p * 0.11 + 3.7) * 0.35) * 2.2 * k;
+}
+`;

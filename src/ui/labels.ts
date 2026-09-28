@@ -44,7 +44,7 @@ export class MapLabels {
         const d = p.distanceTo(cam);
         // Near the limb or behind the planet: hide.
         const facing = p.clone().normalize().dot(cam.clone().sub(p).normalize());
-        const near = d < 50;
+        const near = d < 28;
         const far = alt > 2600 && s.tier < 1;
         if (facing < 0.08 || near || far || d > 4200) continue;
         const v = p.project(camera);
@@ -60,7 +60,8 @@ export class MapLabels {
           e.dataset.sig = sig;
           e.innerHTML = `${t ? flagSvg(t.flag, 18, 12) : ''}<span class="nm">${s.name}</span><span class="pp">${TIERS[s.tier] ?? ''} · ${s.pop}</span>`;
         }
-        const fade = Math.min(1, facing * 6) * Math.min(1, (d - 50) / 60) * (d > 2200 ? Math.max(0, 1 - (d - 2200) / 2000) : 1);
+        // Fully legible at village range; only a camera among the rooftops fades it.
+        const fade = Math.min(1, facing * 6) * Math.min(1, (d - 28) / 22) * (d > 2200 ? Math.max(0, 1 - (d - 2200) / 2000) : 1);
         const scale = Math.max(0.75, Math.min(1.1, 700 / d + 0.6));
         e.style.transform = `translate(${((v.x * 0.5 + 0.5) * width).toFixed(1)}px, ${((-v.y * 0.5 + 0.5) * height).toFixed(1)}px) translate(-50%, -130%) scale(${scale.toFixed(3)})`;
         e.style.opacity = fade.toFixed(3);

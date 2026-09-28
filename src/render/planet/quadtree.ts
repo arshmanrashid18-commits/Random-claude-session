@@ -92,6 +92,11 @@ export interface LodSettings {
   rangeK: number;
 }
 
+/** Distance factor for patches seen edge-on (|n·v| → 0): < 1 near the limb. */
+export function limbScale(ndv: number): number {
+  return 1 - 0.65 * (1 - ndv) ** 4;
+}
+
 const tmp = [0, 0, 0];
 const sphere = new THREE.Sphere();
 
@@ -181,7 +186,12 @@ export class LodSelector {
     sphere.radius = radius;
     if (!this.frustum.intersectsSphere(sphere)) return;
     const dx = sx - this.camX, dy = sy - this.camY, dz = sz - this.camZ;
-    const dist = Math.max(0, Math.sqrt(dx * dx + dy * dy + dz * dz) - radius);
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    // Silhouette-aware: patches seen edge-on near the limb split deeper so the
+    // planet's outline stays round. Conservative over the patch (the vertex
+    // shader applies the same factor per vertex, see limbScale in terrain.ts).
+    const edge = Math.max(0, Math.abs(cx * dx + cy * dy + cz * dz) / Math.max(len, 1e-3) - sinA);
+    const dist = Math.max(0, len - radius) * limbScale(edge);
     if (L < this.settings.maxLevel && dist < this.ranges[L + 1]) {
       this.visit(f, L + 1, 2 * i, 2 * j);
       this.visit(f, L + 1, 2 * i + 1, 2 * j);

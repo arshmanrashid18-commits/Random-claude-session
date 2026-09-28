@@ -40,6 +40,7 @@ export class Modal {
   open(): void {
     this.isOpen = true;
     this.wrap.classList.add('open');
+    Modal.syncBody();
     this.render();
   }
 
@@ -47,7 +48,14 @@ export class Modal {
     if (!this.isOpen) return;
     this.isOpen = false;
     this.wrap.classList.remove('open');
+    Modal.syncBody();
     this.onClose();
+  }
+
+  /** While any panel is open the world's floating labels step back (they
+   *  showed through the translucent panels). */
+  private static syncBody(): void {
+    document.body.classList.toggle('modal-open', document.querySelector('.modal-wrap.open') !== null);
   }
 
   toggle(): void {
@@ -135,12 +143,14 @@ export class ChroniclePanel extends Modal {
     const eras = [...byEra.keys()].sort((a, b) => b - a);
     for (const era of eras) {
       const list = byEra.get(era)!;
-      html += `<h3>Years ${era * 10 + 1}–${era * 10 + 10}${this.eraName(list)}</h3>`;
+      html += `<h3>Years ${era * 10 + 1}–${era * 10 + 10}${this.eraName(list, era)}</h3>`;
       // Group by year into short paragraphs.
       const years = new Map<number, GameEvent[]>();
       for (const e of list) { const y = yearOfTick(e.tick); if (!years.has(y)) years.set(y, []); years.get(y)!.push(e); }
       for (const y of [...years.keys()].sort((a, b) => b - a)) {
-        const sentences = mergeYear(years.get(y)!).sort((a, b) => b.importance - a.importance).slice(0, 8).map((m) => {
+        // The most important sentences of the year, told in the order they
+        // happened (cause before effect: the god's cast before the crater).
+        const sentences = mergeYear(years.get(y)!).sort((a, b) => b.importance - a.importance).slice(0, 8).sort((a, b) => a.id - b.id).map((m) => {
           return `<span class="e" data-ev="${m.id}">${esc(m.text)}</span>`;
         });
         html += `<p><b style="color:var(--gold)">Year ${y}.</b> ${sentences.join(' ')}</p>`;
@@ -151,7 +161,9 @@ export class ChroniclePanel extends Modal {
     this.body.innerHTML = html;
   }
 
-  private eraName(list: GameEvent[]): string {
+  /** Named after what filled the decade; neighbouring decades of the same
+   *  character get different names. */
+  private eraName(list: GameEvent[], era: number): string {
     const count = (k: string[]) => list.filter((e) => k.includes(e.kind)).length;
     const war = count(['war', 'holy-war', 'battle', 'siege', 'conquest']);
     const wrath = count(['meteor', 'quake', 'eruption', 'tsunami', 'plague', 'ice-age']);
@@ -159,10 +171,11 @@ export class ChroniclePanel extends Modal {
     const growth = count(['settlement-founded', 'settlement-grew', 'tech', 'age']);
     const best = Math.max(war, wrath, faith, growth);
     if (best < 2) return '';
-    if (best === wrath) return ' · The Years of Wrath';
-    if (best === war) return ' · An Age of Spears';
-    if (best === faith) return ' · The Years of Wonders';
-    return ' · A Time of Growing';
+    const pick = (names: string[]) => ` · ${names[era % names.length]}`;
+    if (best === wrath) return pick(['The Years of Wrath', 'When the Sky Fell', 'An Age of Ash', 'The Scourging']);
+    if (best === war) return pick(['An Age of Spears', 'The Warring Years', 'A Time of Banners', 'The Long Feud']);
+    if (best === faith) return pick(['The Years of Wonders', 'An Age of Prophets', 'The Kindling', 'A Time of Visions']);
+    return pick(['A Time of Growing', 'The Years of Plenty', 'An Age of Builders', 'The Quickening']);
   }
 }
 

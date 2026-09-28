@@ -2,7 +2,7 @@
  * Terrain and ocean surfaces rendered as instanced quadtree patches.
  */
 import * as THREE from 'three';
-import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_DETAIL, GLSL_HEIGHT, GLSL_NOISE, GLSL_REGION } from '../glsl/common';
+import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_DETAIL, GLSL_HEIGHT, GLSL_NOISE, GLSL_REGION, GLSL_SEABED } from '../glsl/common';
 import { GLSL_CLOUDS, GLSL_SKYLIGHT, GLSL_TERRAIN_ALBEDO } from '../glsl/surface';
 import { LodSelector, MAX_LOD_LEVELS, type LodSettings } from './quadtree';
 import { GLSL_SHADOW_SAMPLE } from '../shadows';
@@ -67,7 +67,11 @@ void main() {
   vec2 ab = aPatch.xy + g * aPatch.z;
   vec3 d0 = faceABToDir(face, ab);
   float h0 = heightFaceAB(face, ab);
-  float dist0 = distance(d0 * (PLANET_R + h0), uCamPos);
+  vec3 toV = d0 * (PLANET_R + h0) - uCamPos;
+  float len0 = length(toV);
+  // Same limb factor as the CPU selection (limbScale in quadtree.ts).
+  float ndv = abs(dot(d0, toV)) / max(len0, 1e-3);
+  float dist0 = len0 * (1.0 - 0.65 * pow(1.0 - ndv, 4.0));
   float range = uRanges[level];
   float morph = clamp((dist0 - range * uMorphStart) / (range * (0.98 - uMorphStart)), 0.0, 1.0);
   vec2 gg = g * uGrid;
@@ -93,6 +97,7 @@ ${GLSL_CUBESPHERE}
 ${GLSL_HEIGHT}
 ${GLSL_REGION}
 ${GLSL_NOISE}
+${GLSL_SEABED}
 ${GLSL_ATMOSPHERE}
 ${GLSL_CLOUDS}
 ${GLSL_SKYLIGHT}
@@ -145,7 +150,10 @@ vec3 detailNormal(vec3 N, vec3 dir, float dist) {
 void main() {
   float r = length(vWorld);
   vec3 dir = vWorld / r;
-  float h = r - PLANET_R;
+  // Shade by the height field itself, not the mesh's interpolated height: the
+  // latter depends on each patch's level of detail, which drew straight seams
+  // in sea-floor colour (seen through shallow water) along patch boundaries.
+  float h = seabed(heightAtDir(dir), dir);
   vec2 ab;
   int f = dirToFaceAB(dir, ab);
   vec2 nuv = ((ab + 1.0) * 0.5 * uHeightN + 0.5) / (uHeightN + 1.0);
@@ -327,7 +335,8 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   float shoreFoam = smoothstep(0.75, 1.0, band) * (1.0 - smoothstep(0.0, 1.8, depth)) * (1.0 - lakeMode * 0.7);
   float edgeFoam = 1.0 - smoothstep(0.0, 0.35, depth);
   float foamNoise = 0.6 + 0.4 * snoise(wp * 0.9 + uTime * 0.2);
-  float foam = clamp((shoreFoam + edgeFoam * 0.8) * foamNoise, 0.0, 1.0);
+  // Surf is a close-up detail: from orbit it would alias into dotted white rims.
+  float foam = clamp((shoreFoam + edgeFoam * 0.8) * foamNoise, 0.0, 1.0) * (1.0 - smoothstep(300.0, 1000.0, dist));
   // Whitecaps: streaky, only under strong storm winds.
   float windy = smoothstep(0.55, 0.9, storm);
   if (windy > 0.0) {
@@ -368,6 +377,7 @@ ${GLSL_CUBESPHERE}
 ${GLSL_HEIGHT}
 ${GLSL_REGION}
 ${GLSL_NOISE}
+${GLSL_SEABED}
 ${GLSL_ATMOSPHERE}
 ${GLSL_SKYLIGHT}
 uniform vec3 uCamPos;
@@ -380,7 +390,7 @@ in float vDist;
 void main() {
   float r = length(vWorld);
   vec3 dir = vWorld / r;
-  float ground = heightAtDir(dir);
+  float ground = seabed(heightAtDir(dir), dir);
   float depth = (r - PLANET_R) - ground;
   if (depth < -0.02) discard;
   vec4 c = shadeWater(vWorld, dir, max(depth, 0.0), vDist, 0.0);

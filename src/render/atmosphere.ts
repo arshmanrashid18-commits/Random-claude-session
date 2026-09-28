@@ -189,6 +189,13 @@ void main() {
       if (camR > CLOUD_R0 && tc0.x > 0.0) ce = tc0.x; // from above: stop at the inner shell
       else if (camR < CLOUD_R0) { cs = max(tc0.y, 0.0); }
       ce = min(ce, sceneDist);
+      // From low altitude the far deck is faded out beyond this distance (see
+      // below); ending the march there keeps the step size the same for sky and
+      // terrain pixels (a march to the far side of the shell drew hard-edged
+      // bands along silhouettes and at the inner shell's tangent).
+      float camAlt0 = length(ro) - PLANET_R;
+      float horizonD = sqrt(max(dot(ro, ro) - PLANET_R * PLANET_R, 1.0));
+      if (camAlt0 < 260.0) ce = min(ce, horizonD * 0.85);
       if (ce > cs && tc1.y > 0.0) {
         int steps = uCloudSteps;
         float seg = ce - cs;
@@ -196,7 +203,9 @@ void main() {
         float jitter = hash13(vec3(gl_FragCoord.xy, uTime * 60.0));
         float mu = dot(rd, uSunDir);
         float phase = mix(phaseM(mu, 0.55), phaseM(mu, -0.2), 0.3) * 4.0 * PI;
-        float lod = seg > 60.0 ? 1.0 : 0.0;
+        // Edge erosion fades out continuously for long grazing segments (a hard
+        // switch drew straight edges along terrain silhouettes and one view angle).
+        float lod = smoothstep(35.0, 95.0, seg);
         float wsum = 0.0;
         // Clouds part around a low camera so the god can see the land.
         float camAlt = length(ro) - PLANET_R;
@@ -209,7 +218,10 @@ void main() {
           if (camAlt < 700.0) dens *= smoothstep(nearFade * 0.35, nearFade, t);
           // From low altitude the far cloud deck is seen edge-on and would be
           // badly undersampled: let it dissolve into the haze instead.
-          if (camAlt < 260.0) dens *= 1.0 - smoothstep(camAlt * 2.5 + 120.0, camAlt * 5.0 + 260.0, t);
+          // Near the camera's horizon (only ~480 u away at 110 u altitude on
+          // this small world) the deck is seen edge-on as a flat strip: it
+          // dissolves before the horizon.
+          if (camAlt < 260.0) dens *= 1.0 - smoothstep(horizonD * 0.5, horizonD * 0.85, t);
           if (dens > 0.001) {
             float r = length(p);
             vec3 up = p / r;
@@ -241,8 +253,10 @@ void main() {
     // Aerial perspective is compressed for nearby surfaces: the atmosphere is
     // scaled for the planet, so at village range it would read as fog. Haze
     // ramps up with distance and reaches full physical strength by ~1100 u.
-    float hazeK = sky ? 1.0 : clamp(sceneDist / 1100.0, 0.07, 1.0);
-    float dtE = dt * hazeK;
+    // The compression depends on the distance along the ray, not on what the
+    // ray finally hits, so a cloud gets the same haze in front of a nearby
+    // mountain as in front of the far sea (no steps along silhouettes).
+    float dtE;
     float mu = dot(rd, uSunDir);
     float pR = phaseR(mu), pM = phaseM(mu, MIE_G);
     vec3 tau = vec3(0.0);
@@ -254,6 +268,7 @@ void main() {
     for (int i = 0; i < 64; i++) {
       if (i >= N) break;
       float t = t0 + (float(i) + 0.5) * dt;
+      dtE = dt * clamp(t / 550.0, 0.07, 1.0);
       vec3 p = ro + rd * t;
       float r = length(p);
       float h = max(r - PLANET_R, 0.0);
@@ -316,7 +331,13 @@ void main() {
         vec3 dome = mix(vec3(0.62, 0.74, 0.90), vec3(0.12, 0.27, 0.62), pow(elev, 0.55));
         float sunSide = pow(max(dot(rd, uSunDir), 0.0), 3.0);
         dome = mix(dome, vec3(1.0, 0.62, 0.36), (1.0 - smoothstep(0.02, 0.35, sunH)) * sunSide * (1.0 - elev) * 0.8);
-        vec3 add = dome * dayK * lowK * 0.06;
+        // Weighted by the densest air the ray passes through (its lowest
+        // altitude), so from above the shell the dome fades smoothly toward the
+        // limb instead of ending in a hard edge against space.
+        float rdo = dot(ro, rd);
+        float minR = rdo >= 0.0 ? length(ro) : sqrt(max(dot(ro, ro) - rdo * rdo, 0.0));
+        float domeW = exp(-max(minR - PLANET_R, 0.0) / 22.0);
+        vec3 add = dome * dayK * lowK * domeW * 0.06;
         inscatter += add;
         inscatterToCloud += add;
       }

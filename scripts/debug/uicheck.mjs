@@ -40,19 +40,20 @@ await step('meteor', async () => {
     const f = cam.current.focus.clone();
     const east = f.clone().cross({ x: 0, y: 1, z: 0 }).normalize();
     const p = f.clone().addScaledVector(east, 0.06).normalize();
-    await window.__genesis.command({ kind: 'boundless', on: true });
     cam.cutTo({ distance: 260, tiltOffset: 0.25 });
     return window.__genesis.command({ kind: 'power', power: 'meteor', x: p.x, y: p.y, z: p.z });
   });
   console.log('meteor cast', JSON.stringify(r));
+  // Simulation ticks jump instantly but effects age with rendered frames
+  // (≤ 0.1 s each), so each capture renders enough frames for its moment.
   await page.evaluate(() => window.__genesis.advance(14));
-  await page.evaluate(() => window.__genesis.renderFrames(3));
+  await page.evaluate(() => window.__genesis.renderFrames(8));
   await page.screenshot({ path: `${out}/meteor-falling.png` });
   await page.evaluate(() => window.__genesis.advance(11));
-  await page.evaluate(() => window.__genesis.renderFrames(2));
+  await page.evaluate(() => window.__genesis.renderFrames(4));
   await page.screenshot({ path: `${out}/meteor-impact.png` });
   await page.evaluate(() => window.__genesis.advance(40));
-  await page.evaluate(() => window.__genesis.renderFrames(6));
+  await page.evaluate(() => window.__genesis.renderFrames(30));
   await page.screenshot({ path: `${out}/meteor-after.png` });
 });
 await step('panels', async () => {

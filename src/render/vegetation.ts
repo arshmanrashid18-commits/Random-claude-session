@@ -20,6 +20,7 @@ import type { PlanetData } from './planet/planetData';
 import { DEPTH_FS, type SharedUniforms } from './planet/terrain';
 import type { CivData } from '../worker/protocol';
 import { BType, BUILDINGS } from '../sim/civ/defs';
+import { lakeFringe } from './lakeFringe';
 
 export const VEG_TYPES = ['broadleaf', 'conifer', 'palm', 'cactus', 'bush', 'snag', 'rock', 'reeds', 'birch'] as const;
 export type VegType = (typeof VEG_TYPES)[number];
@@ -379,6 +380,8 @@ export class Vegetation {
     this.hydroN = hydroN;
     this.lakeLevel = new Float32Array(6 * hydroN * hydroN).fill(NaN);
     for (let k = 0; k < cells.length; k++) this.lakeLevel[cells[k]] = levels[k];
+    // The water also reaches into the fringe cells (see lakeFringe).
+    for (const [c, lv] of lakeFringe(cells, levels, hydroN)) this.lakeLevel[c] = lv;
     this.invalid = true;
   }
 

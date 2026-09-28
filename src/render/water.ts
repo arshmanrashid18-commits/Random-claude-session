@@ -7,19 +7,23 @@ import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_HEIGHT, GLSL_NOI
 import { GLSL_SKYLIGHT } from './glsl/surface';
 import { OCEAN_SHADING, type SharedUniforms } from './planet/terrain';
 import { faceABToDir } from '../sim/planet/cubesphere';
+import { lakeFringe } from './lakeFringe';
 import { PLANET_RADIUS } from '../sim/constants';
 import type { StaticWorldData } from '../worker/protocol';
 import type { PlanetData } from './planet/planetData';
 
 const LAKE_VS = /* glsl */ `
 in float aLevel;
+in float aFringe;
 out vec3 vWorld;
 out float vLevel;
 out float vDist;
+out float vFringe;
 uniform vec3 uCamPos;
 void main() {
   vWorld = position;
   vLevel = aLevel;
+  vFringe = aFringe;
   vDist = distance(position, uCamPos);
   gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
 }
@@ -46,13 +50,24 @@ ${WATER_FS_HEAD}
 in vec3 vWorld;
 in float vLevel;
 in float vDist;
+in float vFringe;
 void main() {
   vec3 dir = normalize(vWorld);
   float ground = heightAtDir(dir);
   float depth = vLevel - ground;
   if (depth < -0.02) discard;
-  vec4 c = shadeWater(vWorld, dir, max(depth, 0.0) * 1.6, vDist, 1.0);
-  outColor = c;
+  // The fringe around a lake lets the shoreline follow the terrain contour
+  // instead of the hydrology grid; it never floods the sea or the valley
+  // below the outlet.
+  float keep = 1.0;
+  if (vFringe > 0.5) {
+    if (ground < 0.0) discard;
+    keep = 1.0 - smoothstep(0.4, 0.9, depth);
+    if (keep <= 0.0) discard;
+  }
+  // Seen from afar a lake reads as deep water, not a pale film.
+  float optical = max(depth, 0.0) * 1.6 + smoothstep(250.0, 1200.0, vDist) * 2.5;
+  outColor = shadeWater(vWorld, dir, optical, vDist, 1.0) * keep;
 }
 `;
 
@@ -137,23 +152,35 @@ export class WaterBodies {
     if (this.riverMesh) this.group.add(this.riverMesh);
   }
 
-  private buildLakes(world: StaticWorldData, _data: PlanetData): THREE.Mesh | null {
+  private buildLakes(world: StaticWorldData, data: PlanetData): THREE.Mesh | null {
     const { cells, levels } = world.lakes;
     if (cells.length === 0) return null;
     const n = world.hydroN;
     const fs = n * n;
     // Edge-exact quads: neighbours share edges, nothing overlaps, so the
-    // translucent surface is never blended twice.
-    const all: [number, number][] = [];
-    for (let k = 0; k < cells.length; k++) all.push([cells[k], levels[k]]);
+    // translucent surface is never blended twice. Lake cells, then one ring of
+    // fringe cells (land around the lake at the lake's level) whose fragments
+    // the shader clips against the terrain, so shores follow the contours.
+    const all: [number, number, number][] = [];
+    for (let k = 0; k < cells.length; k++) all.push([cells[k], levels[k], 0]);
+    const fringe = lakeFringe(cells, levels, n);
+    const d = [0, 0, 0];
+    for (const [c, lv] of fringe) {
+      const f = Math.floor(c / fs);
+      const rem = c - f * fs;
+      const j = Math.floor(rem / n), i = rem - j * n;
+      faceABToDir(f, -1 + (2 * i + 1) / n, -1 + (2 * j + 1) / n, d, 0);
+      if (data.heightAt(d[0], d[1], d[2]) < 0) continue; // never over the sea
+      all.push([c, lv, 1]);
+    }
     const pos = new Float32Array(all.length * 4 * 3);
     const lvl = new Float32Array(all.length * 4);
+    const fr = new Float32Array(all.length * 4);
     const idx: number[] = [];
-    const d = [0, 0, 0];
     const half = 1 / n;
     const corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
     for (let k = 0; k < all.length; k++) {
-      const [c, lv] = all[k];
+      const [c, lv, isFringe] = all[k];
       const f = Math.floor(c / fs);
       const rem = c - f * fs;
       const j = Math.floor(rem / n), i = rem - j * n;
@@ -165,6 +192,7 @@ export class WaterBodies {
         pos[(k * 4 + q) * 3 + 1] = d[1] * r;
         pos[(k * 4 + q) * 3 + 2] = d[2] * r;
         lvl[k * 4 + q] = lv;
+        fr[k * 4 + q] = isFringe;
       }
       const b = k * 4;
       idx.push(b, b + 1, b + 3, b, b + 3, b + 2);
@@ -172,6 +200,7 @@ export class WaterBodies {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('aLevel', new THREE.BufferAttribute(lvl, 1));
+    geo.setAttribute('aFringe', new THREE.BufferAttribute(fr, 1));
     geo.setIndex(idx);
     const mesh = new THREE.Mesh(geo, this.lakeMat);
     mesh.frustumCulled = false;

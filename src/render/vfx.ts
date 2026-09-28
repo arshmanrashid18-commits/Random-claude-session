@@ -97,15 +97,21 @@ void main() {
   float fadeIn = smoothstep(0.0, 0.08, vK);
   float fadeOut = 1.0 - smoothstep(0.6, 1.0, vK);
   if (vShape == 0.0) {
-    a = exp(-r * r * 4.0);
+    // Windowed so it reaches zero inside the quad: with HDR colours the tail
+    // of a plain gaussian drew the sprite's square outline.
+    a = exp(-r * r * 4.0) * (1.0 - smoothstep(0.7, 1.0, r));
   } else if (vShape == 1.0) {
     // Flame: teardrop, hot core to red tips as it ages.
     vec2 q = uv;
     q.y += 0.25;
     float w = 1.0 - smoothstep(-0.8, 1.0, q.y);
     float d = length(vec2(q.x / max(0.15, w * 0.8), q.y * 0.85));
-    a = smoothstep(1.0, 0.35, d) * (0.75 + 0.25 * vnoise(uv * 3.0 + vSeed * 40.0));
-    col = mix(col * vec3(1.6, 1.4, 1.1), col * vec3(1.0, 0.35, 0.12), smoothstep(0.1, 0.9, vK));
+    // Flickering tongues: noise eats into the outline so no two flames match.
+    float fl = vnoise(vec2(uv.x * 3.0 + vSeed * 40.0, uv.y * 2.0 - vK * 6.0));
+    a = smoothstep(1.0, 0.35, d + (fl - 0.5) * 0.45) * (0.7 + 0.3 * fl);
+    // A yellow core that reddens as it rises and ages (not a white-hot cone).
+    vec3 hot = col * mix(vec3(1.25, 1.05, 0.8), vec3(1.1, 0.8, 0.5), fract(vSeed * 7.3));
+    col = mix(hot, col * vec3(0.95, 0.32, 0.1), smoothstep(0.05, 0.8, vK + (1.0 - w) * 0.3));
     fadeOut = 1.0 - smoothstep(0.4, 1.0, vK);
   } else if (vShape == 2.0) {
     float n = vnoise(uv * 2.5 + vSeed * 31.0) * 0.6 + vnoise(uv * 5.0 - vSeed * 13.0) * 0.4;
@@ -113,7 +119,7 @@ void main() {
     col *= 0.8 + n * 0.4;
     fadeOut = 1.0 - smoothstep(0.3, 1.0, vK);
   } else if (vShape == 3.0 || vShape == 6.0) {
-    a = exp(-r * r * 9.0);
+    a = exp(-r * r * 9.0) * (1.0 - smoothstep(0.7, 1.0, r));
   } else if (vShape == 4.0) {
     a = smoothstep(1.0, 0.7, length(vec2(uv.x * 1.8, uv.y)));
   } else {
@@ -288,9 +294,17 @@ uniform vec3 uColor;
 uniform float uAlpha;
 uniform float uTime;
 uniform float uDash;
+uniform float uFront;
 void main() {
   float edge = 1.0 - abs(vV * 2.0 - 1.0);
   float a = smoothstep(0.0, 0.6, edge);
+  if (uFront > 0.0) {
+    // A shock front, not a painted circle: a sharp leading edge (outer side),
+    // dust trailing inward, and uneven strength around the ring.
+    float front = smoothstep(1.0, 0.88, vV) * pow(vV, 2.5);
+    float n = 0.6 + 0.4 * sin(vU * 6.2832 * 23.0 + sin(vU * 6.2832 * 7.0) * 3.0) * sin(vU * 6.2832 * 5.0 + 1.3);
+    a = mix(a, front * n, uFront);
+  }
   if (uDash > 0.0) a *= 0.55 + 0.45 * step(0.5, fract(vU * uDash - uTime * 0.6));
   a *= uAlpha;
   outColor = vec4(uColor * a, a);
@@ -322,7 +336,7 @@ class GroundRing {
     this.geo.setIndex(idx);
     this.mat = new THREE.RawShaderMaterial({
       glslVersion: THREE.GLSL3, vertexShader: RING_VS, fragmentShader: RING_FS,
-      uniforms: { uColor: { value: new THREE.Color(color) }, uAlpha: { value: 1 }, uTime, uDash: { value: dash } },
+      uniforms: { uColor: { value: new THREE.Color(color) }, uAlpha: { value: 1 }, uTime, uDash: { value: dash }, uFront: { value: 0 } },
       transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide,
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
     });
@@ -429,6 +443,8 @@ export class Vfx {
   private reticleFill: GroundRing;
   private selection: GroundRing;
   private seen = new Map<number, { phase: number; lastEmit: number }>();
+  /** Approach direction of each falling meteor, fixed when it first appears. */
+  private meteorEntry = new Map<number, THREE.Vector3>();
   private emitAcc = 0;
   private rng = 1;
   /** Screen flash (0..1) requested by impacts; read by the renderer. */
@@ -548,7 +564,8 @@ export class Vfx {
   // ------------------------------------------------------------------ primitives
   private shock(center: THREE.Vector3, maxR: number, life: number, color: number, width: number): void {
     const ring = new GroundRing(160, color, 0, this.timeU);
-    (ring.mat.uniforms.uColor.value as THREE.Color).setHex(color).multiplyScalar(3);
+    (ring.mat.uniforms.uColor.value as THREE.Color).setHex(color).multiplyScalar(2.2);
+    ring.mat.uniforms.uFront.value = 1;
     this.group.add(ring.mesh);
     this.shocks.push({ ring, center: center.clone().normalize(), born: this.time, life, maxR, width });
   }
@@ -684,15 +701,24 @@ export class Vfx {
     this.flash = 1;
     this.flashColor.setRGB(1, 0.9, 0.75);
     this.aberration = 1;
-    this.shock(center, 160, 2.8, 0xffc26b, 6);
-    this.shock(center, 360, 5, 0xffe0b0, 3);
-    this.add.emit(this.time, p0.x, p0.y, p0.z, 0, 0, 0, 0.9, 14, 40, 0, 0, 10, 7, 4, 1, Shape.Glow, 0);
+    // A searing shock front and a slower, dimmer dust front.
+    this.shock(center, 160, 2.2, 0xffc26b, 6);
+    this.shock(center, 340, 4, 0xc8a27a, 3);
+    // The flash: brief, and windowed so it never reads as a white disc.
+    this.add.emit(this.time, p0.x, p0.y, p0.z, 0, 0, 0, 0.5, 12, 34, 0, 0, 4.5, 3.2, 1.8, 1, Shape.Glow, 0);
     const east = new V(up.z, 0, -up.x).normalize();
     const north = new V().crossVectors(up, east);
-    // Fireball.
-    for (let i = 0; i < 160; i++) {
+    // Fireball: yellow-orange tongues that redden and give way to smoke (few
+    // enough, and dim enough, that the additive stack keeps its colour).
+    for (let i = 0; i < 90; i++) {
       const v = up.clone().multiplyScalar(4 + this.rand() * 10).addScaledVector(east, this.sym() * 9).addScaledVector(north, this.sym() * 9);
-      this.add.emit(this.time, p0.x, p0.y, p0.z, v.x, v.y, v.z, 1.2 + this.rand() * 1.4, 6, 14, 0, 1.2, 5, 2.4, 0.7, 1, Shape.Flame, this.rand());
+      const heat = 0.55 + this.rand() * 0.45;
+      this.add.emit(this.time + this.rand() * 0.25, p0.x, p0.y, p0.z, v.x, v.y, v.z, 1.0 + this.rand() * 1.6, 5 + this.rand() * 3, 12 + this.rand() * 6, 0, 1.2, 2.6 * heat, 1.15 * heat, 0.35 * heat, 1, Shape.Flame, this.rand());
+    }
+    // The fireball's own dark smoke, boiling up through it.
+    for (let i = 0; i < 140; i++) {
+      const v = up.clone().multiplyScalar(6 + this.rand() * 12).addScaledVector(east, this.sym() * 6).addScaledVector(north, this.sym() * 6);
+      this.alpha.emit(this.time + 0.3 + this.rand() * 0.8, p0.x, p0.y, p0.z, v.x, v.y, v.z, 6 + this.rand() * 6, 6, 18, 0, 0.5, 0.13, 0.11, 0.1, 0.85, Shape.Smoke, this.rand());
     }
     // Ejecta: low arcs flung outward.
     for (let i = 0; i < 420; i++) {
@@ -720,20 +746,29 @@ export class Vfx {
         if (e.phase !== 0) break;
         const fall = 24;
         const k = Math.min(1, Math.max(0, (tickNow - e.start) / fall));
-        // Come in low from the horizon so the fall is seen across the sky.
-        const dir = new V(e.dx, e.dy, e.dz);
-        dir.addScaledVector(up, -dir.dot(up));
-        if (dir.lengthSq() < 1e-6) dir.set(up.z, 0, -up.x);
-        const entry = dir.normalize().multiplyScalar(0.9).addScaledVector(up, 0.45).normalize();
         const g = Math.max(0, groundHeight(data.heights, data.n, up.x, up.y, up.z));
         const ground = up.clone().multiplyScalar(PLANET_RADIUS + g);
-        const dist = (1 - k) * 900 + 2;
+        // It falls from beyond the target and high in the watcher's sky, so
+        // the whole descent crosses the view (fixed once, then held).
+        let entry = this.meteorEntry.get(e.id);
+        if (!entry) {
+          const away = ground.clone().sub(c.camera.position);
+          away.addScaledVector(up, -away.dot(up));
+          if (away.lengthSq() < 1e-6) away.set(e.dx, e.dy, e.dz).addScaledVector(up, -new V(e.dx, e.dy, e.dz).dot(up));
+          if (away.lengthSq() < 1e-6) away.set(up.z, 0, -up.x);
+          entry = away.normalize().multiplyScalar(0.62).addScaledVector(up, 0.78).normalize();
+          this.meteorEntry.set(e.id, entry);
+        }
+        const dist = (1 - k) * 620 + 2;
         const p = ground.clone().addScaledVector(entry, dist);
-        this.add.emit(this.time, p.x, p.y, p.z, 0, 0, 0, 0.12, 8 + (1 - k) * 12, 6, 0, 0, 14, 10, 6, 1, Shape.Glow, 0);
+        // Head: a white-gold point wrapped in an orange glow.
+        this.add.emit(this.time, p.x, p.y, p.z, 0, 0, 0, 0.14, 5 + (1 - k) * 6, 4, 0, 0, 6, 5, 3.5, 1, Shape.Glow, 0);
+        this.add.emit(this.time, p.x, p.y, p.z, 0, 0, 0, 0.2, 14 + (1 - k) * 10, 10, 0, 0, 2.2, 0.9, 0.3, 0.8, Shape.Glow, 0);
+        // Trail: burning fragments and a long smoke wake that lingers in the sky.
         for (let i = 0; i < 10 * q; i++) {
           const v = entry.clone().multiplyScalar(3 + this.rand() * 3).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(1.5));
-          this.add.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 0.8 + this.rand() * 0.8, 3, 7, 0, 0.8, 5, 2.2, 0.8, 0.9, Shape.Flame, this.rand());
-          this.alpha.emit(this.time, p.x, p.y, p.z, v.x * 0.3, v.y * 0.3, v.z * 0.3, 4 + this.rand() * 3, 3, 12, 0, 0.3, 0.3, 0.27, 0.25, 0.5, Shape.Smoke, this.rand());
+          this.add.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 0.8 + this.rand() * 0.8, 3, 7, 0, 0.8, 2.6, 1.1, 0.35, 0.9, Shape.Flame, this.rand());
+          this.alpha.emit(this.time, p.x, p.y, p.z, v.x * 0.3, v.y * 0.3, v.z * 0.3, 6 + this.rand() * 4, 3, 14, 0, 0.3, 0.3, 0.27, 0.25, 0.55, Shape.Smoke, this.rand());
         }
         break;
       }
@@ -832,7 +867,9 @@ export class Vfx {
           const up = new V(d[0], d[1], d[2]);
           const p = up.clone().multiplyScalar(PLANET_RADIUS + g + 0.2);
           const v = up.clone().multiplyScalar(1.5 + this.rand() * 2).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(0.4));
-          this.add.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 0.7 + this.rand() * 0.6, 1.2 + fire * 1.5, 0.4, 0, 0.6, 4, 1.8, 0.5, 0.9, Shape.Flame, this.rand());
+          // Tongues of varied size and heat, not one repeated cone.
+          const heat = 0.6 + this.rand() * 0.6;
+          this.add.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 0.5 + this.rand() * 0.9, (0.6 + this.rand() * 1.6) * (0.8 + fire), 0.3, 0, 0.6, 2.6 * heat, 1.05 * heat, 0.28 * heat, 0.9, Shape.Flame, this.rand());
           if (this.rand() < 0.35) {
             const s = up.clone().multiplyScalar(3 + this.rand() * 3);
             this.alpha.emit(this.time, p.x, p.y, p.z, s.x, s.y, s.z, 6 + this.rand() * 5, 2, 12, -0.02, 0.15, 0.2, 0.18, 0.17, 0.55 * fire, Shape.Smoke, this.rand());
@@ -995,6 +1032,7 @@ export class Vfx {
     for (; ti < 4; ti++) this.tsunamiAmp[ti] = 0;
     this.eclipse += (eclipse - this.eclipse) * Math.min(1, dt * 3);
     for (const id of [...this.seen.keys()]) if (!live.has(id)) this.seen.delete(id);
+    for (const id of [...this.meteorEntry.keys()]) if (!live.has(id)) this.meteorEntry.delete(id);
     this.fires(c, dt);
     if (c.speed > 0 || c.dt > 0) this.ambient(c, dt);
     // Bolts flicker and fade.
@@ -1009,8 +1047,9 @@ export class Vfx {
     for (const s of this.shocks) {
       const k = (this.time - s.born) / s.life;
       const r = s.maxR * (1 - Math.pow(1 - Math.min(1, k), 2.2));
-      s.ring.place(s.center, Math.max(0.5, r), s.width * (1 - k * 0.5), c.data, 0.5);
-      s.ring.mat.uniforms.uAlpha.value = Math.max(0, 1 - k);
+      // The dust behind the front widens as it runs out; its energy spreads thin.
+      s.ring.place(s.center, Math.max(0.5, r), s.width * (1 + k * 2.5), c.data, 0.5);
+      s.ring.mat.uniforms.uAlpha.value = Math.pow(Math.max(0, 1 - k), 1.6);
       if (k >= 1) { this.group.remove(s.ring.mesh); s.ring.mesh.geometry.dispose(); s.ring.mat.dispose(); }
     }
     this.shocks = this.shocks.filter((s) => this.time - s.born < s.life);

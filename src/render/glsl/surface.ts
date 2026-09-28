@@ -81,16 +81,19 @@ float cloudDensity(vec3 p, float lod) {
   // Height profile: flat-ish bases, rounded tops; storms tower. (The top
   // edge stays below 1: smoothstep with equal edges is undefined in GLSL and
   // blanked the densest cloud — hurricane cores — on some drivers.)
-  float prof = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(mix(0.45, 0.94, cov), 1.0, hf));
+  // The tops billow with the cell noise: a ceiling at one height read as a
+  // flat-topped slab when the layer was seen edge-on from low altitude.
+  float top = mix(0.4, 0.94, cov) * (0.7 + 0.3 * n.g);
+  float prof = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(top, min(top + 0.35, 1.0), hf));
   float d = remap(base * prof, 1.0 - cov * 0.92, 1.0, 0.0, 1.0);
   // Hurricane walls are thick (the threshold and edge erosion meant for
   // fair-weather cloud left them a faint haze); toward the edges of the rain
   // bands the noise frays them into feathered, broken cloud.
   d = max(d, hur * prof * (0.4 + 0.6 * base) * smoothstep(0.12, 0.5, base + 0.4 * hur));
   if (d <= 0.0) return 0.0;
-  if (lod < 0.5) {
+  if (lod < 0.999) {
     float det = texture(uCloudNoise, q * 3.1 + vec3(0.3, 0.1, 0.7) * uTime * 0.02).b;
-    d = remap(d, det * 0.35, 1.0, 0.0, 1.0);
+    d = remap(d, det * 0.35 * (1.0 - lod), 1.0, 0.0, 1.0);
   }
   return clamp(d, 0.0, 1.0);
 }
