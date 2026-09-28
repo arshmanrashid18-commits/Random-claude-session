@@ -30,13 +30,17 @@ Working and verified (tests, screenshots or measurements):
   proudest, limitations, next five), QUALITY_LOG passes 0.1–3 and the delight list.
 
 Final phase (Phase 9) status:
-* Quality Pass 3 fixed: invisible hurricanes, polka-dot sea ice, picket-fence aurora
-  over a sunlit pole, saturated night-town blobs, the building-list leak.
+* Adversarial reviews: Pass 4 (5/4/4/4 on beauty/coherence/polish/wow) and Pass 5
+  (5/3/4/4). Every finding verified and dispositioned in QUALITY_LOG; ~40 fixes across
+  sky, clouds, water, lakes, terrain palette, fog (now rendered), VFX, night, UI.
+* Fog: the simulated field (dawn cycle, rain washout, shores) is drawn in valleys, over
+  the sea and around a camera standing in it; `fog` viewpoint and screenshot.
 * Remaining known limitations are listed in FINAL_REPORT.md (no GPU in the container,
-  single-threaded simulation below 100× at scale, stylised low-poly models).
+  single-threaded simulation below 100× at scale, stylised low-poly models, and the
+  reviewer's view that the art reads as a strong indie rather than a studio title).
 
-Next (if resumed): act on the adversarial screenshot review, re-run `npm run shots`,
-`npm test`, the scenario soak and the 500-year soak, then commit.
+Next (if resumed): act on the latest review in QUALITY_LOG, re-run `npm run shots`,
+the UI and title captures, `npm test`, and the soaks if simulation code changed.
 
 ## How to resume
 
