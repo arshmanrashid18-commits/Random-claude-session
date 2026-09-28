@@ -6,7 +6,7 @@
  */
 import * as THREE from 'three';
 import { GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_NOISE } from './glsl/common';
-import { MOON_RADIUS } from '../sim/constants';
+import { MOON_RADIUS, PLANET_RADIUS } from '../sim/constants';
 
 const SKY_VS = /* glsl */ `
 out vec2 vNdc;
@@ -158,8 +158,10 @@ export class SkyLayer {
   readonly skyMat: THREE.ShaderMaterial;
   readonly moonMat: THREE.ShaderMaterial;
   readonly moon: THREE.Mesh;
+  private readonly sunDir: THREE.Vector3;
 
   constructor(shared: Record<string, THREE.IUniform>) {
+    this.sunDir = shared.uSunDir.value as THREE.Vector3;
     this.camera = new THREE.PerspectiveCamera(50, 1, 50, 60000);
     this.skyMat = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
@@ -208,6 +210,14 @@ export class SkyLayer {
     this.skyMat.uniforms.uInvProj.value.copy(this.camera.projectionMatrixInverse);
     this.skyMat.uniforms.uCamWorld.value.copy(this.camera.matrixWorld);
     this.skyMat.uniforms.uSidereal.value = sidereal;
+    // A camera low over sunlit country is dazzled, as in any daylight
+    // photograph: the stars fade (a full starfield hung over sunlit mountains).
+    // From orbit, or over the night side, they stay.
+    const p = main.position;
+    const r = p.length();
+    const lit = THREE.MathUtils.smoothstep(p.dot(this.sunDir) / r, -0.08, 0.3);
+    const low = 1 - THREE.MathUtils.smoothstep(r - PLANET_RADIUS, 600, 1500);
+    this.skyMat.uniforms.uStarBrightness.value = 1 - 0.9 * lit * low;
     this.moon.position.copy(moonPos);
     // Tidal locking: the same face always points at the planet.
     this.moon.lookAt(0, 0, 0);

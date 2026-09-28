@@ -40,7 +40,9 @@ export class MapLabels {
       for (const s of civ.settlements) {
         if (!s.alive) continue;
         const t = civ.tribes[s.tribe];
-        const p = this.tmp.set(s.x, s.y, s.z).multiplyScalar(PLANET_RADIUS + 6);
+        // Hung above the rooftops on a short leader (at the village's centre
+        // it hid the town hall).
+        const p = this.tmp.set(s.x, s.y, s.z).multiplyScalar(PLANET_RADIUS + 16);
         const d = p.distanceTo(cam);
         // Near the limb or behind the planet: hide.
         const facing = p.clone().normalize().dot(cam.clone().sub(p).normalize());

@@ -72,6 +72,8 @@ const MERGE: Record<string, (places: string) => string> = {
   'drought-end': (p) => `The droughts over ${p} break.`,
   wildfire: (p) => `Wildfires sweep across ${p}.`,
   blizzard: () => 'Blizzards howl across the high latitudes.',
+  // (epidemics name their herds; see mergeYear)
+  epidemic: (p) => `Disease spreads among the ${p}.`,
 };
 
 function placeList(names: string[]): string {
@@ -103,7 +105,11 @@ function mergeYear(list: GameEvent[]): { id: number; importance: number; text: s
   }
   for (const [kind, g] of groups) {
     if (g.length === 1) { const n = narrate(g[0]); out.push({ id: g[0].id, importance: g[0].importance, text: n.text || n.title }); continue; }
-    const places = g.map((e) => String(e.data.continent ?? e.data.where ?? ''));
+    // One sentence for a year of murrains, naming each herd once (the same
+    // sentence six times in three years read as a log, not a chronicle).
+    const places = kind === 'epidemic'
+      ? g.map((e) => `${String(e.data.species ?? 'beasts')} of ${String(e.data.where ?? 'the wilds')}`)
+      : g.map((e) => String(e.data.continent ?? e.data.where ?? ''));
     out.push({ id: g[0].id, importance: Math.max(...g.map((e) => e.importance)), text: MERGE[kind](placeList(places)) });
   }
   return out;
@@ -265,7 +271,7 @@ export class EcologyPanel extends Modal {
         <div class="card"><h4>Plant cover</h4><div class="big">${Math.round(d.plantCover * 100)}%</div><div class="muted">of all land</div></div>
         <div class="card"><h4>Evolution</h4><div class="big">${born} <span class="muted">new</span> · ${extinct} <span class="muted">lost</span></div><div class="muted">since the beginning</div></div>
       </div>
-      <div class="card" style="margin-bottom:14px"><h4>Populations over time</h4><canvas class="chart pop" width="1640" height="360"></canvas><div class="legend">${d.species.map((s, i) => `<span data-sp="${i}" class="${this.hidden.has(i) ? 'off' : ''}">${speciesSwatch(d.species, i)}${esc(s.name)} ${d.alive[i] ?? 0}</span>`).join('')}</div></div>
+      <div class="card" style="margin-bottom:14px"><h4>Populations over time <span class="muted" style="text-transform:none;letter-spacing:0">· square-root scale</span></h4><canvas class="chart pop" width="1640" height="360"></canvas><div class="legend">${d.species.map((s, i) => `<span data-sp="${i}" class="${this.hidden.has(i) ? 'off' : ''}">${speciesSwatch(d.species, i)}${esc(s.name)} ${d.alive[i] ?? 0}</span>`).join('')}</div></div>
       <div class="grid2">
         <div class="card"><h4>The living map</h4><canvas class="chart map" width="640" height="320" style="height:auto;aspect-ratio:2/1"></canvas><div class="legend">${BIOME_NAMES.map((n, i) => `<span><i style="background:${BIOME_COLORS[i]};height:8px"></i>${n}</span>`).join('')}</div></div>
         <div class="card"><h4>How they die</h4>${this.deathTable(d)}<h4 style="margin-top:12px">Evolution</h4>${d.records.slice(-6).reverse().map((r) => `<div class="muted">Year ${Math.floor(r.tick / TICKS_PER_YEAR) + 1}: ${r.kind === 'extinction' ? `the ${esc(r.name)} died out` : `the ${esc(r.name)} arose from the ${esc(r.parent ?? '')}${r.where ? ` in ${esc(r.where)}` : ''}`}</div>`).join('') || '<div class="muted">No species has yet been born or lost.</div>'}</div>
@@ -289,17 +295,32 @@ export class EcologyPanel extends Modal {
     c.clearRect(0, 0, W, H);
     let max = 10;
     d.history.forEach((h, i) => { if (!this.hidden.has(i)) for (const v of h) max = Math.max(max, v); });
+    // Square-root scale: small populations stay readable beside a boom (on a
+    // linear axis six species lay flat along zero), with round tick values.
+    const top = 16, bottom = H - 34, left = 70;
+    const yOf = (v: number) => bottom - Math.sqrt(Math.max(0, v) / max) * (bottom - top);
+    const nice = (v: number) => {
+      const p = 10 ** Math.floor(Math.log10(Math.max(1, v)));
+      const m = v / p;
+      return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * p;
+    };
+    const ticks = [...new Set([0.06, 0.25, 0.56, 1].map((f) => nice(max * f)))].filter((v) => v <= max);
     c.strokeStyle = 'rgba(255,255,255,0.07)';
-    c.fillStyle = 'rgba(255,255,255,0.35)';
-    c.font = '22px system-ui';
-    for (let k = 0; k <= 4; k++) {
-      const y = H - 30 - (k / 4) * (H - 50);
-      c.beginPath(); c.moveTo(60, y); c.lineTo(W, y); c.stroke();
-      c.fillText(String(Math.round((max * k) / 4)), 4, y + 7);
+    c.fillStyle = 'rgba(255,255,255,0.4)';
+    c.font = '21px Inter, system-ui, sans-serif';
+    c.textAlign = 'right';
+    for (const v of [0, ...ticks]) {
+      const y = yOf(v);
+      c.beginPath(); c.moveTo(left, y); c.lineTo(W, y); c.stroke();
+      c.fillText(v.toLocaleString(), left - 10, y + 7);
     }
     const n = Math.max(...d.history.map((h) => h.length), 2);
     const years = (n * d.interval) / TICKS_PER_YEAR;
-    c.fillText(`last ${years.toFixed(0)} years`, W - 190, H - 4);
+    c.textAlign = 'left';
+    c.fillText(`${years.toFixed(0)} years ago`, left, H - 4);
+    c.textAlign = 'right';
+    c.fillText('now', W - 4, H - 4);
+    c.textAlign = 'left';
     d.history.forEach((h, i) => {
       if (this.hidden.has(i) || h.length < 2) return;
       const st = speciesStyle(d.species, i);
@@ -308,8 +329,8 @@ export class EcologyPanel extends Modal {
       c.setLineDash(st.dash);
       c.beginPath();
       h.forEach((v, k) => {
-        const x = 60 + ((k + (n - h.length)) / (n - 1)) * (W - 70);
-        const y = H - 30 - (v / max) * (H - 50);
+        const x = left + ((k + (n - h.length)) / (n - 1)) * (W - left - 6);
+        const y = yOf(v);
         if (k === 0) c.moveTo(x, y); else c.lineTo(x, y);
       });
       c.stroke();

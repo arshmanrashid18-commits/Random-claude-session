@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_DETAIL, GLSL_HEIGHT, GLSL_NOISE, GLSL_REGION } from './glsl/common';
-import { GLSL_SKYLIGHT } from './glsl/surface';
+import { GLSL_CLOUDS, GLSL_SKYLIGHT } from './glsl/surface';
 import { OCEAN_SHADING, type SharedUniforms } from './planet/terrain';
 import { faceABToDir } from '../sim/planet/cubesphere';
 import { lakeFringe } from './lakeFringe';
@@ -44,7 +44,7 @@ ${GLSL_NOISE}
 ${GLSL_ATMOSPHERE}
 ${GLSL_SKYLIGHT}
 ${GLSL_DETAIL}
-uniform float uTime;
+${GLSL_CLOUDS}
 ${OCEAN_SHADING}
 `;
 
@@ -84,7 +84,9 @@ void main() {
   keep *= 1.0 - smoothstep(-1.0, -4.0, tempL) * 0.9;
   if (keep <= 0.0) discard;
   // Seen from afar a lake reads as deep water, not a pale film.
-  float optical = max(depth, 0.0) * 1.6 + smoothstep(250.0, 1200.0, vDist) * 2.5;
+  // Inland water is darker than the clear sea shallows: tannins and silt hide
+  // the bed within a metre or two (a pale sheet over the lake bed read as mint).
+  float optical = max(depth, 0.0) * 2.4 + smoothstep(0.0, 0.5, depth) * 0.8 + smoothstep(250.0, 1200.0, vDist) * 2.5;
   outColor = shadeWater(vWorld, dir, optical, vDist, 1.0) * keep;
 }
 `;

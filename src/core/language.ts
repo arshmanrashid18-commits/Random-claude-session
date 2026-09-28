@@ -90,7 +90,7 @@ export class Language {
     for (let i = 0; i < n; i++) w += this.syllable(rng);
     // Collapse triple letters and awkward doubles.
     w = w.replace(/(.)\1\1+/g, '$1$1').replace(/^([^aeiouy])\1/, '$1');
-    return w;
+    return euphonize(w);
   }
 
   /** Deterministic name for an arbitrary integer key (e.g. person id). */
@@ -122,6 +122,40 @@ export class Language {
   term(c: Concept): string {
     return this.spec.lexicon[c];
   }
+}
+
+const VOWEL = /[aeiouy]/;
+const ONSETS = new Set(['bl', 'br', 'ch', 'cl', 'cr', 'dr', 'fl', 'fr', 'gl', 'gr', 'kh', 'kr', 'pl', 'pr', 'sh', 'sk', 'sl', 'sm', 'sn', 'sp', 'st', 'sw', 'th', 'tr', 'tw', 'wh', 'zh']);
+const CODAS = new Set(['ch', 'ck', 'ft', 'kh', 'ld', 'lk', 'lm', 'lt', 'mb', 'nd', 'ng', 'nk', 'nt', 'rd', 'rk', 'rm', 'rn', 'rt', 'sh', 'sk', 'st', 'th']);
+
+/**
+ * Keeps a generated word sayable: no more than two consonants in a row (the
+ * last two stay: they usually open the next syllable), only familiar clusters
+ * at the start and end, and no more than two vowels in a row ("Tsoujlatltspec"
+ * becomes "Soujlaspec"). A pure function of the letters: it draws no random
+ * numbers, so every world and scenario stays exactly as generated.
+ */
+export function euphonize(w: string): string {
+  const runs = w.toLowerCase().match(/[aeiouy]+|[^aeiouy]+/g) ?? [];
+  const out: string[] = [];
+  for (let i = 0; i < runs.length; i++) {
+    let r = runs[i];
+    if (VOWEL.test(r[0])) {
+      out.push(r.slice(0, 2).replace('yy', 'y'));
+      continue;
+    }
+    if (i === 0) {
+      if (r.length > 1 && !ONSETS.has(r.slice(-2))) r = r.slice(-1);
+      else r = r.slice(-2);
+    } else if (i === runs.length - 1) {
+      if (r.length > 1 && !CODAS.has(r.slice(0, 2))) r = r.slice(0, 1);
+      else r = r.slice(0, 2);
+    } else if (r.length > 2) {
+      r = r.slice(-2);
+    }
+    out.push(r);
+  }
+  return out.join('').slice(0, 12);
 }
 
 export function capitalize(s: string): string {

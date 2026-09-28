@@ -184,3 +184,26 @@ Each entry: decision — why.
     categorical palette (dark surface) with composite encoding: herbivores solid,
     predators dashed in the same hue order, descendants dotted in their ancestor's hue —
     never a ninth generated hue.
+54. **Bundled typefaces.** The display, body and mono faces (Cormorant Garamond, Inter,
+    JetBrains Mono; all OFL) ship as npm dependencies, latin subsets only, bundled by
+    Vite. Nothing is fetched at run time and the procedural rule still holds for the
+    world itself; the system fallbacks (Times, DejaVu) made every panel look unfinished.
+55. **Names are made sayable after generation.** A pure function of the letters trims
+    consonant runs to two and keeps only familiar clusters at word edges. It draws no
+    random numbers (the language generators have their own seeded streams, separate
+    from the simulation's), so every world and all eight calibrated scenarios play out
+    exactly as before.
+56. **Particles are composited after the atmosphere.** Seen against the sky, a particle
+    had the whole ray's haze added over it, which cut a volcano's plume off at the
+    horizon. Particles now draw over the composite with their own soft depth test
+    against the scene depth; the price is that distant particles get no aerial haze,
+    which only matters for effects hundreds of units away.
+57. **Estuaries are shaded as rivers.** Rivers carve their lower reaches below sea level,
+    so the sea fills them. Re-carving would change the height field (and the
+    scenarios), so the ocean shader instead detects water hemmed in by land on most
+    sides and shades it as river water — no surf, optically deep.
+58. **The silhouette is flattened from afar.** Relief of up to 4% of the radius made the
+    planet's outline lumpy from orbit. Cameras far away draw the relief at the limb at
+    30% height; the shading keeps the full height field, so only the outline changes.
+59. **Opening on the lit side.** Play opens on the largest settlement in daylight (the
+    largest overall may sit at midnight), for scenarios and free play alike.

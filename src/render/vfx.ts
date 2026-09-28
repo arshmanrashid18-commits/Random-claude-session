@@ -36,6 +36,7 @@ out vec4 vColor;
 out float vK;
 out float vShape;
 out float vSeed;
+out float vViewZ;
 void main() {
   float t = uTime - aOrigin.w;
   float life = aVel.w;
@@ -67,6 +68,7 @@ void main() {
   }
   mv.xy += q * size;
   gl_Position = projectionMatrix * mv;
+  vViewZ = -mv.z;
   vUv = position.xy;
   vColor = aColor;
   vK = k;
@@ -83,6 +85,13 @@ in vec4 vColor;
 in float vK;
 in float vShape;
 in float vSeed;
+in float vViewZ;
+// Particles are drawn over the atmosphere composite (seen against the sky,
+// the full-ray haze was added on top of them and cut a volcano's plume off
+// at the horizon), so they test the scene depth themselves, softly.
+uniform sampler2D uDepth;
+uniform vec2 uViewport;
+uniform vec2 uNearFar;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 float vnoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -130,6 +139,9 @@ void main() {
     a = smoothstep(1.0, 0.55, r);
   }
   a *= vColor.a * fadeIn * fadeOut;
+  float dz = texture(uDepth, gl_FragCoord.xy / uViewport).r;
+  float sceneZ = dz >= 0.999999 ? 1e9 : (uNearFar.x * uNearFar.y) / (uNearFar.y - dz * (uNearFar.y - uNearFar.x));
+  a *= clamp((sceneZ - vViewZ) / max(0.6, vViewZ * 0.015), 0.0, 1.0);
   if (a < 0.003) discard;
   outColor = vec4(col * a, a);
 }
@@ -146,7 +158,7 @@ class ParticlePool {
   readonly cap: number;
   static STRIDE = 18;
 
-  constructor(cap: number, additive: boolean, uniforms: { uTime: THREE.IUniform }) {
+  constructor(cap: number, additive: boolean, uniforms: Record<string, THREE.IUniform>) {
     this.cap = cap;
     const quad = new THREE.PlaneGeometry(2, 2);
     this.geo = new THREE.InstancedBufferGeometry();
@@ -168,6 +180,7 @@ class ParticlePool {
       uniforms,
       transparent: true,
       depthWrite: false,
+      depthTest: false,
       blending: THREE.CustomBlending,
       blendSrc: THREE.OneFactor,
       blendDst: additive ? THREE.OneFactor : THREE.OneMinusSrcAlphaFactor,
@@ -436,6 +449,9 @@ export interface VfxContext {
 
 export class Vfx {
   readonly group = new THREE.Group();
+  /** Particles, drawn after the atmosphere composite (see PART_FS). */
+  readonly overlay = new THREE.Scene();
+  private depthU = { uDepth: { value: null as THREE.Texture | null }, uViewport: { value: new THREE.Vector2(1, 1) }, uNearFar: { value: new THREE.Vector2(0.1, 1e5) } };
   private add: ParticlePool;
   private alpha: ParticlePool;
   private time = 0;
@@ -448,7 +464,7 @@ export class Vfx {
   private selection: GroundRing;
   private seen = new Map<number, { phase: number; lastEmit: number }>();
   /** Approach (direction, starting distance) of each falling meteor, fixed when it first appears. */
-  private meteorEntry = new Map<number, { dir: THREE.Vector3; dist: number }>();
+  private meteorEntry = new Map<number, { dir: THREE.Vector3; dist: number; prev: THREE.Vector3 | null }>();
   private emitAcc = 0;
   private rng = 1;
   /** Screen flash (0..1) requested by impacts; read by the renderer. */
@@ -467,13 +483,20 @@ export class Vfx {
   onImpact: (p: THREE.Vector3, kind: PowerId) => void = () => {};
 
   constructor() {
-    this.add = new ParticlePool(24000, true, { uTime: this.timeU });
-    this.alpha = new ParticlePool(20000, false, { uTime: this.timeU });
-    this.group.add(this.alpha.mesh, this.add.mesh);
+    this.add = new ParticlePool(24000, true, { uTime: this.timeU, ...this.depthU });
+    this.alpha = new ParticlePool(20000, false, { uTime: this.timeU, ...this.depthU });
+    this.overlay.add(this.alpha.mesh, this.add.mesh);
     this.reticle = new GroundRing(128, 0xffffff, 24, this.timeU);
     this.reticleFill = new GroundRing(96, 0xffffff, 0, this.timeU);
     this.selection = new GroundRing(48, 0xffe8b0, 6, this.timeU);
     this.group.add(this.reticle.mesh, this.reticleFill.mesh, this.selection.mesh);
+  }
+
+  /** Scene depth for the particles' own depth test. */
+  setDepth(tex: THREE.Texture, w: number, h: number, near: number, far: number): void {
+    this.depthU.uDepth.value = tex;
+    this.depthU.uViewport.value.set(w, h);
+    this.depthU.uNearFar.value.set(near, far);
   }
 
   private rand(): number {
@@ -762,21 +785,36 @@ export class Vfx {
           if (screenUp.lengthSq() < 1e-6) screenUp.set(up.z, 0, -up.x);
           const dir = screenUp.normalize().multiplyScalar(0.8).addScaledVector(up, 0.6).normalize();
           const camDist = c.camera.position.distanceTo(ground);
-          path = { dir, dist: Math.min(620, Math.max(80, camDist * 0.55)) };
+          path = { dir, dist: Math.min(620, Math.max(80, camDist * 0.55)), prev: null };
           this.meteorEntry.set(e.id, path);
         }
         const entry = path.dir;
         const dist = (1 - k) * path.dist + 2;
         const p = ground.clone().addScaledVector(entry, dist);
-        // Head: a white-gold point wrapped in an orange glow.
+        // Head: a white-gold point wrapped in an orange glow, drawn out into an
+        // incandescent streak along its fall.
         this.add.emit(this.time, p.x, p.y, p.z, 0, 0, 0, 0.14, 5 + (1 - k) * 6, 4, 0, 0, 6, 5, 3.5, 1, Shape.Glow, 0);
         this.add.emit(this.time, p.x, p.y, p.z, 0, 0, 0, 0.2, 14 + (1 - k) * 10, 10, 0, 0, 2.2, 0.9, 0.3, 0.8, Shape.Glow, 0);
-        // Trail: burning fragments and a long smoke wake that lingers in the sky.
-        for (let i = 0; i < 10 * q; i++) {
-          const v = entry.clone().multiplyScalar(3 + this.rand() * 3).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(1.5));
-          this.add.emit(this.time, p.x, p.y, p.z, v.x, v.y, v.z, 0.8 + this.rand() * 0.8, 3, 7, 0, 0.8, 2.6, 1.1, 0.35, 0.9, Shape.Flame, this.rand());
-          this.alpha.emit(this.time, p.x, p.y, p.z, v.x * 0.3, v.y * 0.3, v.z * 0.3, 6 + this.rand() * 4, 3, 14, 0, 0.3, 0.3, 0.27, 0.25, 0.55, Shape.Smoke, this.rand());
+        const sz = 5 + (1 - k) * 5;
+        const s1 = p.clone().addScaledVector(entry, sz * 3);
+        const s2 = p.clone().addScaledVector(entry, sz * 1.2);
+        this.add.emit(this.time, s1.x, s1.y, s1.z, -entry.x * 1e-3, -entry.y * 1e-3, -entry.z * 1e-3, 0.12, sz * 1.6, sz * 1.6, 0, 0, 3.2, 1.3, 0.35, 0.8, Shape.Streak, 0);
+        this.add.emit(this.time, s2.x, s2.y, s2.z, -entry.x * 1e-3, -entry.y * 1e-3, -entry.z * 1e-3, 0.12, sz * 0.8, sz * 0.8, 0, 0, 6, 4.6, 3, 1, Shape.Streak, 0);
+        // Trail: burning fragments and a long smoke wake that lingers in the
+        // sky, laid along the whole stretch fallen since the last frame (a
+        // wake emitted only at the head broke into dots, or vanished, whenever
+        // frames were far apart).
+        const from = path.prev ?? ground.clone().addScaledVector(entry, path.dist + 2);
+        const steps = Math.min(80, Math.max(1, Math.ceil(from.distanceTo(p) / 2.5)));
+        for (let s = 0; s < steps; s++) {
+          const t = (s + this.rand()) / steps;
+          const w = from.clone().lerp(p, t);
+          const age = 1 - t; // older along the wake
+          const v = entry.clone().multiplyScalar(1 + this.rand() * 2).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(0.8));
+          if (this.rand() < 0.6 * q) this.add.emit(this.time, w.x, w.y, w.z, v.x, v.y, v.z, 0.5 + this.rand() * 0.6 - age * 0.3, 2.5, 5, 0, 0.8, 2.6, 1.1, 0.35, 0.9, Shape.Flame, this.rand());
+          this.alpha.emit(this.time, w.x, w.y, w.z, v.x * 0.3, v.y * 0.3, v.z * 0.3, 7 + this.rand() * 5, 2.5 + age * 4, 11 + age * 6, 0, 0.3, 0.32, 0.29, 0.27, 0.5, Shape.Smoke, this.rand());
         }
+        path.prev = p.clone();
         break;
       }
       case 'volcano': {

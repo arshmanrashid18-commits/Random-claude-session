@@ -15,6 +15,9 @@
     "monkey": "node scripts/monkey.mjs"
   },
   "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "three": "^0.186.1"
   },
   "devDependencies": {

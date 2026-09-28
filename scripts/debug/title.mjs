@@ -27,7 +27,8 @@ await page.evaluate(() => window.__genesis.renderFrames(2));
 await page.screenshot({ path: `${out}/title-new.png` });
 await page.click('[data-act="back"]');
 await page.click('[data-act="begin"]');
-await page.evaluate(() => window.__genesis.renderFrames(30));
+// The opening flight lasts 4.5 s (frame time is capped, so allow for it).
+await page.evaluate(() => window.__genesis.renderFrames(90));
 await page.screenshot({ path: `${out}/begin.png` });
 await browser.close();
 await server.close();

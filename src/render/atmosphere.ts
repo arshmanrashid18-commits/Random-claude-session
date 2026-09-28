@@ -212,6 +212,12 @@ void main() {
         // Edge erosion fades out continuously for long grazing segments (a hard
         // switch drew straight edges along terrain silhouettes and one view angle).
         float lod = smoothstep(35.0, 95.0, seg);
+        // From far away the fine erosion is sub-pixel and only frayed the
+        // edges into torn paper: it fades out, and thin cloud turns into
+        // translucent veils around opaque cores.
+        float farC = smoothstep(600.0, 2400.0, camAlt0);
+        lod = max(lod, farC * 0.85);
+        float densPow = 1.0 + farC * 0.7;
         float wsum = 0.0;
         // Clouds part around a low camera so the god can see the land.
         float camAlt = length(ro) - PLANET_R;
@@ -245,7 +251,7 @@ void main() {
             // phase peak). Without it sunlit tops were dimmer than desert.
             float ms = exp(-ld * 0.45) * 0.55 + exp(-ld * 0.12) * 0.25;
             vec3 lit = sunL * (beer * mix(1.0, powder, 0.5) * phase + ms * 1.2) * 0.09 + amb;
-            float ext = dens * 0.55 * dt;
+            float ext = pow(dens, densPow) * 0.55 * dt;
             float a = 1.0 - exp(-ext);
             cloudCol += cloudT * a * lit;
             wsum += cloudT * a * t;

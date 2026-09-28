@@ -181,7 +181,8 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
     }
     case 'wildlife': {
       const f = r.creatures.densestSpot() ?? findBest(r, (_d, h) => (h > 2 ? 1 : 0), 400);
-      return { focus: f, distance: 34, heading: 1.8, tiltOffset: 0.0, localTime: 0.47 };
+      // Mid-morning: a noon sun hid every shadow under its tree.
+      return { focus: f, distance: 34, heading: 1.8, tiltOffset: 0.0, localTime: 0.36 };
     }
     case 'village': {
       const civ = r.buildings.latest;

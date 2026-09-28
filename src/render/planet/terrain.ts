@@ -79,6 +79,12 @@ void main() {
   ab = aPatch.xy + (gg / uGrid) * aPatch.z;
   vec3 dir = faceABToDir(face, ab);
   float h = groundHeightFaceAB(face, ab, dir);
+  // Seen from far off, relief right at the silhouette is flattened: mountains
+  // 4% of the radius high made the outline lumpy (a potato against the smooth
+  // atmosphere rim). Shading still uses the full height field, so only the
+  // outline changes.
+  float flatten = smoothstep(1200.0, 2800.0, length(uCamPos) - PLANET_R) * (1.0 - smoothstep(0.05, 0.4, ndv));
+  h *= 1.0 - 0.7 * flatten;
   float dist = distance(dir * (PLANET_R + h), uCamPos);
   float skirt = position.z * (1.5 + aPatch.z * 45.0);
   vWorld = dir * (PLANET_R + h - skirt);
@@ -162,6 +168,26 @@ void main() {
   vec3 N = normalize(nt.xyz);
   N = detailNormal(N, dir, vDist);
   SurfaceInfo si = terrainSurface(dir, vWorld, h, N, nt.w, vDist);
+  // Weathered rock: ridged relief on steep ground, from the god's usual range
+  // out to ~1,400 u (mountainsides read as smooth clay at the height field's
+  // resolution). Applied as a surface-gradient bump through screen-space
+  // derivatives, evaluated outside any branch so the derivatives are defined;
+  // the finer octave fades out before it would alias.
+  float steepK = smoothstep(0.1, 0.34, 1.0 - dot(N, dir)) * smoothstep(0.3, 1.0, h) * (1.0 - smoothstep(900.0, 1400.0, vDist));
+  vec3 pr = dir * PLANET_R;
+  float rr1 = 1.0 - abs(snoise(pr * 0.045));
+  float rr2 = 1.0 - abs(snoise(pr * 0.14 + 3.3));
+  float fineR = 1.0 - smoothstep(220.0, 520.0, vDist);
+  float hb = (rr1 * rr1 * 2.5 + rr2 * rr2 * 0.9 * fineR) * steepK;
+  vec3 dpx = dFdx(vWorld), dpy = dFdy(vWorld);
+  vec3 rx = cross(dpy, N), ry = cross(N, dpx);
+  float det = dot(dpx, rx);
+  vec3 bg = sign(det) * (dFdx(hb) * rx + dFdy(hb) * ry);
+  if (abs(det) > 1e-12) N = normalize(abs(det) * N - bg);
+  // Crests catch light and weather pale; the clefts between them hold shadow.
+  si.albedo *= mix(1.0, 0.8 + 0.3 * rr1 * rr1 + 0.08 * rr2 * fineR, steepK);
+  // Screen footprint of this pixel on the ground (for analytic anti-aliasing).
+  float footprint = length(fwidth(vWorld));
 
   vec3 L = uSunDir;
   float mu = dot(dir, L);
@@ -180,22 +206,33 @@ void main() {
   vec3 color = direct + amb;
   // Underwater light absorption (seabed seen through the ocean surface).
   if (h < 0.0) color *= exp(-vec3(0.35, 0.12, 0.06) * min(-h, 30.0) * 0.35);
-  // Lava: a dark crust split by glowing veins; fresh flows glow through, and
-  // steep faces drain and crust over (a uniform glow over a region cell read as
-  // an orange rectangle painted down the cliffs).
-  if (si.emissive > 0.01) {
+  // Lava: a dark crust split by glowing cracks; fresh flows run in bright
+  // channels, and steep faces drain and crust over. The field lives in coarse
+  // region cells: it is sampled through a ~12 u domain warp and shaped by
+  // lobe noise so a flow never ends on a cell's straight edge, and the cracks
+  // fade to their mean brightness where the screen cannot resolve them (they
+  // aliased into a speckled checker at mid range).
+  vec3 lw = vec3(snoise(dir * 90.0), snoise(dir * 90.0 + 5.2), snoise(dir * 90.0 - 3.7));
+  float lava = texture(uSurfaceTex, regionUV(normalize(dir + lw * 0.012))).b;
+  if (lava > 0.004) {
     vec3 q = dir * PLANET_R;
-    float n1 = snoise(q * 0.32 + vec3(0.0, uTime * 0.04, 0.0));
-    float n2 = snoise(q * 1.05 - vec3(uTime * 0.07, 0.0, 0.0));
-    float veins = 1.0 - smoothstep(0.0, 0.11, abs(n1 * 0.7 + n2 * 0.3));
-    float fresh = smoothstep(0.55, 0.95, si.emissive);
+    float lobe = snoise(q * 0.05) * 0.65 + snoise(q * 0.13 + 2.1) * 0.35;
+    float cover = smoothstep(0.05, 0.3, lava * (0.8 + 0.7 * lobe));
+    float c1 = snoise(q * 0.14 + vec3(0.0, uTime * 0.02, 0.0));
+    float c2 = snoise(q * 0.42 - vec3(uTime * 0.05, 0.0, 0.0));
+    float f1 = footprint * 0.14 * 1.8, f2 = footprint * 0.42 * 1.8;
+    float v1 = mix(1.0 - smoothstep(0.0, 0.07 + f1, abs(c1)), 0.2, smoothstep(0.12, 0.45, f1));
+    float v2 = mix(1.0 - smoothstep(0.0, 0.06 + f2, abs(c2)), 0.15, smoothstep(0.12, 0.45, f2));
+    float veins = max(v1, v2 * 0.55);
+    float fresh = smoothstep(0.5, 0.95, lava);
     float flatK = smoothstep(0.45, 0.8, dot(N, dir));
-    // The field comes from coarse cells: noise frays its edge so a flow never
-    // ends in the straight line of a cell boundary.
-    float cover = smoothstep(0.02, 0.35, si.emissive + (n1 * 0.6 + n2 * 0.4) * 0.2 - 0.04);
-    color = mix(color, vec3(0.03, 0.025, 0.022) * (0.4 + ndl), cover * 0.85);
-    float glow = mix(veins, 1.0, fresh * 0.65 * flatK) * cover * mix(0.12, 1.0, flatK);
-    color += vec3(3.4, 0.95, 0.2) * glow * (0.75 + 0.25 * snoise(q * 2.2 + uTime * 0.6));
+    float fl = footprint * 0.05 * 1.8;
+    float channel = mix(1.0 - smoothstep(0.0, 0.12 + fl, abs(lobe - 0.15)), 0.3, smoothstep(0.1, 0.4, fl)) * fresh;
+    vec3 crust = vec3(0.035, 0.03, 0.028) * (0.35 + ndl) + vec3(0.05, 0.012, 0.0) * veins * fresh;
+    color = mix(color, crust, cover * 0.9);
+    float glow = (veins * mix(0.3, 1.0, fresh) + channel * flatK * 1.4) * cover * mix(0.2, 1.0, flatK);
+    vec3 hot = mix(vec3(2.4, 0.5, 0.1), vec3(4.2, 1.7, 0.4), clamp(channel + veins * fresh * 0.5, 0.0, 1.0));
+    color += hot * glow * (0.8 + 0.2 * snoise(q * 0.9 + uTime * 0.5));
   }
   vec3 ruv = regionUV(dir);
   // Floodwater: a muddy, reflective sheet over drowned land.
@@ -222,11 +259,13 @@ void main() {
     // From afar the fine specks would alias: coarser clusters of lights take
     // over (a flat constant here made each town one saturated disc).
     float farGlow = smoothstep(200.0, 900.0, vDist);
-    // (with a floor, so even a small village shows from orbit)
-    float speckFar = max(smoothstep(0.25, 0.85, snoise(dir * 320.0) * 0.55 + snoise(dir * 90.0) * 0.45 + surf.a * 0.7), 0.3);
-    float lights = surf.a * mix(speck, speckFar, farGlow) * night * uNightLights;
+    // Clusters of lamps over a faint glow that gathers toward the town's heart
+    // (a uniform floor drew every town as one flat tan disc).
+    float speckFar = smoothstep(0.3, 0.9, snoise(dir * 320.0) * 0.55 + snoise(dir * 90.0) * 0.45 + surf.a * 0.6);
+    float farL = speckFar * 0.85 + smoothstep(0.1, 0.8, surf.a) * 0.3;
+    float lights = surf.a * mix(speck, farL, farGlow) * night * uNightLights;
     // Brighter from afar so towns read as a glow on the night side.
-    color += vec3(3.2, 1.9, 0.8) * lights * mix(0.9, 1.7, farGlow);
+    color += vec3(3.4, 1.7, 0.5) * lights * mix(0.9, 1.9, farGlow);
   }
   // Borders between peoples, seen from afar.
   if (uBorders > 0.0) {
@@ -285,6 +324,7 @@ void main() { outColor = vec4(1.0); }
 `;
 
 export const OCEAN_SHADING = /* glsl */ `
+uniform float uNightLights;
 vec3 waterNormal(vec3 dir, vec3 wp, float dist, float rough) {
   float fade = 1.0 - smoothstep(80.0, 1400.0, dist);
   vec3 N = dir;
@@ -325,7 +365,9 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   vec3 L = uSunDir;
   float r = length(wp);
   float mu = dot(dir, L);
-  vec3 sunCol = transmittanceToSun(r, mu) * uSunIntensity;
+  // Clouds shade the water as they shade the land (a hurricane cast no
+  // shadow on the sea).
+  vec3 sunCol = transmittanceToSun(r, mu) * uSunIntensity * cloudShadow(wp, L);
   vec3 V = normalize(uCamPos - wp);
   vec3 ruv = regionUV(dir);
   vec4 clim = texture(uClimateTex, ruv);
@@ -333,7 +375,7 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   float storm = clim.a;
   // Storm seas are rough; lakes and rivers only ripple (storm-rough normals
   // mirrored a pale sky and turned every river into a white strip).
-  vec3 N = waterNormal(dir, wp, dist, lakeMode > 0.5 ? 0.45 + storm * 0.3 : 0.6 + storm * 1.6);
+  vec3 N = waterNormal(dir, wp, dist, mix(0.6 + storm * 1.6, 0.45 + storm * 0.3, clamp(lakeMode * 2.0, 0.0, 1.0)));
   float NdV = max(dot(N, V), 0.0);
   float fres = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
   vec3 R = reflect(-V, N);
@@ -347,7 +389,9 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   vec3 spec = sunCol * ggx * fres * max(dot(N, L), 0.0) * 0.9;
   // Water body colour: absorption with depth.
   vec3 deep = vec3(0.006, 0.028, 0.07);
-  vec3 shallow = mix(vec3(0.03, 0.26, 0.28), vec3(0.05, 0.20, 0.16), min(lakeMode, 1.0));
+  // Inland water is darker and greener than the sandy sea shallows (a pale mint
+  // lake read as an opaque sheet).
+  vec3 shallow = mix(vec3(0.03, 0.26, 0.28), vec3(0.03, 0.14, 0.12), min(lakeMode, 1.0));
   vec3 body = mix(deep, shallow, exp(-depth * 0.16));
   float light = max(mu, 0.0) * 0.8 + 0.08 * smoothstep(-0.2, 0.2, mu);
   vec3 bodyLit = body * (sunCol * light * 0.35 + skyAmbient(dir, dir, L) * uSunIntensity * 0.05);
@@ -355,11 +399,14 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   // Shore waves: bands of constant depth marching toward land.
   float band = sin(depth * 5.5 - uTime * 1.6 + snoise(wp * 0.08) * 2.0);
   // lakeMode: 0 sea, 1 lake, 2 river (rivers have no shore waves: their foam
-  // bands along both banks made the channel read as a milky sheet).
-  float shoreK = lakeMode > 1.5 ? 0.0 : lakeMode > 0.5 ? 0.08 : 1.0;
+  // bands along both banks made the channel read as a milky sheet). Blends
+  // continuously between the three, for estuaries.
+  float lakeT = clamp(lakeMode, 0.0, 1.0), riverT = clamp(lakeMode - 1.0, 0.0, 1.0);
+  float shoreK = mix(1.0, 0.0, lakeT);
   float shoreFoam = smoothstep(0.75, 1.0, band) * (1.0 - smoothstep(0.0, 1.8, depth)) * shoreK;
-  // Lakes have little surf: a faint lap at the shore, not a white outline.
-  float edgeFoam = (1.0 - smoothstep(0.0, 0.35, depth)) * (lakeMode > 1.5 ? 0.0 : lakeMode > 0.5 ? 0.25 : 1.0);
+  // Lakes have no surf, only a faint lap at the shore (bands of constant depth
+  // drew white contour rings round every shallow bump, like a map).
+  float edgeFoam = (1.0 - smoothstep(0.0, 0.35, depth)) * mix(mix(1.0, 0.1, lakeT), 0.0, riverT);
   float foamNoise = 0.6 + 0.4 * snoise(wp * 0.9 + uTime * 0.2);
   // Surf is a close-up detail: from orbit it would alias into dotted white rims.
   float foam = clamp((shoreFoam + edgeFoam * 0.8) * foamNoise, 0.0, 1.0) * (1.0 - smoothstep(300.0, 1000.0, dist));
@@ -374,6 +421,16 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   vec3 foamCol = vec3(0.9, 0.95, 1.0) * (sunCol * max(mu, 0.0) * 0.3 + skyAmbient(dir, dir, L) * uSunIntensity * 0.06);
   vec3 col = bodyLit * alpha + refl * fres + spec;
   float a = clamp(max(alpha, fres * 0.9), 0.0, 1.0);
+  // At night the lamps of a town shimmer on its river and harbour (dark water
+  // punched black holes through every lit town seen from afar).
+  float nightW = smoothstep(0.02, -0.12, mu) * uNightLights;
+  if (nightW > 0.0) {
+    float dev = texture(uSurfaceTex, ruv).a;
+    float shimmer = 0.55 + 0.45 * snoise(wp * 0.35 + vec3(0.0, uTime * 0.6, 0.0));
+    float lamp = smoothstep(0.02, 0.4, dev) * nightW * shimmer;
+    col += vec3(3.0, 1.5, 0.45) * lamp * 0.3;
+    a = max(a, lamp * 0.5);
+  }
   col = mix(col, foamCol, foam * 0.85);
   a = max(a, foam * 0.85);
   // Sea ice.
@@ -407,7 +464,7 @@ ${GLSL_SEABED}
 ${GLSL_ATMOSPHERE}
 ${GLSL_SKYLIGHT}
 uniform vec3 uCamPos;
-uniform float uTime;
+${GLSL_CLOUDS}
 ${GLSL_FOG}
 uniform vec4 uTsunami[4];
 uniform float uTsunamiAmp[4];
@@ -420,7 +477,24 @@ void main() {
   float ground = seabed(heightAtDir(dir), dir);
   float depth = (r - PLANET_R) - ground;
   if (depth < -0.02) discard;
-  vec4 c = shadeWater(vWorld, dir, max(depth, 0.0), vDist, 0.0);
+  // Estuaries: the lower reaches of rivers are carved below sea level, and a
+  // narrow inland channel shaded as open sea (sandy shallows seen through
+  // clear water, surf on both banks) read as a milky ribbon through the
+  // villages. Where land surrounds the water on most sides it is shaded as
+  // river water: no surf, and optically deep like the river ribbons upstream.
+  float riverK = 0.0;
+  if (depth < 5.0) {
+    vec3 t1 = normalize(cross(dir, abs(dir.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 t2 = cross(dir, t1);
+    float land = 0.0;
+    for (int i = 0; i < 6; i++) {
+      float a = float(i) * 1.0472;
+      land += smoothstep(-0.3, 0.8, heightAtDir(normalize(dir + (t1 * cos(a) + t2 * sin(a)) * (14.0 / PLANET_R))));
+    }
+    riverK = smoothstep(2.6, 4.4, land) * (1.0 - smoothstep(3.0, 5.0, depth));
+  }
+  float depthW = max(depth, 0.0);
+  vec4 c = shadeWater(vWorld, dir, depthW + riverK * 2.5 * smoothstep(0.0, 0.6, depthW), vDist, riverK * 2.0);
   // Sea fog banks (the same simulated field), thickest near the shore.
   float sfog = fogField(dir);
   if (sfog > 0.0) {

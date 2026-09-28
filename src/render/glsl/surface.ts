@@ -35,9 +35,11 @@ float stormCoverage(vec3 dir, out float swirl, out float hur) {
       vec3 t2 = cross(s.xyz, t1);
       vec3 q = dir - s.xyz * dot(dir, s.xyz);
       float ang = atan(dot(q, t2), dot(q, t1));
-      float spiral = 0.5 + 0.5 * sin(ang * 2.0 * sp.y + log(max(r, 0.02)) * 7.0 - uTime * 0.6 * sp.y);
-      float arms = mix(1.0, spiral, smoothstep(0.25, 0.8, r));
-      float eye = smoothstep(0.05, 0.14, r);
+      // Three rain bands wound tight round a dense central overcast, with
+      // clear lanes between them (two broad arms read as a one-armed ring).
+      float spiral = smoothstep(0.25, 0.85, 0.5 + 0.5 * sin(ang * 3.0 * sp.y + log(max(r, 0.02)) * 9.0 - uTime * 0.6 * sp.y));
+      float arms = mix(1.0, spiral, smoothstep(0.3, 0.75, r));
+      float eye = smoothstep(0.035, 0.11, r);
       hur = max(hur, sp.x * arms * eye * (1.0 - smoothstep(0.9, 2.1, r)));
       swirl = max(swirl, sp.x * (1.0 - smoothstep(0.0, 1.8, r)));
     } else {
@@ -66,7 +68,9 @@ float cloudDensity(vec3 p, float lod) {
   float a0 = texture(uCloudNoise, qw * 0.5).a, a1 = texture(uCloudNoise, qw * 1.4 + 0.37).a, a2 = texture(uCloudNoise, qw * 3.1 + 0.71).a;
   float wx = a0 * 0.55 + a1 * 0.3 + a2 * 0.15;
   cov = smoothstep(0.12, 0.75, cov);
-  cov = clamp(cov * smoothstep(0.34, 0.66, wx) * 1.5, 0.0, 1.0);
+  // Inside a system the cover saturates into sheets broken by holes; outside
+  // it the sky clears (evenly scattered flakes read as confetti from orbit).
+  cov = clamp(cov * smoothstep(0.36, 0.62, wx) * 2.0, 0.0, 1.0);
   // Hurricanes keep their own shape (spiral arms, eye) through the mask.
   cov = max(cov, hur);
   if (cov < 0.04) return 0.0;
@@ -77,7 +81,7 @@ float cloudDensity(vec3 p, float lod) {
   vec4 n = texture(uCloudNoise, q);
   // A mid-scale field breaks the periodic cell lattice under heavy cover.
   float mid = texture(uCloudNoise, q * 0.27 + vec3(0.13, 0.57, 0.31)).a;
-  float base = (n.r * 0.65 + n.g * 0.35) * (0.62 + 0.7 * mid);
+  float base = (n.r * 0.5 + n.g * 0.28 + mid * 0.22) * (0.5 + 0.9 * mid);
   // Height profile: flat-ish bases, rounded tops; storms tower. (The top
   // edge stays below 1: smoothstep with equal edges is undefined in GLSL and
   // blanked the densest cloud — hurricane cores — on some drivers.)
@@ -85,7 +89,10 @@ float cloudDensity(vec3 p, float lod) {
   // flat-topped slab when the layer was seen edge-on from low altitude.
   float top = mix(0.4, 0.94, cov) * (0.7 + 0.3 * n.g);
   float prof = smoothstep(0.0, 0.12, hf) * (1.0 - smoothstep(top, min(top + 0.35, 1.0), hf));
-  float d = remap(base * prof, 1.0 - cov * 0.92, 1.0, 0.0, 1.0);
+  // Seen from afar (lod → 1) the edges thin into translucent veils instead of
+  // ending in a hard, paper-cut line.
+  float d = remap(base * prof, 1.0 - cov * 0.92 - lod * 0.1, 1.0, 0.0, 1.0);
+  d *= mix(1.0, clamp(d, 0.0, 1.0), lod * 0.6);
   // Hurricane walls are thick (the threshold and edge erosion meant for
   // fair-weather cloud left them a faint haze); toward the edges of the rain
   // bands the noise frays them into feathered, broken cloud.
@@ -251,7 +258,7 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   vec3 cReed = srgb(vec3(0.38, 0.48, 0.28));
   // Autumn colour for broadleaf forests when cooling.
   float autumn = smoothstep(12.0, 4.0, temp) * smoothstep(-4.0, 3.0, temp);
-  cBroad = mix(cBroad, srgb(vec3(0.62, 0.36, 0.12)), autumn * 0.75);
+  cBroad = mix(cBroad, srgb(vec3(0.64, 0.27, 0.07)), autumn * 0.8);
   // Deciduous leaves drop in cold months.
   float leaf = smoothstep(-2.0, 5.0, temp);
   float trees = broad * mix(0.35, 1.0, leaf) + conifer + tropical;
@@ -299,6 +306,8 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   snowAmt *= 1.0 - smoothstep(0.35, 0.6, slope);
   snowAmt = smoothstep(0.25, 0.65, snowAmt + macro * 0.2 + micro * 0.05);
   if (h < -0.3) snowAmt *= 0.0;
+  // Lava melts the snow on and around its field.
+  snowAmt *= 1.0 - smoothstep(0.0, 0.06, surf.b);
   vec3 snowCol = srgb(vec3(0.83, 0.86, 0.91)); // bright, but only sunlit snow nears white
   col = mix(col, snowCol, snowAmt);
 

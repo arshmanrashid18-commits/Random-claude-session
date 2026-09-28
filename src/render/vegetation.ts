@@ -158,11 +158,13 @@ export function buildModel(type: VegType, far = false): THREE.BufferGeometry {
       break;
     }
     case 'reeds': {
-      const c = lin(0x7a8a45), c2 = lin(0x8c7a45);
-      for (let k = 0; k < 9; k++) {
+      // Broad blades in a clump: hair-thin quads aliased into dotted black
+      // strokes ("barcodes") at the god's usual range.
+      const c = lin(0x8a9a52), c2 = lin(0x9c8a52);
+      for (let k = 0; k < 7; k++) {
         const a = k * 2.4;
-        const rr = 0.15 + (k % 3) * 0.12;
-        b.quad(0.08, 1.4 + (k % 4) * 0.25, V3(Math.cos(a) * rr, -0.1, Math.sin(a) * rr), E(0, a, 0), { color: k % 2 ? c : c2, sway: 0.9 }, 0.25);
+        const rr = 0.12 + (k % 3) * 0.1;
+        b.quad(0.2, 1.2 + (k % 4) * 0.22, V3(Math.cos(a) * rr, -0.1, Math.sin(a) * rr), E(0, a, 0), { color: k % 2 ? c : c2, sway: 0.9 }, 0.25);
       }
       break;
     }
@@ -223,14 +225,19 @@ in float vFoliage;
 in float vUpness;
 void main() {
   vec3 col = vColor * (1.0 + vTint.x * 0.3) * mix(vec3(1.0), vec3(1.12, 1.02, 0.7), max(vTint.x, 0.0) * vFoliage) * mix(vec3(1.0), vec3(0.85, 0.97, 1.1), max(-vTint.x, 0.0) * vFoliage);
-  // Autumn: foliage turns gold and red; at the extreme leaves thin out.
-  vec3 autumnCol = mix(vec3(0.55, 0.25, 0.04), vec3(0.62, 0.12, 0.03), fract(vTint.x * 7.0));
+  // Autumn: foliage turns amber, gold and crimson (deep, saturated tones: the
+  // paler ones read as bread under a bright sun).
+  float at = fract(vTint.x * 7.0);
+  vec3 autumnCol = at < 0.4 ? vec3(0.50, 0.13, 0.01) : at < 0.75 ? vec3(0.55, 0.30, 0.02) : vec3(0.32, 0.03, 0.01);
   col = mix(col, autumnCol, vTint.y * vFoliage);
-  // Snow settles on upward-facing surfaces.
-  float snow = vTint.z * smoothstep(0.05, 0.6, vUpness);
+  // Snow settles on upward-facing surfaces (little of it on leaves still turning).
+  float snow = vTint.z * smoothstep(0.05, 0.6, vUpness) * (1.0 - vTint.y * vFoliage * 0.7);
   col = mix(col, vec3(0.85, 0.88, 0.92), snow);
-  // Nature is slightly desaturated so civilisation's colours pop against it.
-  col = mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, 0.82);
+  // Crowns are darker underneath, where they shade themselves.
+  col *= mix(1.0, mix(0.6, 1.0, smoothstep(-0.6, 0.5, vUpness)), vFoliage);
+  // Nature is slightly desaturated so civilisation's colours pop against it
+  // (autumn keeps its colour).
+  col = mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, mix(0.82, 1.0, vTint.y * vFoliage));
   vec3 N = normalize(vNormal);
   vec3 c = shadeObject(vWorld, N, col, vFoliage * (1.0 - snow), 0.0, vec3(0.0));
   outColor = vec4(c, 1.0);
@@ -465,6 +472,11 @@ export class Vegetation {
     const NT = VEG_TYPES.length;
     const nearR = Math.max(45, radius * 0.4);
     const slotOf = (c: Candidate) => c.type + (c.dist < nearR ? 0 : NT);
+    // Reeds are read only up close; beyond, the reed-bed tint on the ground
+    // stands for them.
+    let kept = 0;
+    for (const c of cands) if (c.type !== 7 || c.dist <= nearR) cands[kept++] = c;
+    cands.length = kept;
     const counts = new Array(NT * 2).fill(0);
     for (const c of cands) counts[slotOf(c)]++;
     counts.forEach((cnt, i) => this.ensureCapacity(i, cnt));
@@ -558,8 +570,10 @@ export class Vegetation {
     const temp = data.sampleRegion(data.climateCPU, face, a, b, 0) * 80 - 40;
     const snow = Math.min(1, data.sampleRegion(data.climateCPU, face, a, b, 2) * 1.8);
     const autumn = type === 0 || type === 8 ? Math.max(0, Math.min(1, (12 - temp) / 8)) * Math.max(0, Math.min(1, (temp + 4) / 6)) : 0;
-    const baseScale = [1.0, 1.05, 0.95, 0.9, 1.0, 1.0, 0.9, 1.0, 1.0][type];
-    const scale = baseScale * (0.65 + r2 * 0.7) * (type === 6 ? 0.6 + slope : 1);
+    // Loose rocks stay smaller than a hut (boulders as big as houses broke the
+    // sense of scale); cliffs still gather the larger ones.
+    const baseScale = [1.0, 1.05, 0.95, 0.9, 1.0, 1.0, 0.5, 1.0, 1.0][type];
+    const scale = baseScale * (0.65 + r2 * 0.7) * (type === 6 ? 0.7 + slope * 0.8 : 1);
     out.push({ type, x, y, z, h, scale, rot: r0 * 40, hue: r2 - 0.5, autumn, snow, dist });
   }
 }

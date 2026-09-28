@@ -103,7 +103,10 @@ void main() {
     float skyMask = step(0.99999, d);
     vec3 c = texture(tColor, uv).rgb;
     float br = max(c.r, max(c.g, c.b));
-    acc += c * skyMask * smoothstep(1.5, 12.0, br) * decay;
+    // Only the sun and the sky round it cast rays: bright stars caught by a
+    // lower threshold were smeared into fat discs across the night sky.
+    float nearSun = 1.0 - smoothstep(0.04, 0.3, length(uv - uSunUv));
+    acc += c * skyMask * smoothstep(3.0, 16.0, br) * nearSun * decay;
     decay *= 0.965;
   }
   outColor = vec4(acc / float(N) * uIntensity, 1.0);
@@ -267,7 +270,14 @@ void main() {
   col = daltonize(col);
   float v = length((uv - 0.5) * vec2(uAspect, 1.0) * 0.9);
   col *= 1.0 - smoothstep(0.35, 1.25, v) * uVignette;
-  float n = fract(sin(dot(uv * vec2(1213.3, 811.7) + uTime * 17.0, vec2(12.9898, 78.233))) * 43758.5453);
+  // Film grain from an integer hash: the classic sin() hash loses precision
+  // at large arguments and drew a faint regular dot grid on some GPUs.
+  uvec2 gp = uvec2(gl_FragCoord.xy);
+  uint gh = gp.x * 1973u + gp.y * 9277u + uint(uTime * 60.0) * 26699u;
+  gh = (gh ^ (gh >> 16u)) * 0x7feb352du;
+  gh = (gh ^ (gh >> 15u)) * 0x846ca68bu;
+  gh ^= gh >> 16u;
+  float n = float(gh & 0xffffu) / 65535.0;
   col += (n - 0.5) * uGrain;
   col = mix(col, uFadeColor, uFade);
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);

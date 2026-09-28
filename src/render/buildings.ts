@@ -253,8 +253,9 @@ function buildModel(type: number, g: number, style: number): THREE.BufferGeometr
       break;
     }
     case BType.Quarry: {
-      b.box(5, 1.2, 4, V(0, -1.4, 0), P.p({ color: lin(0x7a746a) }));
-      for (let k = 0; k < 5; k++) b.box(0.8, 0.6, 0.8, V(-1.6 + k * 0.8, -0.3 + (k % 2) * 0.1, 1.4 - (k % 3) * 0.8), P.p({ color: lin(0xa29a8c), jitter: 0.1 }));
+      // Cut stone in the rock's own greys (pale blocks read as white cubes).
+      b.box(5, 1.2, 4, V(0, -1.4, 0), P.p({ color: lin(0x5e584f) }));
+      for (let k = 0; k < 5; k++) b.box(0.8, 0.6, 0.8, V(-1.6 + k * 0.8, -0.3 + (k % 2) * 0.1, 1.4 - (k % 3) * 0.8), P.p({ color: lin(0x80786b), jitter: 0.1 }));
       b.segment(V(-2.4, 0, -1.8), V(-1.8, 3.2, -1.2), 0.08, 0.06, 4, P.p({ color: wood }));
       b.segment(V(-1.8, 3.2, -1.2), V(0.4, 2.4, -0.4), 0.05, 0.05, 4, P.p({ color: wood }));
       break;
@@ -411,6 +412,9 @@ void main() {
   vec2 q = vLocal;
   float edge = max(abs(q.x), abs(q.y));
   if (edge > 0.98) discard;
+  // Nothing is sown under the sea (a field laid across an estuary showed
+  // through the water).
+  if (length(vWorld) - PLANET_R < 0.02) discard;
   vec3 up = normalize(vWorld);
   vec4 clim = texture(uClimateTex, regionUV(up));
   float temp = clim.r * 80.0 - 40.0;
@@ -460,6 +464,8 @@ in vec3 vWorld;
 in float vLevel;
 in float vSide;
 void main() {
+  // Roads end at the water's edge (a ford), not under the sea.
+  if (length(vWorld) - PLANET_R < 0.08) discard;
   float a = 1.0 - smoothstep(0.6, 1.0, abs(vSide));
   vec3 dirt = pow(vec3(0.5, 0.4, 0.28), vec3(2.2));
   vec3 cobble = pow(vec3(0.55, 0.52, 0.48), vec3(2.2));

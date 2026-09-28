@@ -344,6 +344,10 @@ export class GameRenderer {
     r.render(this.scene, cam);
     // Atmosphere composite.
     this.atmosphere.render(r, cam, this.hdrRT.texture, this.hdrRT.depthTexture!, this.compRT);
+    // Particles over the composite, depth-tested by hand against the scene.
+    this.vfx.setDepth(this.hdrRT.depthTexture!, this.hdrRT.width, this.hdrRT.height, cam.near, cam.far);
+    r.setRenderTarget(this.compRT);
+    r.render(this.vfx.overlay, cam);
     // Sun screen position for flare / god rays.
     const sunDir = this.shared.uSunDir.value as THREE.Vector3;
     const sp = cam.position.clone().addScaledVector(sunDir, 5000).project(cam);
@@ -354,7 +358,10 @@ export class GameRenderer {
     const cp = cam.position;
     const along = cp.dot(sunDir);
     const miss = along >= 0 ? Infinity : Math.sqrt(Math.max(0, cp.lengthSq() - along * along));
-    const planetK = Math.min(1, Math.max(0, (miss - PLANET_RADIUS) / 45));
+    // Past the limb the sun still shines through the atmosphere shell, dimmed
+    // and reddened: the flare fades in across the shell, not 45 u above the
+    // ground (a full starburst hung beside the night side's limb).
+    const planetK = THREE.MathUtils.smoothstep(miss - PLANET_RADIUS, 30, 140);
     const visible = behind ? 0 : (1 - Math.min(1, Math.max(0, (margin - 1.0) / 0.3))) * planetK;
     this.post.render(r, this.compRT.texture, this.hdrRT.depthTexture!, { uv: this.sunUv, visible }, cam.projectionMatrixInverse, this.time);
     this.stats.drawCalls = r.info.render.calls;

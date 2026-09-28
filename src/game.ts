@@ -552,19 +552,27 @@ export class Game {
   }
 
   /** Fly to the most populous settlement. */
-  focusPeople(): void {
-    const s = this.civ?.settlements.filter((q) => q.alive).sort((a, b) => b.pop - a.pop)[0];
-    if (!s) return;
-    // Open on the lit side: if the people sit at dusk or in darkness, look a
-    // little sunward of them (they stay in frame) so the first view is day.
-    const f = new THREE.Vector3(s.x, s.y, s.z).normalize();
+  /** Fly to the people for the first view of play: the largest settlement in
+   *  daylight (the largest overall might sit at midnight, and a first frame of
+   *  black planet sold nothing), nudged sunward if it lies near dusk. */
+  focusPeople(distance = 520, heading?: number, seconds = 4): void {
     const sun = (this.renderer.shared.uSunDir.value as THREE.Vector3).clone().normalize();
+    const alive = this.civ?.settlements.filter((q) => q.alive) ?? [];
+    let s = null as (typeof alive)[number] | null;
+    let best = -Infinity;
+    for (const q of alive) {
+      const l = new THREE.Vector3(q.x, q.y, q.z).normalize().dot(sun);
+      const score = q.pop * (l > 0.25 ? 1 : l > 0 ? 0.3 : 0.04);
+      if (score > best) { best = score; s = q; }
+    }
+    if (!s) return;
+    const f = new THREE.Vector3(s.x, s.y, s.z).normalize();
     const lit = f.dot(sun);
     if (lit < 0.45) {
       const toward = sun.clone().addScaledVector(f, -sun.dot(f));
       if (toward.lengthSq() > 1e-6) f.addScaledVector(toward.normalize(), Math.min(0.32, (0.45 - lit) * 0.6)).normalize();
     }
-    this.renderer.camera.flyTo({ focus: f, distance: 520, tiltOffset: 0.08 }, 4);
+    this.renderer.camera.flyTo({ focus: f, distance, tiltOffset: 0.08, ...(heading !== undefined ? { heading } : {}) }, seconds);
   }
 
   /** Move the camera focus east/north by world units. */

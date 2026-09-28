@@ -2,6 +2,17 @@
  * Entry point: boots the renderer and simulation worker, shows the loading
  * screen, and exposes the automation harness used by `npm run shots`.
  */
+// Typefaces are bundled (OFL, latin subsets), never fetched at run time: the
+// system fallbacks (Times, DejaVu) made the interface look unfinished.
+import '@fontsource/cormorant-garamond/latin-400.css';
+import '@fontsource/cormorant-garamond/latin-500.css';
+import '@fontsource/cormorant-garamond/latin-600.css';
+import '@fontsource/cormorant-garamond/latin-400-italic.css';
+import '@fontsource/cormorant-garamond/latin-500-italic.css';
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-600.css';
+import '@fontsource/jetbrains-mono/latin-400.css';
 import './ui/styles.css';
 import './ui/hud.css';
 import * as THREE from 'three';
@@ -81,8 +92,7 @@ function beginPlay(): void {
   game.titleMode = false;
   game.enabled = true;
   const cam = renderer.camera;
-  const s = game.civ?.settlements.filter((q) => q.alive).sort((a, b) => b.pop - a.pop)[0];
-  if (s) cam.flyTo({ focus: new THREE.Vector3(s.x, s.y, s.z), distance: 620, heading: 0.4, tiltOffset: 0.08 }, 4.5);
+  game.focusPeople(620, 0.4, 4.5);
   game.setSpeed(1);
   game.banner.show(game.worldName, scenario ? scenario.tagline : 'A world waits for its god', 5000);
   if (game.settings.tutorial && !scenario) {
