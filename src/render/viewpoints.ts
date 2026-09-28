@@ -196,7 +196,8 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
     case 'volcano': {
       // An erupting volcano (divine or otherwise), framed at dusk for the glow.
       const v = r.effects.find((e) => e.power === 'volcano');
-      if (v) return { focus: new THREE.Vector3(v.x, v.y, v.z).normalize(), distance: 170, heading: 2.6, tiltOffset: 0.35, localTime: 0.68 };
+      // Seen from the landward side, looking down across the cone and its plume.
+      if (v) return { focus: new THREE.Vector3(v.x, v.y, v.z).normalize(), distance: 175, heading: 2.6 + Math.PI, tiltOffset: 0.45, localTime: 0.68 };
       const f = findBest(r, (d, h) => (h > 2 ? 1 : 0) - Math.abs(d.y), 800);
       return { focus: f, distance: 120, heading: 0.5, tiltOffset: 0, localTime: 0.4 };
     }

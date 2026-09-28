@@ -116,7 +116,9 @@ void main() {
   } else if (vShape == 2.0) {
     float n = vnoise(uv * 2.5 + vSeed * 31.0) * 0.6 + vnoise(uv * 5.0 - vSeed * 13.0) * 0.4;
     a = smoothstep(1.0, 0.2, r + (n - 0.5) * 0.6);
-    col *= 0.8 + n * 0.4;
+    // Smoke pales as it rises and spreads (sunlit, thinning tops), and each
+    // puff is lighter on its upper side: a plume, not a flat dark smudge.
+    col *= (0.8 + n * 0.4) * (0.75 + vK * 0.9) * (1.0 + clamp(uv.y, -1.0, 1.0) * 0.18);
     fadeOut = 1.0 - smoothstep(0.3, 1.0, vK);
   } else if (vShape == 3.0 || vShape == 6.0) {
     a = exp(-r * r * 9.0) * (1.0 - smoothstep(0.7, 1.0, r));

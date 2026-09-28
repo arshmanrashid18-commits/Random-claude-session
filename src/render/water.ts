@@ -3,7 +3,7 @@
  * (ribbons following the simulated drainage network, flowing downstream).
  */
 import * as THREE from 'three';
-import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_HEIGHT, GLSL_NOISE, GLSL_REGION } from './glsl/common';
+import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_DETAIL, GLSL_HEIGHT, GLSL_NOISE, GLSL_REGION } from './glsl/common';
 import { GLSL_SKYLIGHT } from './glsl/surface';
 import { OCEAN_SHADING, type SharedUniforms } from './planet/terrain';
 import { faceABToDir } from '../sim/planet/cubesphere';
@@ -40,7 +40,7 @@ ${GLSL_REGION}
 ${GLSL_NOISE}
 ${GLSL_ATMOSPHERE}
 ${GLSL_SKYLIGHT}
-uniform vec3 uCamPos;
+${GLSL_DETAIL}
 uniform float uTime;
 ${OCEAN_SHADING}
 `;
@@ -53,7 +53,9 @@ in float vDist;
 in float vFringe;
 void main() {
   vec3 dir = normalize(vWorld);
-  float ground = heightAtDir(dir);
+  // The same ground the terrain draws (cubic + detail), so the shore is the
+  // exact, smooth line where the rendered ground meets the water.
+  float ground = groundHeight(dir);
   float depth = vLevel - ground;
   if (depth < -0.02) discard;
   // The fringe around a lake lets the shoreline follow the terrain contour

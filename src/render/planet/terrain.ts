@@ -187,12 +187,12 @@ void main() {
     vec3 q = dir * PLANET_R;
     float n1 = snoise(q * 0.32 + vec3(0.0, uTime * 0.04, 0.0));
     float n2 = snoise(q * 1.05 - vec3(uTime * 0.07, 0.0, 0.0));
-    float veins = 1.0 - smoothstep(0.0, 0.16, abs(n1 * 0.7 + n2 * 0.3));
+    float veins = 1.0 - smoothstep(0.0, 0.11, abs(n1 * 0.7 + n2 * 0.3));
     float fresh = smoothstep(0.55, 0.95, si.emissive);
     float flatK = smoothstep(0.45, 0.8, dot(N, dir));
     float cover = smoothstep(0.02, 0.35, si.emissive);
     color = mix(color, vec3(0.03, 0.025, 0.022) * (0.4 + ndl), cover * 0.85);
-    float glow = mix(veins, 1.0, fresh * 0.65) * cover * mix(0.25, 1.0, flatK);
+    float glow = mix(veins, 1.0, fresh * 0.65 * flatK) * cover * mix(0.12, 1.0, flatK);
     color += vec3(3.4, 0.95, 0.2) * glow * (0.75 + 0.25 * snoise(q * 2.2 + uTime * 0.6));
   }
   vec3 ruv = regionUV(dir);

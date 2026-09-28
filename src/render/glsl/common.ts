@@ -287,13 +287,17 @@ float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
  * bilinearly upsampled coarse fields, which run in straight segments that kink
  * at coarse-cell corners. Below the shoreline (never at it) both the seabed
  * colour and the water depth see the same gentle noise, so shelf edges wander
- * like sand bars. Requires GLSL_NOISE.
+ * like sand bars. Requires GLSL_NOISE and GLSL_HEIGHT.
  */
 export const GLSL_SEABED = /* glsl */ `
 float seabed(float h, vec3 dir) {
   float k = smoothstep(-0.3, -1.6, h);
   if (k <= 0.0) return h;
   vec3 p = dir * PLANET_R;
-  return h + (snoise(p * 0.035) * 0.65 + snoise(p * 0.11 + 3.7) * 0.35) * 2.2 * k;
+  // Warp where the sea floor is read (up to ~20 u sideways) so steep shelf
+  // contours meander; never lift it into the shore band.
+  vec3 w = vec3(snoise(p * 0.02), snoise(p * 0.02 + 7.3), snoise(p * 0.02 + 13.1));
+  float hw = min(heightAtDir(normalize(dir + w * 0.018)), -0.3);
+  return mix(h, hw, k) + (snoise(p * 0.035) * 0.65 + snoise(p * 0.11 + 3.7) * 0.35) * 1.4 * k;
 }
 `;

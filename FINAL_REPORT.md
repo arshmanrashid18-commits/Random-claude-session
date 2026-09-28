@@ -17,13 +17,13 @@ would build next.
 | `npm install && npm run dev` works | ✅ | Vite dev server is what every harness script boots (shots, monkey, perf, UI checks) |
 | `npm run build` | ✅ | `tsc --noEmit && vite build` succeeds (≈900 kB main chunk, 234 kB worker) |
 | `npm test` passes | ✅ | 9 suites, 25 tests (see below) |
-| `npm run shots` regenerates the screenshots | ✅ | 12 viewpoints in `docs/screenshots`, "zero console errors/warnings" gate |
+| `npm run shots` regenerates the screenshots | ✅ | 13 viewpoints in `docs/screenshots`, "zero console errors/warnings" gate |
 | Zero console errors | ✅ | Every shots/UI/perf run and the 5-minute monkey test (see below) |
 | All systems visible and emergent | ✅ | Screenshots; chronicle excerpts; debug traces of wars, plagues, ecology |
 | Performance budgets documented | ✅ | Performance section below (with the limits of what can be measured here) |
 | 8 scenarios winnable and losable | ✅ | `tests/scenarios.soak.test.ts`: each won and lost by scripted players, and lost by doing nothing |
 | Quality scores 9+ or explained | ✅ | QUALITY_LOG.md passes; final scores and explanations below |
-| README with ≥10 own screenshots | ✅ | README.md: 12 landscape + 8 interface captures |
+| README with ≥10 own screenshots | ✅ | README.md: 13 landscape + 8 interface captures |
 | FINAL_REPORT.md | ✅ | This file |
 
 ## Tests
