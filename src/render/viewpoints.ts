@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import type { GameRenderer } from './renderer';
 import { dirToFaceAB } from '../sim/planet/cubesphere';
 
-export type ViewpointId = 'orbit' | 'terminator' | 'coast' | 'mountains' | 'forest' | 'ground' | 'night' | 'aurora' | 'storm' | 'village' | 'volcano' | 'wildlife';
+export type ViewpointId = 'orbit' | 'terminator' | 'coast' | 'mountains' | 'forest' | 'ground' | 'night' | 'aurora' | 'storm' | 'village' | 'volcano' | 'wildlife' | 'fog';
 
 export interface Viewpoint {
   focus: THREE.Vector3;
@@ -130,6 +130,16 @@ export function computeViewpoint(r: GameRenderer, id: ViewpointId): Viewpoint {
         return v.trees * 6 - Math.min(relief(r, d, 0.01), 10) * 0.15 - c.cloud * 2 - Math.abs(d.y) * 0.5;
       });
       return { focus: f, distance: 55, heading: 0.4, tiltOffset: -0.05, localTime: 0.38 };
+    }
+    case 'fog': {
+      // The foggiest low land at the world's own hour (fog follows the sim's
+      // dawn, so the light is left as it is), seen low and oblique.
+      const f = findBest(r, (d, h) => {
+        const fd = dirFace(d);
+        const fog = r.data.sampleRegion(r.data.fxCPU, fd.face, fd.a, fd.b, 1);
+        return h > 0.5 ? fog * 2 - h * 0.01 : -1;
+      }, 4000);
+      return { focus: f, distance: 150, heading: 0.9, tiltOffset: 0.62, localTime: null };
     }
     case 'ground': {
       const f = findBest(r, (d, h) => {

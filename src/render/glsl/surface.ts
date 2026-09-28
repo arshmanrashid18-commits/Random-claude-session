@@ -130,6 +130,39 @@ vec3 skyAmbient(vec3 up, vec3 N, vec3 sunDir) {
 }
 `;
 
+/**
+ * Ground fog from the simulated fog field (fx.g): it pools where the ground
+ * lies below its surroundings and over low land, and is lit like a bright
+ * cloud top. Requires GLSL_HEIGHT, GLSL_REGION, GLSL_NOISE and GLSL_SKYLIGHT.
+ */
+export const GLSL_FOG = /* glsl */ `
+// The simulated field, broken into drifting banks and wisps by noise (so its
+// edge never follows the coarse region cells).
+float fogField(vec3 dir) {
+  float f = texture(uFxTex, regionUV(dir)).g;
+  if (f < 0.01) return 0.0;
+  vec3 p = dir * PLANET_R;
+  float n = snoise(p * 0.03 + vec3(uTime * 0.01, 0.0, 0.0)) * 0.6 + snoise(p * 0.09 - vec3(0.0, uTime * 0.02, 0.0)) * 0.4;
+  return clamp(f * 1.3 + n * 0.45 - 0.15, 0.0, 1.0);
+}
+float groundFog(vec3 dir, float h) {
+  if (h < -0.3) return 0.0;
+  float f = fogField(dir);
+  if (f <= 0.0) return 0.0;
+  vec3 t1 = normalize(cross(dir, abs(dir.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+  vec3 t2 = cross(dir, t1);
+  float e = 0.02;
+  float hAvg = (heightAtDir(normalize(dir + t1 * e)) + heightAtDir(normalize(dir - t1 * e))
+              + heightAtDir(normalize(dir + t2 * e)) + heightAtDir(normalize(dir - t2 * e))) * 0.25;
+  float valley = smoothstep(0.5, -2.5, h - hAvg);
+  float low = 1.0 - smoothstep(3.0, 14.0, h);
+  return f * clamp(valley * 0.8 + low * 0.55, 0.0, 1.0);
+}
+vec3 fogLight(vec3 dir, vec3 L, vec3 sunCol) {
+  return vec3(0.86, 0.88, 0.9) * (sunCol * max(dot(dir, L), 0.0) / PI + skyAmbient(dir, dir, L) * uSunIntensity * 0.12);
+}
+`;
+
 export const GLSL_TERRAIN_ALBEDO = /* glsl */ `
 vec3 srgb(vec3 c) { return pow(c, vec3(2.2)); }
 

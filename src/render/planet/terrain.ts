@@ -3,7 +3,7 @@
  */
 import * as THREE from 'three';
 import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_DETAIL, GLSL_HEIGHT, GLSL_NOISE, GLSL_REGION, GLSL_SEABED } from '../glsl/common';
-import { GLSL_CLOUDS, GLSL_SKYLIGHT, GLSL_TERRAIN_ALBEDO } from '../glsl/surface';
+import { GLSL_CLOUDS, GLSL_SKYLIGHT, GLSL_TERRAIN_ALBEDO, GLSL_FOG } from '../glsl/surface';
 import { LodSelector, MAX_LOD_LEVELS, type LodSettings } from './quadtree';
 import { GLSL_SHADOW_SAMPLE } from '../shadows';
 import type { PlanetData } from './planetData';
@@ -101,6 +101,7 @@ ${GLSL_SEABED}
 ${GLSL_ATMOSPHERE}
 ${GLSL_CLOUDS}
 ${GLSL_SKYLIGHT}
+${GLSL_FOG}
 ${GLSL_TERRAIN_ALBEDO}
 ${GLSL_SHADOW_SAMPLE}
 uniform highp sampler2DArray uNormalTex;
@@ -208,6 +209,9 @@ void main() {
     water *= 0.9 + ripple * 0.2;
     color = mix(color, water, fw * 0.88);
   }
+  // Ground fog lying in the valleys and over low land (simulated field).
+  float gfog = groundFog(dir, h);
+  if (gfog > 0.0) color = mix(color, fogLight(dir, L, sunCol), gfog * 0.85);
   // Night: the lights of settlements.
   vec4 surf = texture(uSurfaceTex, ruv);
   float night = smoothstep(0.02, -0.12, mu);
@@ -398,6 +402,7 @@ ${GLSL_ATMOSPHERE}
 ${GLSL_SKYLIGHT}
 uniform vec3 uCamPos;
 uniform float uTime;
+${GLSL_FOG}
 uniform vec4 uTsunami[4];
 uniform float uTsunamiAmp[4];
 ${OCEAN_SHADING}
@@ -410,6 +415,12 @@ void main() {
   float depth = (r - PLANET_R) - ground;
   if (depth < -0.02) discard;
   vec4 c = shadeWater(vWorld, dir, max(depth, 0.0), vDist, 0.0);
+  // Sea fog banks (the same simulated field), thickest near the shore.
+  float sfog = fogField(dir);
+  if (sfog > 0.0) {
+    float k = sfog * 0.5;
+    c = mix(c, vec4(fogLight(dir, uSunDir, transmittanceToSun(r, dot(dir, uSunDir)) * uSunIntensity), 1.0), k);
+  }
   // Tsunami fronts: a white-crested wall of water racing outward.
   float px = max(1.5, vDist * 0.004);
   for (int i = 0; i < 4; i++) {

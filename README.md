@@ -33,7 +33,7 @@ URL options: `?seed=123`, `?quality=low|medium|high|ultra`, `?play=1` (skip the 
 | System | What happens |
 |---|---|
 | **Planet** | Cube-sphere heightfield (6 × 513²) from tectonic plates, ridged noise and hydraulic erosion; priority-flood hydrology fills lakes to their spill level and carves river valleys; moon tides. |
-| **Climate & weather** | Latitude/season/altitude temperature, moisture advection, rain shadows; fronts, named hurricanes, blizzards, lightning, droughts; biomes emerge from climate and change with it. |
+| **Climate & weather** | Latitude/season/altitude temperature, moisture advection, rain shadows; fronts, named hurricanes, blizzards, lightning, droughts, dawn fog in valleys and along coasts; biomes emerge from climate and change with it. |
 | **Ecology** | 8 plant species compete per cell and burn; 13 animal species (8 herbivores, 5 predators) with needs, herds, migration, genetics, predation, disease, speciation and extinction. |
 | **People** | Up to 9,000 agents with needs, skills, personality, spouses, children, memories of the god and their love and fear of it; two life-years pass per world year. |
 | **Settlements** | Camps grow into villages, towns and cities: houses, farms, storehouses, temples, harbours, walls, monuments, roads — built piece by piece with carried materials in a conserving economy. |
@@ -91,7 +91,8 @@ Captured from the running game (seed 20260925, High quality) by `npm run shots` 
 | ![Ground](docs/screenshots/ground.png) | ![Wildlife](docs/screenshots/wildlife.png) |
 | ![Village](docs/screenshots/village.png) | ![Night](docs/screenshots/night.png) |
 | ![Aurora](docs/screenshots/aurora.png) | ![Storm](docs/screenshots/storm.png) |
-| ![Volcano](docs/screenshots/volcano.png) | ![Title screen](docs/screenshots/ui/title.png) |
+| ![Volcano](docs/screenshots/volcano.png) | ![Coastal fog at dawn](docs/screenshots/fog.png) |
+| ![Title screen](docs/screenshots/ui/title.png) | ![Scenarios](docs/screenshots/ui/title-scenarios.png) |
 | ![Interface over a village](docs/screenshots/ui/hud-village.png) | ![Inspector](docs/screenshots/ui/hud-inspect.png) |
 | ![A meteor falls](docs/screenshots/ui/meteor-falling.png) | ![After the impact](docs/screenshots/ui/meteor-after.png) |
 | ![Chronicle](docs/screenshots/ui/chronicle.png) | ![Ecology dashboard](docs/screenshots/ui/ecology.png) |

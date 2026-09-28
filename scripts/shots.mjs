@@ -30,6 +30,7 @@ const DEFAULT_SHOTS = [
   { name: 'forest', view: 'forest' },
   { name: 'ground', view: 'ground' },
   { name: 'aurora', view: 'aurora' },
+  { name: 'fog', view: 'fog' },
   { name: 'wildlife', view: 'wildlife', advance: 60 },
   { name: 'village', view: 'village', advance: 9600 },
   { name: 'night', view: 'night' },

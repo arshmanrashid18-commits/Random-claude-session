@@ -361,6 +361,20 @@ void main() {
     } else {
       result = inscatter * uSunIntensity + behind;
     }
+    // Standing in fog (the simulated field at the camera's feet): the world
+    // fades into it with distance; the sky overhead stays clearer.
+    float camAltF = length(ro) - PLANET_R;
+    if (camAltF < 70.0) {
+      vec3 up0 = normalize(ro);
+      float fc = texture(uFxTex, regionUV(up0)).g * (1.0 - smoothstep(12.0, 70.0, camAltF));
+      if (fc > 0.01) {
+        float muF = dot(up0, uSunDir);
+        vec3 fogC = vec3(0.86, 0.88, 0.9) * (transmittanceToSun(length(ro), muF) * uSunIntensity * max(muF, 0.0) / PI
+                  + vec3(0.27, 0.4, 0.68) * uSunIntensity * 0.06 * smoothstep(-0.18, 0.25, muF));
+        float dF = sky ? 400.0 * (1.0 - smoothstep(0.0, 0.35, dot(rd, up0))) : sceneDist;
+        result = mix(result, fogC, (1.0 - exp(-dF * fc * 0.006)) * 0.9);
+      }
+    }
   }
   // Rainbows belong to observers inside the rain, never to the view from orbit.
   float rbAlt = 1.0 - smoothstep(60.0, 140.0, length(uCamPos) - PLANET_R);

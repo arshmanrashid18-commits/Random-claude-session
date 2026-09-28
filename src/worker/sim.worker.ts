@@ -4,7 +4,7 @@
  * decoupled from rendering, and streams state to the main thread.
  */
 import { World } from '../sim/world';
-import { TICKS_PER_SECOND_1X } from '../sim/constants';
+import { TICKS_PER_SECOND_1X, dayFrac } from '../sim/constants';
 import { buildPadMap, packRGBA } from '../sim/planet/regiontex';
 import type { CivData, EcologyData, EntitySnapshot, FrameData, LakeData, MainToWorker, RegionTextures, RiverData, SpeciesInfo, StaticWorldData, WorkerToMain } from './protocol';
 import { HISTORY_INTERVAL, HISTORY_LEN } from '../sim/ecology/animals';
@@ -78,13 +78,30 @@ function fillTextures(w: World, t: RegionTextures): void {
   packRGBA(pm, t.fx, (c) => cl.rain[c] * 2, (c) => fogAt(w, c), (c) => w.fires.intensity[c], (c) => Math.min(1, flood[c] / 4));
 }
 
-/** Fog: saturated, calm air near dawn-cool surfaces. */
+/**
+ * Fog: saturated, calm air cooled overnight. Radiation fog thickens toward
+ * dawn and burns off through the morning; rain washes it out; coasts and
+ * lakeshores (moist air over cool water) fog more readily. Derived from the
+ * climate state each texture update, with no random draws.
+ */
 function fogAt(w: World, c: number): number {
   const cl = w.planet.climate;
   const sat = 3.8 * Math.exp(0.0687 * Math.max(-45, Math.min(45, cl.temp[c])));
   const rh = cl.humid[c] / sat;
   const wind = Math.hypot(cl.windE[c], cl.windN[c]);
-  return Math.max(0, (rh - 0.82) * 5) * Math.max(0, 1 - wind / 9);
+  const base = Math.max(0, (rh - 0.8) * 5) * Math.max(0, 1 - wind / 9);
+  if (base <= 0) return 0;
+  const g = w.planet.region;
+  const lon = Math.atan2(-g.centers[c * 3 + 2], g.centers[c * 3]);
+  let local = (2 * Math.PI * dayFrac(w.tick) - lon) / (2 * Math.PI) + 0.5;
+  local -= Math.floor(local);
+  // Peaks at 06:00 local time, gone by the afternoon.
+  const k = Math.min(1, Math.max(0, (Math.cos(2 * Math.PI * (local - 0.25)) + 0.3) / 1.2));
+  const dawn = k * k * (3 - 2 * k);
+  const wash = Math.min(1, cl.rain[c] * 12);
+  const t = cl.terrain;
+  const shore = (t.oceanFrac[c] > 0.05 && t.oceanFrac[c] < 0.95) || t.lakeFrac[c] > 0.05 ? 1.4 : 1;
+  return Math.min(1, base * (0.25 + 0.75 * dawn) * (1 - wash) * shore);
 }
 
 function ecologyData(w: World): EcologyData {
