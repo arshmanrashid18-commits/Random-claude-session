@@ -35,17 +35,17 @@ function buildFarModel(type: VegType): THREE.BufferGeometry | null {
   switch (type) {
     case 'broadleaf':
       b.cylinder(0.2, 0.36, 3.4, 4, V3(0, -0.4, 0), { color: bark, ao: 0.4 });
-      b.blob(2.05, 0, V3(0, 4.6, 0), V3(1.3, 1.0, 1.3), { color: lin(0x40692a), sway: 0.7, jitter: 0.2, ao: 0.45, flat: true });
-      b.blob(1.3, 0, V3(0.9, 4.0, 0.2), V3(1, 0.85, 1), { color: lin(0x355a22), sway: 0.7, jitter: 0.2, ao: 0.5, flat: true });
+      b.blob(2.05, 0, V3(0, 4.6, 0), V3(1.3, 1.0, 1.3), { color: lin(0x40692a), sway: 0.7, jitter: 0.2, ao: 0.45 });
+      b.blob(1.3, 0, V3(0.9, 4.0, 0.2), V3(1, 0.85, 1), { color: lin(0x355a22), sway: 0.7, jitter: 0.2, ao: 0.5 });
       break;
     case 'birch':
       b.cylinder(0.12, 0.2, 4.4, 4, V3(0, -0.4, 0), { color: barkLight, ao: 0.3 });
-      b.blob(1.25, 0, V3(0, 4.1, 0), V3(1.0, 1.55, 1.0), { color: lin(0x708f38), sway: 0.8, jitter: 0.25, ao: 0.4, flat: true });
+      b.blob(1.25, 0, V3(0, 4.1, 0), V3(1.0, 1.55, 1.0), { color: lin(0x708f38), sway: 0.8, jitter: 0.25, ao: 0.4 });
       break;
     case 'conifer':
       b.cylinder(0.16, 0.3, 2.2, 4, V3(0, -0.4, 0), { color: bark, ao: 0.4 });
-      b.cone(2.2, 3.8, 6, V3(0, 1.3, 0), { color: lin(0x284a31), sway: 0.3, ao: 0.55, flat: true });
-      b.cone(1.45, 3.4, 6, V3(0, 3.6, 0), { color: lin(0x1f3d28), sway: 0.5, ao: 0.55, flat: true });
+      b.cone(2.2, 3.8, 6, V3(0, 1.3, 0), { color: lin(0x284a31), sway: 0.3, ao: 0.55 });
+      b.cone(1.45, 3.4, 6, V3(0, 3.6, 0), { color: lin(0x1f3d28), sway: 0.5, ao: 0.55 });
       break;
     case 'palm': {
       const trunk = lin(0x8a6f4c);
@@ -60,8 +60,8 @@ function buildFarModel(type: VegType): THREE.BufferGeometry | null {
       break;
     }
     case 'bush':
-      b.blob(0.85, 0, V3(0, 0.45, 0), V3(1.2, 0.8, 1.2), { color: lin(0x4a6a2e), sway: 0.4, jitter: 0.25, ao: 0.6, flat: true });
-      b.blob(0.6, 0, V3(0.55, 0.3, 0.2), V3(1, 0.8, 1), { color: lin(0x3d5a27), sway: 0.4, jitter: 0.25, ao: 0.6, flat: true });
+      b.blob(0.85, 0, V3(0, 0.45, 0), V3(1.2, 0.8, 1.2), { color: lin(0x4a6a2e), sway: 0.4, jitter: 0.25, ao: 0.6 });
+      b.blob(0.6, 0, V3(0.55, 0.3, 0.2), V3(1, 0.8, 1), { color: lin(0x3d5a27), sway: 0.4, jitter: 0.25, ao: 0.6 });
       break;
     case 'cactus': {
       const g = lin(0x5d8043);
@@ -86,26 +86,26 @@ export function buildModel(type: VegType, far = false): THREE.BufferGeometry {
       b.cylinder(0.08, 0.14, 1.6, 5, V3(0, 2.2, 0), { color: bark, sway: 0.2 }, E(0, 0, 0.9));
       b.cylinder(0.08, 0.14, 1.5, 5, V3(0, 2.0, 0), { color: bark, sway: 0.2 }, E(0.8, 0, -0.5));
       const leaf = lin(0x3d6526), leaf2 = lin(0x4b7530), leaf3 = lin(0x355a22);
-      b.blob(1.9, 1, V3(0, 4.6, 0), V3(1.1, 0.85, 1.1), { color: leaf, sway: 0.7, jitter: 0.25, ao: 0.45, flat: true });
-      b.blob(1.4, 1, V3(1.2, 3.9, 0.3), V3(1, 0.85, 1), { color: leaf2, sway: 0.7, jitter: 0.25, ao: 0.5, flat: true });
-      b.blob(1.3, 1, V3(-1.1, 4.0, -0.4), V3(1, 0.85, 1), { color: leaf3, sway: 0.7, jitter: 0.25, ao: 0.5, flat: true });
-      b.blob(1.2, 1, V3(0.2, 5.6, -0.3), V3(1, 0.9, 1), { color: leaf2, sway: 0.8, jitter: 0.25, ao: 0.3, flat: true });
+      b.blob(1.9, 1, V3(0, 4.6, 0), V3(1.1, 0.85, 1.1), { color: leaf, sway: 0.7, jitter: 0.25, ao: 0.45 });
+      b.blob(1.4, 1, V3(1.2, 3.9, 0.3), V3(1, 0.85, 1), { color: leaf2, sway: 0.7, jitter: 0.25, ao: 0.5 });
+      b.blob(1.3, 1, V3(-1.1, 4.0, -0.4), V3(1, 0.85, 1), { color: leaf3, sway: 0.7, jitter: 0.25, ao: 0.5 });
+      b.blob(1.2, 1, V3(0.2, 5.6, -0.3), V3(1, 0.9, 1), { color: leaf2, sway: 0.8, jitter: 0.25, ao: 0.3 });
       break;
     }
     case 'birch': {
       b.cylinder(0.12, 0.2, 4.4, 7, V3(0, -0.4, 0), { color: barkLight, jitter: 0.2, ao: 0.3 });
       const leaf = lin(0x6b8e36), leaf2 = lin(0x7d9c40);
-      b.blob(1.15, 1, V3(0, 4.6, 0), V3(0.95, 1.35, 0.95), { color: leaf, sway: 0.8, jitter: 0.3, ao: 0.4, flat: true });
-      b.blob(0.95, 1, V3(0.55, 3.5, 0.2), V3(1, 1.15, 1), { color: leaf2, sway: 0.8, jitter: 0.3, ao: 0.45, flat: true });
-      b.blob(0.9, 1, V3(-0.5, 3.8, -0.3), V3(1, 1.15, 1), { color: leaf, sway: 0.8, jitter: 0.3, ao: 0.45, flat: true });
-      b.blob(0.8, 1, V3(0.1, 2.8, 0.45), V3(1, 1.1, 1), { color: leaf2, sway: 0.7, jitter: 0.3, ao: 0.5, flat: true });
+      b.blob(1.15, 1, V3(0, 4.6, 0), V3(0.95, 1.35, 0.95), { color: leaf, sway: 0.8, jitter: 0.3, ao: 0.4 });
+      b.blob(0.95, 1, V3(0.55, 3.5, 0.2), V3(1, 1.15, 1), { color: leaf2, sway: 0.8, jitter: 0.3, ao: 0.45 });
+      b.blob(0.9, 1, V3(-0.5, 3.8, -0.3), V3(1, 1.15, 1), { color: leaf, sway: 0.8, jitter: 0.3, ao: 0.45 });
+      b.blob(0.8, 1, V3(0.1, 2.8, 0.45), V3(1, 1.1, 1), { color: leaf2, sway: 0.7, jitter: 0.3, ao: 0.5 });
       break;
     }
     case 'conifer': {
       b.cylinder(0.16, 0.3, 2.2, 6, V3(0, -0.4, 0), { color: bark, ao: 0.4 });
       const needle = lin(0x1f3d28), needle2 = lin(0x284a31);
       const tiers = [[2.3, 2.6, 1.2], [1.9, 2.4, 2.6], [1.5, 2.2, 3.9], [1.05, 2.0, 5.1], [0.6, 1.7, 6.2]];
-      tiers.forEach(([r, h, y], i) => b.cone(r, h, 8, V3(0, y, 0), { color: i % 2 ? needle : needle2, sway: 0.25 + i * 0.1, jitter: 0.2, ao: 0.55, flat: true }));
+      tiers.forEach(([r, h, y], i) => b.cone(r, h, 8, V3(0, y, 0), { color: i % 2 ? needle : needle2, sway: 0.25 + i * 0.1, jitter: 0.2, ao: 0.55 }));
       break;
     }
     case 'palm': {
@@ -138,9 +138,9 @@ export function buildModel(type: VegType, far = false): THREE.BufferGeometry {
     }
     case 'bush': {
       const c1 = lin(0x4a6a2e), c2 = lin(0x3d5a27);
-      b.blob(0.8, 1, V3(0, 0.45, 0), V3(1.1, 0.8, 1.1), { color: c1, sway: 0.4, jitter: 0.3, ao: 0.6, flat: true });
-      b.blob(0.6, 1, V3(0.6, 0.35, 0.2), V3(1, 0.8, 1), { color: c2, sway: 0.4, jitter: 0.3, ao: 0.6, flat: true });
-      b.blob(0.55, 1, V3(-0.5, 0.3, -0.3), V3(1, 0.8, 1), { color: c1, sway: 0.4, jitter: 0.3, ao: 0.6, flat: true });
+      b.blob(0.8, 1, V3(0, 0.45, 0), V3(1.1, 0.8, 1.1), { color: c1, sway: 0.4, jitter: 0.3, ao: 0.6 });
+      b.blob(0.6, 1, V3(0.6, 0.35, 0.2), V3(1, 0.8, 1), { color: c2, sway: 0.4, jitter: 0.3, ao: 0.6 });
+      b.blob(0.55, 1, V3(-0.5, 0.3, -0.3), V3(1, 0.8, 1), { color: c1, sway: 0.4, jitter: 0.3, ao: 0.6 });
       break;
     }
     case 'snag': {
@@ -239,6 +239,18 @@ void main() {
   // (autumn keeps its colour).
   col = mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, mix(0.82, 1.0, vTint.y * vFoliage));
   vec3 N = normalize(vNormal);
+  // Leaf clumps: billowy cells bumped into the crown in world space, so a crown
+  // reads as masses of foliage rather than one faceted solid (the toy-like
+  // facets clashed with the softly lit world around them).
+  if (vFoliage > 0.5) {
+    vec3 q = vWorld * 0.22;
+    float e = 0.05;
+    float c0 = texture(uCloudNoise, q).r;
+    vec3 g = vec3(texture(uCloudNoise, q + vec3(e, 0.0, 0.0)).r - c0, texture(uCloudNoise, q + vec3(0.0, e, 0.0)).r - c0, texture(uCloudNoise, q + vec3(0.0, 0.0, e)).r - c0) / e;
+    g -= N * dot(g, N);
+    N = normalize(N - g * 0.06);
+    col *= 0.72 + 0.5 * c0;
+  }
   vec3 c = shadeObject(vWorld, N, col, vFoliage * (1.0 - snow), 0.0, vec3(0.0));
   outColor = vec4(c, 1.0);
 }

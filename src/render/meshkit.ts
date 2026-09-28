@@ -111,9 +111,13 @@ export class MeshBuilder {
       if (k === undefined) { k = 1 + (this.rand() - 0.5) * noise * 2; map.set(key, k); }
       p.setXYZ(i, p.getX(i) * k, p.getY(i) * k, p.getZ(i) * k);
     }
-    g.computeVertexNormals();
+    // Icosahedra come unindexed (one vertex per face corner), so normals are
+    // faceted unless the corners are welded first: smooth blobs weld them.
+    const src = o.flat ? g : weld(g);
+    src.computeVertexNormals();
     const m = new THREE.Matrix4().compose(at, new THREE.Quaternion(), scale);
-    this.addGeometry(g, m, o);
+    this.addGeometry(src, m, o);
+    if (src !== g) src.dispose();
     g.dispose();
     return this;
   }
@@ -247,4 +251,27 @@ export function lin(hex: number): [number, number, number] {
   // THREE.Color converts sRGB hex input to the linear working space.
   const c = new THREE.Color().setHex(hex);
   return [c.r, c.g, c.b];
+}
+
+/** Weld coincident corners of an unindexed geometry into an indexed one
+ *  (positions only), so computed normals are smooth across faces. */
+function weld(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const p = g.getAttribute('position');
+  const map = new Map<string, number>();
+  const pos: number[] = [];
+  const idx: number[] = [];
+  for (let i = 0; i < p.count; i++) {
+    const key = `${p.getX(i).toFixed(4)},${p.getY(i).toFixed(4)},${p.getZ(i).toFixed(4)}`;
+    let k = map.get(key);
+    if (k === undefined) {
+      k = pos.length / 3;
+      map.set(key, k);
+      pos.push(p.getX(i), p.getY(i), p.getZ(i));
+    }
+    idx.push(k);
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setIndex(idx);
+  return out;
 }

@@ -253,6 +253,7 @@ by cropping or by hiding components one at a time; the causes and fixes:
 | Settlement label hides the town hall | real | anchored 6 u above the centre → hung above the rooftops with a leader line |
 | Ecology chart: series flat on zero, unrounded ticks | real | linear axis → square-root scale with round ticks and a time axis |
 | Title logo glow banding; dot grid | real | one wide strong glow on 8-bit output; film grain from a sin() hash that loses precision → two-layer glow; integer-hash grain |
+| Faceted icosphere crowns beside the soft globe (the "two art languages") | real, partly | three.js icospheres are unindexed, so every blob was flat-shaded whatever its option said → blobs are welded and smooth-shaded, crowns carry billowy leaf-clump relief; rocks and buildings stay faceted |
 | Trees bigger than huts | not a defect | a broadleaf crown is 6–10 m and a hut 4–5 m; the loose rocks were the scale breakers and are fixed |
 | Aurora a flat green smear | partly open | the curtains are marched in the atmosphere pass; seen from 1,150 u they lie across the night side — left for the next pass |
 

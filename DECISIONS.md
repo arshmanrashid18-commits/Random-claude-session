@@ -207,3 +207,8 @@ Each entry: decision — why.
     30% height; the shading keeps the full height field, so only the outline changes.
 59. **Opening on the lit side.** Play opens on the largest settlement in daylight (the
     largest overall may sit at midnight), for scenarios and free play alike.
+60. **Soft foliage, faceted rock.** Tree crowns, bushes and the bodies of people and
+    animals are smooth-shaded (welded vertices) and crowns carry billowy leaf-clump
+    relief in world space; rocks and buildings keep their facets. The flat-shaded
+    crowns read as toys beside the softly lit globe, the reviewers' main objection;
+    crisp facets stay where real things are faceted.

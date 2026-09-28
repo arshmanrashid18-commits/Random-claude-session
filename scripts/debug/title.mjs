@@ -27,6 +27,10 @@ await page.evaluate(() => window.__genesis.renderFrames(2));
 await page.screenshot({ path: `${out}/title-new.png` });
 await page.click('[data-act="back"]');
 await page.click('[data-act="begin"]');
+// Software rendering takes minutes over the 4.5 s opening flight while the
+// world keeps turning in real time (days pass, and the view it chose in daylight
+// drifts into night): hold the clock so the capture shows what a player sees.
+await page.evaluate(() => window.__genesis.game.togglePause());
 // The opening flight lasts 4.5 s (frame time is capped, so allow for it).
 await page.evaluate(() => window.__genesis.renderFrames(90));
 await page.screenshot({ path: `${out}/begin.png` });

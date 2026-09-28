@@ -23,24 +23,26 @@ Working and verified (tests, screenshots or measurements):
 * Audio: generative score, ambience, spatial effects, UI sounds.
 * Tests: 9 fast suites (25 tests); soak: scenarios (8 × win / lose / idle-loses, 24 tests),
   500-year soak with bounded structures (building slots reused, DECISIONS 48).
-* Harness: `npm run shots` (12 viewpoints, zero console errors), UI captures, 5-minute
+* Harness: `npm run shots` (13 viewpoints, zero console errors), UI captures, 5-minute
   monkey test (two seeds, zero errors), `scripts/perf.mjs` renderer table,
   `scripts/bench.mts` simulation table.
 * Docs: README (screenshots, design notes), FINAL_REPORT (evidence, perf tables, scores,
-  proudest, limitations, next five), QUALITY_LOG passes 0.1–3 and the delight list.
+  proudest, limitations, next five), QUALITY_LOG passes 0.1–7 and the delight list.
 
 Final phase (Phase 9) status:
-* Adversarial reviews: Pass 4 (5/4/4/4 on beauty/coherence/polish/wow) and Pass 5
-  (5/3/4/4). Every finding verified and dispositioned in QUALITY_LOG; ~40 fixes across
-  sky, clouds, water, lakes, terrain palette, fog (now rendered), VFX, night, UI.
+* Adversarial reviews by an independent agent, Passes 4–7: beauty 5 · 5 · 5 · 5,
+  coherence 4 · 3 · 4 · 4, polish 4 · 4 · 3 · 4, wow 4 · 4 · 5 · 4. Every finding
+  verified (crops, height picks, hiding components) and dispositioned with its root
+  cause in QUALITY_LOG; ~90 fixes across sky, clouds, water, estuaries, lakes, terrain
+  and rock, lava, night lights, VFX (particles now composited after the haze), fonts,
+  names, chronicle, ecology chart and layout.
+* FINAL_REPORT's quality section now carries the reviewer's scores and the explanation
+  of the shortfall (two art languages, no art-directed hero shots, software rendering).
 * Fog: the simulated field (dawn cycle, rain washout, shores) is drawn in valleys, over
   the sea and around a camera standing in it; `fog` viewpoint and screenshot.
-* Remaining known limitations are listed in FINAL_REPORT.md (no GPU in the container,
-  single-threaded simulation below 100× at scale, stylised low-poly models, and the
-  reviewer's view that the art reads as a strong indie rather than a studio title).
 
-Next (if resumed): act on the latest review in QUALITY_LOG, re-run `npm run shots`,
-the UI and title captures, `npm test`, and the soaks if simulation code changed.
+Next (if resumed): a fifth review (Pass 8) of the latest captures, then act on it; the
+scenario soak after any change under `src/sim` or `src/core`.
 
 ## How to resume
 

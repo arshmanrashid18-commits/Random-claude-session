@@ -9,8 +9,9 @@ trade, pray, marry, fall sick, go to war and remember what their god did to
 them. You shape it all from above with twenty divine powers and a set of
 terraforming brushes — and your deeds become their scripture.
 
-Everything you see is generated at load time from a seed: terrain, textures,
-meshes, clouds, stars, names, flags, music and sound. There are no asset files.
+Everything in the world is generated at load time from a seed: terrain, textures,
+meshes, clouds, stars, names, flags, music and sound. There are no asset files; the
+only bundled media are the interface's three open-source typefaces.
 
 ![The planet from orbit](docs/screenshots/orbit.png)
 
