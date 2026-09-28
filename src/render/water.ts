@@ -74,6 +74,11 @@ void main() {
     keep *= smoothstep(0.05, 0.7, vInside + snoise(vWorld * 0.15) * 0.18);
     if (keep <= 0.0) discard;
   }
+  // A frozen lake lies under the same snow as the land around it: bare ice
+  // in a different colour drew every lake's outline across the snowfields.
+  float tempL = texture(uClimateTex, regionUV(dir)).r * 80.0 - 40.0;
+  keep *= 1.0 - smoothstep(-1.0, -4.0, tempL) * 0.9;
+  if (keep <= 0.0) discard;
   // Seen from afar a lake reads as deep water, not a pale film.
   float optical = max(depth, 0.0) * 1.6 + smoothstep(250.0, 1200.0, vDist) * 2.5;
   outColor = shadeWater(vWorld, dir, optical, vDist, 1.0) * keep;
