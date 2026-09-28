@@ -176,6 +176,43 @@ beside chunky toy props, and a bleached palette. Findings and dispositions:
 
 Pass 6 re-scores after these fixes.
 
+## Pass 6 — third adversarial review
+
+| Category | Pass 4 | Pass 5 | Pass 6 |
+|---|---|---|---|
+| Visual beauty | 5 | 5 | 5 |
+| Visual coherence | 4 | 3 | 4 |
+| Polish / juice (visible) | 4 | 4 | 3 |
+| First-impression wow | 4 | 4 | 5 |
+
+Three reviews, no meaningful movement. Each round fixed every bug it named (none of the
+Pass 4 or Pass 5 findings recur as stated), and each round found the next layer. Asked
+for the single change that would most raise the scores, the reviewer answered with an
+approach, not a bug: art-direct a fixed ladder of hero shots (orbit, descent, village
+mid-zoom, one disaster) against paintovers every build — real ground materials, a water
+shader that sits exactly on the terrain, consistently lit soft clouds, disasters as layered
+sequences with light cast on their surroundings, and dense night-light clusters.
+
+Findings and dispositions:
+
+| Finding | Verdict | Fix |
+|---|---|---|
+| Night town a square amber sprite with black shapes punched through | real | distant buildings glow as lamplight at night |
+| Lava a speckled rectangle with a straight top edge | real | lava field edges frayed by noise |
+| Flat crackled "ice sheets" with straight edges | real | frozen lakes lie under the surrounding snow |
+| Stars in the ocean | misread → real | they were raindrops seen from above; rain fades out by 70 u of altitude |
+| River a frosted-glass strip | real | storm-rough normals on rivers mirrored a pale sky; rivers and lakes only ripple |
+| Aurora vertical seam | real | noise on a ring instead of raw longitude (±180° jump) |
+| Lake straight-edged tint patches, contour rings | real | fringe keeps the lake's tint; faint lake shore bands |
+| Flat khaki ground at mid zoom | real | mid-scale variation (10–40 u) |
+| Stars as fat discs in night shots | real | star peak brightness lowered below the bloom threshold |
+| Inspector behind panels | real | hidden under modal panels |
+| First frame 60% black void | real | the opening view looks sunward of the people at dusk |
+| Thin volcano plume | harness | captured ~6 s into the eruption instead of 3 |
+| Jagged limb and horizon | limit | FXAA on SwiftShader at DPR 1; the silhouette-aware LOD removed the faceting, the remaining steps are aliasing |
+| Orbit clouds "torn paper"; hurricane rings | partly open | cloud edges from orbit remain crisp |
+| Serif renders as Times; generated names hard to pronounce | open | no bundled fonts (zero external assets); the name generator is tied to the simulation's random stream and is left unchanged to keep the scenario calibration |
+
 ## Delight pass
 
 Small touches nobody asked for, each verified in a screenshot or in play:
