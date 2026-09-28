@@ -213,6 +213,49 @@ Findings and dispositions:
 | Orbit clouds "torn paper"; hurricane rings | partly open | cloud edges from orbit remain crisp |
 | Serif renders as Times; generated names hard to pronounce | open | no bundled fonts (zero external assets); the name generator is tied to the simulation's random stream and is left unchanged to keep the scenario calibration |
 
+## Pass 7 — fourth adversarial review
+
+| Category | Pass 4 | Pass 5 | Pass 6 | Pass 7 |
+|---|---|---|---|---|
+| Visual beauty | 5 | 5 | 5 | 5 |
+| Visual coherence | 4 | 3 | 4 | 4 |
+| Polish / juice (visible) | 4 | 4 | 3 | 4 |
+| First-impression wow | 4 | 4 | 5 | 4 |
+
+A fourth consecutive round without meaningful movement. The reviewer's top three asks
+were again approaches rather than bugs: one material language and scale for close-range
+art, one depth-based water shader, and hero effects. Every concrete finding was checked
+by cropping or by hiding components one at a time; the causes and fixes:
+
+| Finding | Verdict | Root cause → fix |
+|---|---|---|
+| First frame of play is night | real | Begin flew to the largest settlement even at midnight (the Pass 6 fix covered scenarios only) → both open on the largest settlement in daylight; the capture now waits out the 4.5 s flight |
+| Village river a milky sheet with white wavy outlines, fields and paths showing through | real | hiding lakes, then rivers, then the ocean isolated it: the river's lower reach is carved below sea level, so the *sea* fills it, shaded as sandy shallows with surf → water hemmed in by land is shaded as river water (no surf, optically deep); fields and roads are not drawn below sea level |
+| Night town a tan blob with black holes | real | hiding the vegetation ruled out trees: the holes were the dark estuary and lakes over the lit ground → town lamps shimmer on nearby water; lights cluster toward the town's heart instead of a flat floor |
+| Volcano plume cut off at the horizon | real | particles were drawn before the atmosphere composite, which added the whole ray's sky haze over any particle seen against the sky → particles now draw after the composite with a soft manual depth test |
+| Crater a dark rectangle sprinkled with orange squares | real | lava sampled straight from 24-u region cells and cracks at 1–3 u aliasing → field sampled through a 12 u domain warp and lobe noise; cracks anti-aliased analytically, bright flow channels; snow melts round the field |
+| Meteor a lone disc on the ground | real | the wake was emitted only at the head's current position, so frames far apart left dots or nothing → the wake is laid along the whole stretch fallen since the last frame, and the head is drawn out into a streak |
+| Stars as fat blurry discs at night; an eight-ray flare beside the limb | real | the god-ray pass took bright *stars* as light sources and smeared them; the sun's flare switched on 45 u above the limb, while the sun was still behind the atmosphere → rays only from the sun, flare fades in across the shell |
+| Starfield over sunlit mountains | real | star brightness was constant → a camera low over daylight is dazzled (stars fade), as in any daylight photograph |
+| Orbit clouds as confetti | real | evenly scattered cells with paper-cut edges → cover saturates into systems with holes and clears outside them; edges thin into translucent veils from afar (three variants rendered and compared) |
+| Hurricane a one-armed doughnut, no shadow on the sea | real | two broad arms → three tight bands with clear lanes; clouds now shade the ocean and lakes |
+| Jagged "potato" limb | real | relief of up to 4% of the radius → relief at the silhouette flattened for distant cameras (shading keeps the full height field) |
+| Lake an opaque mint sheet with white contour rings | real | shore-wave bands of constant depth drew a ring round every shallow bump; clear shallows showed the bed → no bands on lakes, darker inland water, optically deeper |
+| Mountains as smooth clay (earlier passes) | real | the height field's resolution → ridged, weathered rock relief as a surface-gradient bump on steep ground to 1,400 u |
+| Autumn forest reads as bread | real | pale orange blended with snow on leaves → deep amber, gold and crimson, little snow on turning leaves, darker crown undersides |
+| Wildlife scene flat, no shadows | real | a noon sun put every shadow under its tree → mid-morning light |
+| Reeds as black "barcodes"; white stone cubes; hut-sized boulders | real | hair-thin quads aliasing; pale quarry blocks; rock scale → broad blades, reeds only up close; quarry stone in rock greys; loose rocks halved |
+| Times/DejaVu fallbacks everywhere | real | no bundled fonts → Cormorant Garamond, Inter and JetBrains Mono bundled (OFL, latin subsets) |
+| Unpronounceable names | real | syllable concatenation → a pure letter-level pass trims clusters ("Tsoujlatltspec" → "Soujlaspec"); it draws no random numbers, so worlds and scenarios are unchanged (tests re-run) |
+| "Disease spreads among…" six times in three years | real | epidemics were not merged → one sentence per year naming each herd |
+| Modal over the date widget, text hard-clipped, inspector overlapping by 3 px | real | layout → panels clear the top bar, long pages fade out with a visible scrollbar, inspector moved down |
+| Scenario goals at different heights | real | bottom-pinned goals of 2 and 3 lines → goals reserve three lines, so rows start level |
+| Settlement label hides the town hall | real | anchored 6 u above the centre → hung above the rooftops with a leader line |
+| Ecology chart: series flat on zero, unrounded ticks | real | linear axis → square-root scale with round ticks and a time axis |
+| Title logo glow banding; dot grid | real | one wide strong glow on 8-bit output; film grain from a sin() hash that loses precision → two-layer glow; integer-hash grain |
+| Trees bigger than huts | not a defect | a broadleaf crown is 6–10 m and a hut 4–5 m; the loose rocks were the scale breakers and are fixed |
+| Aurora a flat green smear | partly open | the curtains are marched in the atmosphere pass; seen from 1,150 u they lie across the night side — left for the next pass |
+
 ## Delight pass
 
 Small touches nobody asked for, each verified in a screenshot or in play:

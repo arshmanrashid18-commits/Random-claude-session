@@ -443,9 +443,10 @@ export class Game {
       const lon = Math.atan2(-sun.z, sun.x) - 0.75 + Math.sin(this.titleDrift) * 0.25;
       const lat = 0.32;
       const want = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), -Math.cos(lat) * Math.sin(lon));
-      // Hold the framing for the first second so the title never opens on the night side.
-      if (this.titleDrift < 0.012) cam.target.focus.copy(want);
-      else cam.target.focus.lerp(want, Math.min(1, dt * 0.5)).normalize();
+      // Follow the sun exactly: the world keeps turning in real time, and a
+      // rate-limited follow fell behind onto the night side whenever the first
+      // frames stalled (shader compilation on a slow machine).
+      cam.target.focus.copy(want);
       cam.current.focus.copy(cam.target.focus);
       cam.target.heading = 0.25;
       cam.current.heading = 0.25;

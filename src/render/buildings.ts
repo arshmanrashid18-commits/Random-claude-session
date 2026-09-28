@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_DETAIL, GLSL_HEIGHT, GLSL_NOISE } from './glsl/common';
 import { GLSL_FRAME, OBJECT_FS_HEAD } from './glsl/objects';
+import { GLSL_TOWNLIGHTS } from './glsl/surface';
 import { MeshBuilder, lin, type PartOpts } from './meshkit';
 import type { SharedUniforms } from './planet/terrain';
 import { groundHeight } from './groundHeight';
@@ -404,6 +405,7 @@ void main() {
 
 const FIELD_FS = /* glsl */ `
 ${OBJECT_FS_HEAD}
+${GLSL_TOWNLIGHTS}
 in vec3 vWorld;
 in vec2 vLocal;
 in float vGrowth;
@@ -431,6 +433,8 @@ void main() {
   // Hedge border.
   col = mix(col, pow(vec3(0.25, 0.35, 0.15), vec3(2.2)), smoothstep(0.9, 0.97, edge));
   vec3 c = shadeObject(vWorld, up, col, 0.0, 0.0, vec3(0.0));
+  // The town's lamps shine over its fields as over the ground they cover.
+  c += townLights(up, texture(uSurfaceTex, regionUV(up)).a, distance(vWorld, uCamPos), smoothstep(0.02, -0.12, dot(up, uSunDir)));
   outColor = vec4(c, 1.0);
 }
 `;
@@ -460,6 +464,7 @@ void main() {
 
 const ROAD_FS = /* glsl */ `
 ${OBJECT_FS_HEAD}
+${GLSL_TOWNLIGHTS}
 in vec3 vWorld;
 in float vLevel;
 in float vSide;
@@ -474,6 +479,7 @@ void main() {
   col *= 0.85 + n * 0.15;
   vec3 up = normalize(vWorld);
   vec3 c = shadeObject(vWorld, up, col, 0.0, 0.0, vec3(0.0));
+  c += townLights(up, texture(uSurfaceTex, regionUV(up)).a, distance(vWorld, uCamPos), smoothstep(0.02, -0.12, dot(up, uSunDir)));
   outColor = vec4(c, a * 0.9);
 }
 `;

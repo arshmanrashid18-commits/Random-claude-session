@@ -22,7 +22,7 @@ would build next.
 | All systems visible and emergent | ✅ | Screenshots; chronicle excerpts; debug traces of wars, plagues, ecology |
 | Performance budgets documented | ✅ | Performance section below (with the limits of what can be measured here) |
 | 8 scenarios winnable and losable | ✅ | `tests/scenarios.soak.test.ts`: each won and lost by scripted players, and lost by doing nothing |
-| Quality scores 9+ or explained | ✅ | QUALITY_LOG.md passes; final scores and explanations below |
+| Quality scores 9+ or explained | ✅ (explained) | Below 9: independent reviewer scores 4–5 on the visual categories; the shortfall and its causes are explained below and in QUALITY_LOG.md |
 | README with ≥10 own screenshots | ✅ | README.md: 13 landscape + 8 interface captures |
 | FINAL_REPORT.md | ✅ | This file |
 
@@ -156,25 +156,48 @@ software rasteriser. The budgets are met by construction rather than by measurem
 
 ## Final quality scores
 
-Scored against the final screenshot set (docs/screenshots) and play-throughs of the
-harness; the full history of passes is in QUALITY_LOG.md.
+These are not my scores. From Pass 4 onward every round was scored by an independent
+adversarial reviewer: a fresh agent with a brutal art-director brief ("a stranger
+believes it was made by a studio over years"), no knowledge of what had changed, told
+to crop and upscale anything suspicious rather than guess. My own earlier 9s (Pass 3)
+turned out to be inflated and are kept in QUALITY_LOG.md only as a record of that. The
+reviewer scores the four visual categories; the other four rest on measurements.
 
-| Category | Score | Why not higher |
+| Category | Score | Basis |
 |---|---|---|
-| Visual beauty | 9 | Coast, forest, village, mountain and volcano views hold up; a hurricane spirals over the ocean and the aurora folds over a moonlit continent; models are stylised low-poly |
-| Visual coherence | 9 | Clearings, lakes, rivers, vegetation, pack ice and biomes agree near and far; clouds are a single volumetric layer (no high cirrus) |
-| Emergent storytelling | 9 | Wars, conquests, refugees, plagues with named carriers, schisms and scripture all arise unscripted |
-| Moment-to-moment fun | 9 | Twenty powers with combos, terraforming, visible consequences; scenarios require play |
-| Polish / juice | 9 | Banners, labels, pulses, ambient life, audio moods; see the delight list |
-| Performance | 8 | Draw calls in the tens and bounded triangles per preset; simulation falls below 100× once thousands of agents live (see above); no real-GPU measurement possible here |
-| Stability | 9 | Zero console errors across all harness runs; 500-year soak; monkey test |
-| First-impression wow | 9 | Title over the live, lit planet; terminator; the village diorama |
+| Visual beauty | 5 | reviewer, Passes 4–7: 5 · 5 · 5 · 5 |
+| Visual coherence | 4 | reviewer: 4 · 3 · 4 · 4 |
+| Polish / juice (visible) | 4 | reviewer: 4 · 4 · 3 · 4 |
+| First-impression wow | 4 | reviewer: 4 · 4 · 5 · 4 |
+| Emergent storytelling | 8 | measured: wars, plagues traced to their carriers, schisms and scripture arise unscripted (debug traces; chronicle); the chronicle still reads partly as a log |
+| Moment-to-moment fun | 7 | twenty powers with combos and eight scenarios proven winnable and losable, but play-tested only by scripts and a monkey, never by a person |
+| Performance | 7 | simulation measured (100× early, ~42× with 10,000 agents); GPU budgets met by construction only, never measured on a GPU |
+| Stability | 9 | zero console errors in every harness run, a 500-year soak, save/load bit-identical, monkey runs clean |
 
-Performance stays at 8: the simulation's per-tick cost grows with population, so
-100× is only sustained in the first decades, and GPU frame rates could not be measured
-on hardware in this environment. Four scored passes are logged (0.1, 1, 2 and the final
-Pass 3); the remaining gap is structural (single-threaded simulation) rather than a
-defect.
+### Why the shortfall
+
+The quality loop's exit rule is "every category 9+, or five consecutive loops without
+meaningful improvement, explained". Passes 4 to 7 are four such loops. Each fixed every
+concrete defect its review named — about 90 findings, each confirmed by cropping, by
+picking heights or by hiding components one at a time, each with its root cause in
+QUALITY_LOG.md — and not one finding recurred as stated. The scores did not move
+because each review found the next layer, and because the reviewer's standing objections
+are to the approach, not to bugs:
+
+1. **Two art languages.** The globe is shaded semi-physically (atmosphere, volumetric
+   clouds, water optics) while people, animals, trees and buildings are chunky
+   procedural low-poly props. Up close the two do not belong to one world. Closing the
+   gap means either stylising the globe or replacing every prop with authored-quality
+   models, a rebuild rather than a fix.
+2. **No art-directed hero shots.** A studio iterates a fixed ladder of shots against
+   paintovers with artists; here every image is the unedited output of simulation and
+   procedural code, judged only at 1280×720 on a CPU rasteriser.
+3. **Software rendering.** Every image was rendered by SwiftShader at DPR 1 with FXAA:
+   thin geometry aliases, and a frame takes seconds, which limits how many look
+   iterations fit in a pass.
+
+The four measured categories are held back by the limits listed below: no human
+play-testing, and no real GPU.
 
 ## What I am proudest of
 
@@ -210,8 +233,12 @@ defect.
   and not winnable by idling on its own seed; other seeds are not part of scenarios.
 * **Audio was verified structurally, not by ear.** The WebAudio graph builds and plays
   without errors in headless Chromium, but nobody listened to it in this environment.
-* **Stylised low-poly models.** People, animals, buildings and trees are procedural
-  low-poly meshes animated in the vertex shader; there is no skeletal animation.
+* **Stylised low-poly models beside a semi-physical globe.** People, animals, buildings
+  and trees are procedural low-poly meshes animated in the vertex shader (no skeletal
+  animation); up close they do not share the globe's art language, which is the
+  reviewer's main objection (see Final quality scores).
+* **Never played by a person.** Balance, fun and the tutorial were exercised by
+  scripted players, a monkey test and screenshots, not by human play-testers.
 * **Phase tags are local.** The git remote accepts only the development branch.
 
 ## Five things I would build next

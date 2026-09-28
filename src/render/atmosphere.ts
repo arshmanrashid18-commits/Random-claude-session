@@ -144,16 +144,20 @@ vec3 auroraEmission(vec3 p) {
   float fold = 0.035 * snoise(vec3(ring * 7.0 + vec2(uTime * 0.04, 0.0), hemi + uTime * 0.05))
              + 0.012 * snoise(vec3(ring * 23.0, hemi + 2.0 + uTime * 0.08));
   float x = lat - ovalLat - fold;
-  float sheet = exp(-pow(x / 0.012, 2.0)) + 0.45 * exp(-pow((x - 0.035) / 0.01, 2.0));
+  // (plus a faint diffuse glow either side of the curtains)
+  float sheet = exp(-pow(x / 0.015, 2.0)) + 0.45 * exp(-pow((x - 0.035) / 0.012, 2.0)) + 0.18 * exp(-pow(x / 0.06, 2.0));
   if (sheet < 0.01) return vec3(0.0);
   // Fine vertical rays within the curtain, and slow surges of brightness along it.
-  float rays = 0.5 + 0.5 * snoise(vec3(ring * 110.0, uTime * 0.2 + hemi));
+  // (low contrast: seen from afar, strong rays banded the curtain into stripes)
+  float rays = 0.72 + 0.28 * snoise(vec3(ring * 110.0, uTime * 0.2 + hemi));
   float surge = 0.3 + 0.7 * smoothstep(-0.4, 0.6, snoise(vec3(ring * 3.0 - vec2(uTime * 0.02, 0.0), hemi + 7.0)));
   // Tall curtains: bright lower edge, glow reaching far up.
   float vert = smoothstep(0.0, 0.06, hf) * (exp(-hf * 3.0) * 0.6 + exp(-hf * 1.1) * 0.4);
   vec3 green = vec3(0.15, 1.0, 0.45);
-  vec3 violet = vec3(0.6, 0.2, 0.95);
-  vec3 col = mix(green, violet, smoothstep(0.3, 0.85, hf));
+  // Green oxygen light below, red oxygen high up, a pink nitrogen fringe at
+  // the lower edge.
+  vec3 red = vec3(0.85, 0.12, 0.25);
+  vec3 col = mix(green, red, smoothstep(0.35, 0.9, hf)) + vec3(0.5, 0.08, 0.45) * exp(-hf * 18.0) * 0.6;
   return col * sheet * rays * surge * vert * night * uAurora * 0.2;
 }
 
@@ -365,6 +369,11 @@ void main() {
         // closest approach reaching the top of the air), or it ends in a hard edge.
         float shellH = ATMO_R - PLANET_R;
         float limbFade = camAltA < shellH ? 1.0 : 1.0 - smoothstep(0.3 * shellH, 0.92 * shellH, minR - PLANET_R);
+        // From above the air the ray's lowest altitude plays the part of
+        // elevation: pale just over the ground, deepening to blue toward the
+        // top of the shell (it faded grey into black, a fog bubble).
+        float hK = smoothstep(0.0, 0.6 * shellH, minR - PLANET_R);
+        dome = mix(dome, mix(vec3(0.5, 0.66, 0.92), vec3(0.1, 0.24, 0.62), hK), smoothstep(shellH * 0.8, shellH * 1.2, camAltA));
         domeW = max(domeW, exp(-max(aboveHz, 0.0) * 3.2) * (1.0 - smoothstep(60.0, 420.0, camAltA)) * limbFade);
         skyGlow = dayK * domeW;
         vec3 add = dome * dayK * lowK * domeW * 0.06;
@@ -378,7 +387,10 @@ void main() {
       vec3 sun = tg.x < 1e8 && tg.y > 0.0 ? vec3(0.0) : sunDiscRadiance(rd);
       background = (background - sun) / (1.0 + skyLum * 60.0) + sun;
     }
-    vec3 behind = background * Tfull + aur;
+    // Starlight grazing the limb is dimmed less than the physics says: on the
+    // night side nothing scatters in to fill the gap, and the full extinction
+    // drew a dark ring round the planet that blotted out the Milky Way.
+    vec3 behind = background * (sky ? pow(Tfull, vec3(0.35)) : Tfull) + aur;
     if (cloudDepth > 0.0) {
       // Front-to-back: air in front of the cloud, the cloud itself, then
       // everything behind it seen through the cloud.

@@ -3,7 +3,7 @@
  */
 import * as THREE from 'three';
 import { GLSL_ATMOSPHERE, GLSL_CONSTANTS, GLSL_CUBESPHERE, GLSL_DETAIL, GLSL_HEIGHT, GLSL_NOISE, GLSL_REGION, GLSL_SEABED } from '../glsl/common';
-import { GLSL_CLOUDS, GLSL_SKYLIGHT, GLSL_TERRAIN_ALBEDO, GLSL_FOG } from '../glsl/surface';
+import { GLSL_CLOUDS, GLSL_SKYLIGHT, GLSL_TERRAIN_ALBEDO, GLSL_FOG, GLSL_TOWNLIGHTS } from '../glsl/surface';
 import { LodSelector, MAX_LOD_LEVELS, type LodSettings } from './quadtree';
 import { GLSL_SHADOW_SAMPLE } from '../shadows';
 import type { PlanetData } from './planetData';
@@ -112,7 +112,7 @@ ${GLSL_TERRAIN_ALBEDO}
 ${GLSL_SHADOW_SAMPLE}
 uniform highp sampler2DArray uNormalTex;
 uniform vec3 uCamPos;
-uniform float uNightLights;
+${GLSL_TOWNLIGHTS}
 uniform float uBorders;
 uniform vec3 uTribeCol[32];
 in vec3 vWorld;
@@ -131,6 +131,14 @@ float territory(vec3 dir, out float own) {
   own = t.x < 0.5 ? (t.y < 0.5 ? o00 : o01) : (t.y < 0.5 ? o10 : o11);
   float w = mix(mix(float(o00 == own), float(o10 == own), t.x), mix(float(o01 == own), float(o11 == own), t.x), t.y);
   return w;
+}
+
+// Ridged relief for weathered rock: x = height (world units), y and z = the
+// squared ridge values of the coarse and fine octaves.
+vec3 rockRelief(vec3 p, float fine) {
+  float r1 = 1.0 - abs(snoise(p * 0.045));
+  float r2 = fine > 0.0 ? 1.0 - abs(snoise(p * 0.14 + 3.3)) : 0.0;
+  return vec3(r1 * r1 * 2.5 + r2 * r2 * 0.9 * fine, r1 * r1, r2 * r2);
 }
 
 vec3 detailNormal(vec3 N, vec3 dir, float dist) {
@@ -170,22 +178,25 @@ void main() {
   SurfaceInfo si = terrainSurface(dir, vWorld, h, N, nt.w, vDist);
   // Weathered rock: ridged relief on steep ground, from the god's usual range
   // out to ~1,400 u (mountainsides read as smooth clay at the height field's
-  // resolution). Applied as a surface-gradient bump through screen-space
-  // derivatives, evaluated outside any branch so the derivatives are defined;
-  // the finer octave fades out before it would alias.
+  // resolution). The bump's gradient is taken by finite differences in world
+  // space (screen-space derivatives are constant over each 2×2 pixel quad and
+  // drew stair-steps across snowfields); the finer octave fades out before it
+  // would alias.
   float steepK = smoothstep(0.1, 0.34, 1.0 - dot(N, dir)) * smoothstep(0.3, 1.0, h) * (1.0 - smoothstep(900.0, 1400.0, vDist));
-  vec3 pr = dir * PLANET_R;
-  float rr1 = 1.0 - abs(snoise(pr * 0.045));
-  float rr2 = 1.0 - abs(snoise(pr * 0.14 + 3.3));
-  float fineR = 1.0 - smoothstep(220.0, 520.0, vDist);
-  float hb = (rr1 * rr1 * 2.5 + rr2 * rr2 * 0.9 * fineR) * steepK;
-  vec3 dpx = dFdx(vWorld), dpy = dFdy(vWorld);
-  vec3 rx = cross(dpy, N), ry = cross(N, dpx);
-  float det = dot(dpx, rx);
-  vec3 bg = sign(det) * (dFdx(hb) * rx + dFdy(hb) * ry);
-  if (abs(det) > 1e-12) N = normalize(abs(det) * N - bg);
-  // Crests catch light and weather pale; the clefts between them hold shadow.
-  si.albedo *= mix(1.0, 0.8 + 0.3 * rr1 * rr1 + 0.08 * rr2 * fineR, steepK);
+  if (steepK > 0.0) {
+    vec3 pr = dir * PLANET_R;
+    vec3 t1 = normalize(cross(dir, abs(dir.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 t2 = cross(dir, t1);
+    float fineR = 1.0 - smoothstep(220.0, 520.0, vDist);
+    float e = 0.6;
+    vec3 rr0 = rockRelief(pr, fineR);
+    vec3 rrA = rockRelief(pr + t1 * e, fineR);
+    vec3 rrB = rockRelief(pr + t2 * e, fineR);
+    vec3 bg = (t1 * (rrA.x - rr0.x) + t2 * (rrB.x - rr0.x)) / e * steepK;
+    N = normalize(N - bg);
+    // Crests catch light and weather pale; the clefts between them hold shadow.
+    si.albedo *= mix(1.0, 0.8 + 0.3 * rr0.y + 0.08 * rr0.z * fineR, steepK);
+  }
   // Screen footprint of this pixel on the ground (for analytic anti-aliasing).
   float footprint = length(fwidth(vWorld));
 
@@ -254,19 +265,7 @@ void main() {
   // Night: the lights of settlements.
   vec4 surf = texture(uSurfaceTex, ruv);
   float night = smoothstep(0.02, -0.12, mu);
-  if (night > 0.0 && surf.a > 0.02 && h > 0.0) {
-    float speck = smoothstep(0.35, 0.9, snoise(dir * 2600.0) * 0.5 + snoise(dir * 700.0) * 0.5 + surf.a);
-    // From afar the fine specks would alias: coarser clusters of lights take
-    // over (a flat constant here made each town one saturated disc).
-    float farGlow = smoothstep(200.0, 900.0, vDist);
-    // Clusters of lamps over a faint glow that gathers toward the town's heart
-    // (a uniform floor drew every town as one flat tan disc).
-    float speckFar = smoothstep(0.3, 0.9, snoise(dir * 320.0) * 0.55 + snoise(dir * 90.0) * 0.45 + surf.a * 0.6);
-    float farL = speckFar * 0.85 + smoothstep(0.1, 0.8, surf.a) * 0.3;
-    float lights = surf.a * mix(speck, farL, farGlow) * night * uNightLights;
-    // Brighter from afar so towns read as a glow on the night side.
-    color += vec3(3.4, 1.7, 0.5) * lights * mix(0.9, 1.9, farGlow);
-  }
+  if (h > 0.0) color += townLights(dir, surf.a, vDist, night);
   // Borders between peoples, seen from afar.
   if (uBorders > 0.0) {
     float own;
@@ -419,7 +418,9 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
     foam = max(foam, caps * windy * 0.4 * (1.0 - smoothstep(150.0, 800.0, dist)));
   }
   vec3 foamCol = vec3(0.9, 0.95, 1.0) * (sunCol * max(mu, 0.0) * 0.3 + skyAmbient(dir, dir, L) * uSunIntensity * 0.06);
-  vec3 col = bodyLit * alpha + refl * fres + spec;
+  // Inland water mirrors less of the pale analytic sky (lakes read as flat
+  // silver sheets); their own dark body colour carries them.
+  vec3 col = bodyLit * alpha + refl * fres * mix(1.0, 0.6, lakeT) + spec;
   float a = clamp(max(alpha, fres * 0.9), 0.0, 1.0);
   // At night the lamps of a town shimmer on its river and harbour (dark water
   // punched black holes through every lit town seen from afar).
@@ -428,8 +429,8 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
     float dev = texture(uSurfaceTex, ruv).a;
     float shimmer = 0.55 + 0.45 * snoise(wp * 0.35 + vec3(0.0, uTime * 0.6, 0.0));
     float lamp = smoothstep(0.02, 0.4, dev) * nightW * shimmer;
-    col += vec3(3.0, 1.5, 0.45) * lamp * 0.3;
-    a = max(a, lamp * 0.5);
+    col += vec3(3.2, 1.6, 0.5) * lamp;
+    a = max(a, lamp * 0.6);
   }
   col = mix(col, foamCol, foam * 0.85);
   a = max(a, foam * 0.85);

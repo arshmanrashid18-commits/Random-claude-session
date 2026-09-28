@@ -37,7 +37,9 @@ float stormCoverage(vec3 dir, out float swirl, out float hur) {
       float ang = atan(dot(q, t2), dot(q, t1));
       // Three rain bands wound tight round a dense central overcast, with
       // clear lanes between them (two broad arms read as a one-armed ring).
-      float spiral = smoothstep(0.25, 0.85, 0.5 + 0.5 * sin(ang * 3.0 * sp.y + log(max(r, 0.02)) * 9.0 - uTime * 0.6 * sp.y));
+      // (a slow wobble keeps the bands from being a perfect coil)
+      float wob = texture(uCloudNoise, dir * 2.3 + vec3(uTime * 0.004)).a - 0.5;
+      float spiral = smoothstep(0.25, 0.85, 0.5 + 0.5 * sin(ang * 3.0 * sp.y + log(max(r, 0.02)) * 9.0 + wob * 3.0 - uTime * 0.6 * sp.y));
       float arms = mix(1.0, spiral, smoothstep(0.3, 0.75, r));
       float eye = smoothstep(0.035, 0.11, r);
       hur = max(hur, sp.x * arms * eye * (1.0 - smoothstep(0.9, 2.1, r)));
@@ -96,7 +98,7 @@ float cloudDensity(vec3 p, float lod) {
   // Hurricane walls are thick (the threshold and edge erosion meant for
   // fair-weather cloud left them a faint haze); toward the edges of the rain
   // bands the noise frays them into feathered, broken cloud.
-  d = max(d, hur * prof * (0.4 + 0.6 * base) * smoothstep(0.12, 0.5, base + 0.4 * hur));
+  d = max(d, hur * prof * (0.25 + 0.75 * base) * smoothstep(0.15, 0.55, base + 0.28 * hur));
   if (d <= 0.0) return 0.0;
   if (lod < 0.999) {
     float det = texture(uCloudNoise, q * 3.1 + vec3(0.3, 0.1, 0.7) * uTime * 0.02).b;
@@ -144,6 +146,25 @@ vec3 skyAmbient(vec3 up, vec3 N, vec3 sunDir) {
  * lies below its surroundings and over low land, and is lit like a bright
  * cloud top. Requires GLSL_HEIGHT, GLSL_REGION, GLSL_NOISE and GLSL_SKYLIGHT.
  */
+/**
+ * The lamps of settlements at night: fine specks up close, clusters gathering
+ * toward a town's heart from afar. Shared by the terrain and by everything laid
+ * on it (fields and roads drawn unlit punched black holes through a lit town).
+ * dev is the region's development (surface texture alpha).
+ */
+export const GLSL_TOWNLIGHTS = /* glsl */ `
+uniform float uNightLights;
+vec3 townLights(vec3 dir, float dev, float dist, float night) {
+  if (night <= 0.0 || dev <= 0.02) return vec3(0.0);
+  float speck = smoothstep(0.35, 0.9, snoise(dir * 2600.0) * 0.5 + snoise(dir * 700.0) * 0.5 + dev);
+  float farGlow = smoothstep(200.0, 900.0, dist);
+  float speckFar = smoothstep(0.3, 0.9, snoise(dir * 320.0) * 0.55 + snoise(dir * 90.0) * 0.45 + dev * 0.6);
+  float farL = speckFar * 0.85 + smoothstep(0.1, 0.8, dev) * 0.3;
+  float lights = dev * mix(speck, farL, farGlow) * night * uNightLights;
+  return vec3(3.4, 1.7, 0.5) * lights * mix(0.9, 1.9, farGlow);
+}
+`;
+
 export const GLSL_FOG = /* glsl */ `
 // The simulated field, broken into drifting banks and wisps by noise (so its
 // edge never follows the coarse region cells).
