@@ -83,7 +83,7 @@ be exported to and imported from files.
 
 ## Screenshots
 
-Captured from the running game (seed 20260925, High quality) by `npm run shots` (landscapes) and `node scripts/debug/uicheck.mjs docs/screenshots/ui` / `node scripts/debug/title.mjs docs/screenshots/ui` (interface).
+Captured from the running game (seed 20260925, High quality) by `npm run shots` (landscapes) and `node scripts/debug/uicheck.mjs docs/screenshots/ui` / `node scripts/debug/title.mjs docs/screenshots/ui` (interface). The volcano was captured with `npm run shots -- --only=village,volcano`, so its world is a few days younger than in the full run and the eruption opens in a different range.
 
 | | |
 |---|---|
