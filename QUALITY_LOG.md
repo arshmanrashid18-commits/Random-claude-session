@@ -356,6 +356,7 @@ Pass 9 findings acted on:
 | A third of the wildlife frame is giant dark pine polygons | real | plants right against the lens dissolve; the view is lit from a mid-morning sun |
 | A snowy pine at the lip of an erupting crater | real | nothing grows in lava or fresh ash |
 | Rivers broken into dashes in the opening frame | real | ribbons never thinner than about two pixels (up to four times their width) |
+| Grey cracked polygons on the volcano's snowfields (found in the final captures) | real | frozen lakes were still drawn at a tenth of their strength, so their ice pattern and cell edges showed → hidden entirely under the snow |
 | Village untouched inside the meteor's scorch; fireball a "glass dome" | open | impact damage to buildings is drawn only as the population loss; the dome is the crater lake under the fireball's glare |
 | Blurry terrain in the opening frame, orbit vs ground palette | open | region-cell climate and vegetation fields (64 per face) are the colour source at that height — the art-language gap above |
 
