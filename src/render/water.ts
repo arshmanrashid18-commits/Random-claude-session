@@ -81,7 +81,9 @@ void main() {
   // A frozen lake lies under the same snow as the land around it: bare ice
   // in a different colour drew every lake's outline across the snowfields.
   float tempL = texture(uClimateTex, regionUV(dir)).r * 80.0 - 40.0;
-  keep *= 1.0 - smoothstep(-1.0, -4.0, tempL) * 0.9;
+  // (entirely: at a tenth of its strength the ice's crack pattern and the
+  // straight edges of the lake cells still drew a grey patchwork on the snow)
+  keep *= 1.0 - smoothstep(-1.0, -4.0, tempL);
   if (keep <= 0.0) discard;
   // Seen from afar a lake reads as deep water, not a pale film.
   // Inland water is darker than the clear sea shallows: tannins and silt hide
