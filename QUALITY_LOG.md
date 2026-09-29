@@ -271,6 +271,45 @@ So Passes 4–7 judged partly degraded images, and the renderer benchmark's pres
 not what they claimed. A preset named in the URL now pins the session; all screenshots
 and the benchmark are re-captured.
 
+## Pass 8 — fifth adversarial review (first on true-High captures)
+
+| Category | Pass 4 | Pass 5 | Pass 6 | Pass 7 | Pass 8 |
+|---|---|---|---|---|---|
+| Visual beauty | 5 | 5 | 5 | 5 | 5 |
+| Visual coherence | 4 | 3 | 4 | 4 | 4 |
+| Polish / juice (visible) | 4 | 4 | 3 | 4 | 5 |
+| First-impression wow | 4 | 4 | 5 | 4 | 5 |
+
+The best round so far (the reviewer put the title, terminator and coast at 6–7 and the
+UI at about 7), but +1 in two categories is within the ±1 the reviewers swing between
+rounds on unchanged images, so it is not counted as a meaningful improvement.
+Findings and dispositions:
+
+| Finding | Verdict | Root cause → fix |
+|---|---|---|
+| "Year 11" reads "Year II", "910" as "9IO", "0 new" as "O new" | real | the display face's default old-style figures → lining, tabular figures everywhere (the bundled subset carries `lnum`/`tnum`) |
+| Tutorial "Click" in bare monospace | real | the keycap style was not applied inside the tutorial → it is |
+| World name under the date at ~1.5:1 contrast | real | faint text colour → dim text colour, a size up |
+| Scenario cards out of line by 4 px | harness | the pointer stayed over a card after the click (hover lifts it) → the capture parks the pointer |
+| Ecology chart: four orange/salmon and two blue series | real | 13 series on 8 hues, matched only through the legend → each line labelled at its end, labels nudged apart |
+| Ecology cut mid-content with no fade | partly | the fade was 30 px and easy to miss → 48 px |
+| Meteor trail a vertical column from the top of the frame | real | the approach ran straight down the screen → it slants, and the wake widens and wanders as it ages |
+| Meteor impact a "glass bubble" | explained | the crater lake the hydrology fills, lit by the fireball's glare |
+| After the impact, the river "drawn over the smoke" | misread → real | the brown disc is the burn scar on the ground (the river rightly lies on it), drawn as even region-cell splats → burn and ash are broken up by noise into char, a singed rim and ash drifts |
+| Volcano: grey translucent disc round the lava; red trees on the snow | real | ash as a flat region-cell tint; autumn crowns computed without the snow → patchy ash; no autumn colour under snow |
+| Night town a hard-edged gold square; green specks on the lit rim | real | the glow sampled straight from the region cells; aurora curtains edge-on at the limb over the ground → the glow is sampled through a domain warp; the aurora fades at the limb for distant cameras over the ground as well as the sky |
+| Title planet: neon-green smear on the lit edge | real | the same edge-on aurora |
+| Ocean covered in single white pixels (fog view) | real | leaping-fish spray emitted for cameras up to 260 u, where it is one pixel → only below 110 u |
+| Cloud bank with a vertical seam beside a mountain | partly | the march's step size and erosion detail came from the segment cut short by terrain → both now come from the uncut segment; what remains is the mountain's sheer flank seen through thin cloud |
+| Huts as identical map pins | real | a cone in the people's colour on every apex → a smoke-hole collar and a wooden finial; the band under the eaves keeps the colour |
+| Cacti inside oak woodland | real | cactus weight ignored the trees → none where trees grow |
+| White poles in the forest | real | paper-white birch bark → pale grey bark |
+| Lake almost white (coast) | real | full-strength sun glint on inland water → halved |
+| Saturated rainbow across the whole sky | real | too strong → a faint veil |
+| River a flat overlay whose width jumps at the village | open | the lower reach is carved below sea level, so the estuary is as wide as its valley; widening channels upstream would change the height field and the calibrated scenarios |
+| Close-range art (cone pines, faceted cliffs, plain meadows) and the near/far palette gap | open | the reviewer's first recommendation in every round: rebuilding the close-range art in the globe's language (tri-planar rock, a unified biome palette, new tree species) is a rebuild, not a fix |
+| Fireball, dust ring and debris; caldera geometry; lit smoke | open | effects are particles and terrain shading only; lit volumetric smoke and crater geometry are future work |
+
 ## Delight pass
 
 Small touches nobody asked for, each verified in a screenshot or in play:
