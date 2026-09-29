@@ -224,6 +224,10 @@ in vec3 vTint;
 in float vFoliage;
 in float vUpness;
 void main() {
+  // Plants right against the lens dissolve (screen-door) instead of filling a
+  // third of the frame with giant dark polygons.
+  float nearK = smoothstep(5.0, 14.0, distance(vWorld, uCamPos));
+  if (nearK < 1.0 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) > nearK) discard;
   vec3 col = vColor * (1.0 + vTint.x * 0.3) * mix(vec3(1.0), vec3(1.12, 1.02, 0.7), max(vTint.x, 0.0) * vFoliage) * mix(vec3(1.0), vec3(0.85, 0.97, 1.1), max(-vTint.x, 0.0) * vFoliage);
   // Autumn: foliage turns amber, gold and crimson (deep, saturated tones: the
   // paler ones read as bread under a bright sun).
@@ -527,6 +531,9 @@ export class Vegetation {
     const moss = data.sampleRegion(vB, face, a, b, 3);
     const hb = data.grid.sample(heights, d[0], d[1], d[2]);
     if (hb < -0.4) return;
+    // Nothing stands in lava or fresh ash (a snowy pine stood untouched at the
+    // lip of an erupting crater).
+    if (data.sampleRegion(data.surfaceCPU, face, a, b, 2) > 0.02 || data.sampleRegion(data.surfaceCPU, face, a, b, 1) > 0.25) return;
     // Local clustering so forests form groves and clearings.
     const cluster = 0.55 + 0.9 * (Math.sin(d[0] * 211 + d[1] * 97) * Math.sin(d[2] * 173 - d[1] * 59) * 0.5 + 0.5);
     const w = [

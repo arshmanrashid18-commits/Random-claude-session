@@ -16,7 +16,7 @@ would build next.
 | Item | Status | Evidence |
 |---|---|---|
 | `npm install && npm run dev` works | ✅ | Vite dev server is what every harness script boots (shots, monkey, perf, UI checks) |
-| `npm run build` | ✅ | `tsc --noEmit && vite build` succeeds (940 kB main chunk, 238 kB worker, nine woff2 typeface subsets of ~23 kB each) |
+| `npm run build` | ✅ | `tsc --noEmit && vite build` succeeds (943 kB main chunk, 238 kB worker, nine woff2 typeface subsets of ~23 kB each) |
 | `npm test` passes | ✅ | 9 suites, 25 tests (see below) |
 | `npm run shots` regenerates the screenshots | ✅ | 13 viewpoints in `docs/screenshots`, "zero console errors/warnings" gate |
 | Zero console errors | ✅ | Every shots/UI/perf run and the 5-minute monkey test (see below) |

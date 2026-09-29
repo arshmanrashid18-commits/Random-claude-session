@@ -286,7 +286,7 @@
 .chron h3 { font-size: 13px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); font-family: var(--font-body); font-weight: 500; margin: 18px 0 6px; }
 .chron p { margin: 0 0 6px; }
 .chron .era { color: var(--text-dim); font-style: italic; }
-.chron .e { cursor: pointer; border-radius: 4px; padding: 0 2px; }
+.chron .e { cursor: pointer; border-radius: 4px; }
 .chron .e:hover { background: rgba(242, 197, 114, 0.1); }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }

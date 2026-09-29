@@ -33,12 +33,42 @@ const CAUSE_WORDS: Record<string, string> = {
   betrayal: 'breaking their oath', alliance: 'to honour an alliance', rebellion: 'against the rebels',
 };
 
+/** What the god did, in the chronicle's voice (a bare "You cast Meteor upon
+ *  Noukaih" read like a variable dropped into a template). */
+const DEEDS: Record<string, (w: string) => string> = {
+  lightning: (w) => `You hurled lightning at ${w}.`,
+  rain: (w) => `You sent rain upon ${w}.`,
+  drought: (w) => `You withheld the rain from ${w}.`,
+  wildfire: (w) => `You set ${w} ablaze.`,
+  iceage: (w) => `You called down the long winter upon ${w}.`,
+  earthquake: (w) => `You shook the earth beneath ${w}.`,
+  volcano: (w) => `You tore open the mountains of ${w}.`,
+  tsunami: (w) => `You raised the sea against ${w}.`,
+  meteor: (w) => `You hurled a star at ${w}.`,
+  bloom: (w) => `You made ${w} bloom.`,
+  blessing: (w) => `You blessed the people of ${w}.`,
+  plague: (w) => `You sent a plague upon ${w}.`,
+  resurrection: (w) => `You raised the dead of ${w}.`,
+  locusts: (w) => `You loosed locusts upon ${w}.`,
+  inspiration: (w) => `You lit a spark of genius in ${w}.`,
+  prophet: (w) => `You sent a vision to ${w}.`,
+  harmony: (w) => `You laid peace upon ${w}.`,
+  beacon: (w) => `You set a beacon above ${w}.`,
+  eclipse: (w) => `You darkened the sun over ${w}.`,
+  sanctuary: (w) => `You raised a sacred grove at ${w}.`,
+};
+function powerDeed(power: string, name: string, where: string): string {
+  const f = DEEDS[power];
+  return f ? f(where) : `You cast ${name} upon ${where}.`;
+}
+
 export function narrate(e: GameEvent): Narration {
   const d = e.data;
   switch (e.kind) {
     case 'power': {
       const combo = s(d.combo);
-      return { title: combo || s(d.name), text: combo ? `${s(d.name)} became ${combo} at ${s(d.where)}.` : `You cast ${s(d.name)} upon ${s(d.where)}.`, icon: s(d.power), tone: 'divine' };
+      const w = s(d.where);
+      return { title: combo || s(d.name), text: combo ? `${s(d.name)} became ${combo} at ${w}.` : powerDeed(s(d.power), s(d.name), w), icon: s(d.power), tone: 'divine' };
     }
     case 'miracle':
       if (d.kind === 'resurrection') return { title: 'The dead rise', text: `${n(d.count)} walk again${d.names ? ` — ${s(d.names)} among them` : ''}.`, icon: 'resurrection', tone: 'divine' };

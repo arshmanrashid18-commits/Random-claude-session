@@ -212,7 +212,7 @@ export class PowerBar {
       col.appendChild(el('div', 'school-name', SCHOOL_NAMES[school]));
       const row = el('div', 'school-row');
       for (const p of POWERS.filter((x) => x.school === school)) {
-        const b = el('div', 'pw', `${icon(p.id, 24)}<span class="cost">${p.cost}</span><span class="key">${keyLabel(keyOf(`power:${p.id}`)).slice(0, 3)}</span><div class="cd"></div>`);
+        const b = el('div', 'pw', `${icon(p.id, 24)}<span class="cost">${p.cost}</span><span class="key">${keyOf(`power:${p.id}`) ? keyLabel(keyOf(`power:${p.id}`)).slice(0, 3) : ''}</span><div class="cd"></div>`);
         b.style.setProperty('--pw', hex(p.color));
         b.dataset.tip = powerTip(p, keyOf(`power:${p.id}`));
         b.setAttribute('role', 'button');

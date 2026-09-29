@@ -117,7 +117,8 @@ void main() {
     float d = length(vec2(q.x / max(0.15, w * 0.8), q.y * 0.85));
     // Flickering tongues: noise eats into the outline so no two flames match.
     float fl = vnoise(vec2(uv.x * 3.0 + vSeed * 40.0, uv.y * 2.0 - vK * 6.0));
-    a = smoothstep(1.0, 0.35, d + (fl - 0.5) * 0.45) * (0.7 + 0.3 * fl);
+    // (a soft edge: a hard one made a lone flame read as a solid orange cone)
+    a = smoothstep(1.0, 0.15, d + (fl - 0.5) * 0.45) * (0.7 + 0.3 * fl) * (1.0 - smoothstep(0.55, 1.0, r));
     // A yellow core that reddens as it rises and ages (not a white-hot cone).
     vec3 hot = col * mix(vec3(1.25, 1.05, 0.8), vec3(1.1, 0.8, 0.5), fract(vSeed * 7.3));
     col = mix(hot, col * vec3(0.95, 0.32, 0.1), smoothstep(0.05, 0.8, vK + (1.0 - w) * 0.3));
@@ -817,7 +818,7 @@ export class Vfx {
           const age = 1 - t; // older along the wake
           // (older puffs drift and spread: a wake that widens and wanders)
           const v = entry.clone().multiplyScalar(1 + this.rand() * 2).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(0.8 + age * 2.2));
-          if (this.rand() < 0.6 * q) this.add.emit(this.time, w.x, w.y, w.z, v.x, v.y, v.z, 0.5 + this.rand() * 0.6 - age * 0.3, 2.5, 5, 0, 0.8, 2.6, 1.1, 0.35, 0.9, Shape.Flame, this.rand());
+          if (this.rand() < 0.6 * q) this.add.emit(this.time, w.x, w.y, w.z, v.x, v.y, v.z, 0.35 + this.rand() * 0.4 - age * 0.2, 1.6, 3.2, 0, 0.8, 2.6, 1.1, 0.35, 0.8, Shape.Flame, this.rand());
           this.alpha.emit(this.time, w.x, w.y, w.z, v.x * 0.3, v.y * 0.3, v.z * 0.3, 7 + this.rand() * 5, 2.5 + age * 4, 11 + age * 6, 0, 0.3, 0.32, 0.29, 0.27, 0.5, Shape.Smoke, this.rand());
         }
         path.prev = p.clone();

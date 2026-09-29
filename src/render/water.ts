@@ -94,17 +94,24 @@ void main() {
 const RIVER_VS = /* glsl */ `
 in vec2 aRiver; // x: across (-1..1), y: distance along (world units)
 in float aWidth;
+in vec3 aSide;  // unit vector from the centre line toward this edge
+in float aHalf; // half width (world units)
 out vec3 vWorld;
 out vec2 vRiver;
 out float vWidth;
 out float vDist;
 uniform vec3 uCamPos;
 void main() {
-  vWorld = position;
+  // Never thinner than about two pixels (up to four times the real width): a
+  // sub-pixel ribbon broke into dashes from any height above the treetops.
+  float d0 = distance(position, uCamPos);
+  float extra = clamp(d0 * 0.0011 - aHalf, 0.0, aHalf * 3.0);
+  vec3 p = position + aSide * extra;
+  vWorld = p;
   vRiver = aRiver;
   vWidth = aWidth;
-  vDist = distance(position, uCamPos);
-  gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
+  vDist = distance(p, uCamPos);
+  gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }
 `;
 
@@ -243,6 +250,8 @@ export class WaterBodies {
     const pos: number[] = [];
     const riv: number[] = [];
     const wid: number[] = [];
+    const sidev: number[] = [];
+    const half: number[] = [];
     const idx: number[] = [];
     // Rivers are traced on the coarse hydrology grid; subdivide each span so
     // the ribbon drapes over the terrain instead of bridging hills.
@@ -295,6 +304,8 @@ export class WaterBodies {
           pos.push(vx * rr, vy * rr, vz * rr);
           riv.push(side, along);
           wid.push(wv[k]);
+          sidev.push(sx * side, sy * side, sz * side);
+          half.push(w * PLANET_RADIUS);
         }
         if (k < m - 1) {
           const a = base + k * 2;
@@ -306,6 +317,8 @@ export class WaterBodies {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('aRiver', new THREE.Float32BufferAttribute(riv, 2));
     geo.setAttribute('aWidth', new THREE.Float32BufferAttribute(wid, 1));
+    geo.setAttribute('aSide', new THREE.Float32BufferAttribute(sidev, 3));
+    geo.setAttribute('aHalf', new THREE.Float32BufferAttribute(half, 1));
     geo.setIndex(idx);
     const mesh = new THREE.Mesh(geo, this.riverMat);
     mesh.frustumCulled = false;
