@@ -78,6 +78,11 @@ an identical hash after five centuries. Trajectory (`test-results/soak-500y.txt`
 | 400 | 2,817 | 5 | 8,270 | 42 | 3,641 / 3,687 | 3,213 | 6.34 |
 | 500 | 2,903 | 5 | 8,335 | 34 | 3,671 / 3,687 | 3,272 | 6.23 |
 
+Re-run on the final code (after the name clean-up in `src/core`): passed, with the
+same people, tribes, animals, species, buildings and cached paths at every one of the
+twenty sample years; only ms/tick roughly doubled, because it shared the CPU with a
+screenshot run (the table keeps the timings of the quiet run).
+
 Peoples grow logistically to a plateau near 2,900; animals diversify through speciation
 (13 → 42 species, then extinctions bring it to 34). Before the slot fix the same run
 ended with 17,578 building entries and 6.9 ms/tick.
