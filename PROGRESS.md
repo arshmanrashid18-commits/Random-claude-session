@@ -30,8 +30,11 @@ Working and verified (tests, screenshots or measurements):
   proudest, limitations, next five), QUALITY_LOG passes 0.1–7 and the delight list.
 
 Final phase (Phase 9) status:
-* Adversarial reviews by an independent agent, Passes 4–7: beauty 5 · 5 · 5 · 5,
-  coherence 4 · 3 · 4 · 4, polish 4 · 4 · 3 · 4, wow 4 · 4 · 5 · 4. Every finding
+* Adversarial reviews by an independent agent, Passes 4–8: beauty 5 · 5 · 5 · 5 · 5,
+  coherence 4 · 3 · 4 · 4 · 4, polish 4 · 4 · 3 · 4 · 5, wow 4 · 4 · 5 · 4 · 5.
+* Found after Pass 7: the harness screenshots and benchmark were silently degraded (the
+  saved 'auto' quality re-enabled the governor despite `?quality=`); fixed, everything
+  re-captured and re-measured (DECISIONS 61). Every finding
   verified (crops, height picks, hiding components) and dispositioned with its root
   cause in QUALITY_LOG; ~90 fixes across sky, clouds, water, estuaries, lakes, terrain
   and rock, lava, night lights, VFX (particles now composited after the haze), fonts,
@@ -41,8 +44,8 @@ Final phase (Phase 9) status:
 * Fog: the simulated field (dawn cycle, rain washout, shores) is drawn in valleys, over
   the sea and around a camera standing in it; `fog` viewpoint and screenshot.
 
-Next (if resumed): a fifth review (Pass 8) of the latest captures, then act on it; the
-scenario soak after any change under `src/sim` or `src/core`.
+Next (if resumed): act on the latest review in QUALITY_LOG; re-run the scenario soak
+after any change under `src/sim` or `src/core`.
 
 ## How to resume
 

@@ -85,9 +85,10 @@ ended with 17,578 building entries and 6.9 ms/tick.
 Monkey test (`npm run monkey`): five minutes of random play against the real game —
 drags, zooms, clicks, hotkeys, power casts, terraforming strokes, panels, settings,
 quick save and a page reload — failing on any console error or warning. Two runs on the
-final code, both with **zero console errors or warnings**: seed 1337 at 1280×720 (46
-actions) and seed 7 at 640×360 (81 actions, including 11 casts, 10 terraforming strokes,
-17 zooms and a quick save). The action rate is bounded by software WebGL, which takes
+final code, both with **zero console errors or warnings**: seed 1337 at 1280×720 (36
+actions, including 3 casts, 3 terraforming strokes and a page reload) and seed 7 at
+640×360 (80 actions, including 11 casts, 10 terraforming strokes, 17 zooms, a quick save
+and a reload). The action rate is bounded by software WebGL, which takes
 0.5–2 s per frame in this container.
 
 ## Performance
