@@ -54,6 +54,7 @@ else {
 const sim = new SimClient();
 const loading = new LoadingScreen(uiRoot);
 const game = new Game(renderer, sim, uiRoot);
+game.qualityPinned = params.get('quality') !== null;
 new InputController(game, canvas);
 const harnessMode = params.get('harness') === '1';
 const audio = new AudioEngine();

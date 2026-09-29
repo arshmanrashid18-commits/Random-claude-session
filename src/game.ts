@@ -79,6 +79,8 @@ export class Game {
   enabled = false;
   /** Title screen: the camera drifts around the planet. */
   titleMode = false;
+  /** Quality fixed by the URL: settings and the governor leave it alone. */
+  qualityPinned = false;
   private titleDrift = 0;
   tutorial: import('./ui/title').Tutorial | null = null;
   /** Hooks for audio and effects (set by the audio engine / VFX). */
@@ -165,7 +167,11 @@ export class Game {
     this.renderer.camera.reducedMotion = s.reducedMotion;
     this.renderer.post.final.uniforms.uColorblind.value = s.colorblind;
     this.renderer.shared.uBorders.value = s.borders ? 0.35 : 0;
-    if (s.quality === 'auto') this.governor.enabled = true;
+    // A preset named in the URL (?quality=high) pins it for the session: the
+    // saved 'auto' setting re-enabled the governor, which stepped long
+    // software-rendered runs down to Low and blurred half the screenshots.
+    if (this.qualityPinned) this.governor.enabled = false;
+    else if (s.quality === 'auto') this.governor.enabled = true;
     else { this.governor.enabled = false; if (this.renderer.quality !== undefined) this.renderer.setQuality(s.quality); }
     this.feed.el.style.display = s.feed ? '' : 'none';
   }
