@@ -257,6 +257,20 @@ by cropping or by hiding components one at a time; the causes and fixes:
 | Trees bigger than huts | not a defect | a broadleaf crown is 6–10 m and a hut 4–5 m; the loose rocks were the scale breakers and are fixed |
 | Aurora a flat green smear | partly open | the curtains are marched in the atmosphere pass; seen from 1,150 u they lie across the night side — left for the next pass |
 
+### Found after Pass 7: the captures themselves were degraded
+
+Night-sky stars were fat discs in the full screenshot run but pinpoints in every
+isolated render of the same view at the same tick. Bisecting the run order showed the
+cause was state carried between views, not the sky: the saved setting `quality: auto`
+re-enabled the quality governor even when the URL pinned `?quality=high`, and over a
+long software-rendered run the governor stepped the preset down. Every view after the
+first few (fog, wildlife, village, night, storm, volcano and the interface captures)
+was rendered at Medium or Low: lower resolution, fewer grass blades and cloud steps,
+blurred stars. (The village view drew 53 calls in the run against 84 at true High.)
+So Passes 4–7 judged partly degraded images, and the renderer benchmark's presets were
+not what they claimed. A preset named in the URL now pins the session; all screenshots
+and the benchmark are re-captured.
+
 ## Delight pass
 
 Small touches nobody asked for, each verified in a screenshot or in play:

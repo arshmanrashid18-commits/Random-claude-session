@@ -212,3 +212,7 @@ Each entry: decision — why.
     relief in world space; rocks and buildings keep their facets. The flat-shaded
     crowns read as toys beside the softly lit globe, the reviewers' main objection;
     crisp facets stay where real things are faceted.
+61. **A URL quality preset is a pin.** `?quality=` fixes the preset for the session and
+    turns the governor off; saved settings apply only when the URL names none. The
+    harness depends on it: with the governor live, long software-rendered runs were
+    silently stepped down and screenshots and benchmarks did not show what they claimed.
