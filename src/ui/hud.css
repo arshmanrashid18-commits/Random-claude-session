@@ -248,13 +248,17 @@
   background: rgba(3, 5, 10, 0.45);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s;
+  /* Closed panels are hidden outright once they have faded, not merely
+     transparent: a hidden layer cannot take a click or a drag whatever any
+     other pointer rule says, and its controls leave the tab order. */
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0s linear 0.3s;
   z-index: 20;
   /* Centred between the top bar and the power bar, never under either. */
   padding: 94px 16px 104px;
   box-sizing: border-box;
 }
-.modal-wrap.open { opacity: 1; pointer-events: auto; }
+.modal-wrap.open { opacity: 1; pointer-events: auto; visibility: visible; transition: opacity 0.3s, visibility 0s; }
 .modal {
   width: min(880px, calc(100vw - 32px));
   max-height: calc(100vh - 206px);

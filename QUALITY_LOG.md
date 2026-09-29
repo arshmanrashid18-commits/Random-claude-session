@@ -373,6 +373,10 @@ rule now has zero specificity (`:where(#ui) > *`), and the monkey test first ass
 that the centre of the screen hits the world canvas, that a drag turns the planet, and
 that a HUD button opens its panel and closing it gives the world back. Run against the
 old CSS the check fails at once; on the fix it passes.
+The user reported the same symptom again after the fix was pushed (keyboard working,
+mouse doing nothing; whether their checkout had the fix is unconfirmed), so the closed
+layers were made `visibility: hidden` as well (DECISIONS 62): a second,
+independent guard rather than a reliance on one selector's specificity.
 
 ## Delight pass
 

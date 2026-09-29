@@ -216,3 +216,9 @@ Each entry: decision — why.
     turns the governor off; saved settings apply only when the URL names none. The
     harness depends on it: with the governor live, long software-rendered runs were
     silently stepped down and screenshots and benchmarks did not show what they claimed.
+62. **Closed panels are hidden, not transparent.** A closed panel layer is
+    `visibility: hidden` once its fade ends, as well as `pointer-events: none`. The
+    mouse bug found in play came from a pointer rule outranking the panels' own; a
+    hidden element takes no hit whatever the pointer rules say, so the same class of
+    bug cannot come back through another selector, and closed panels' buttons leave
+    the tab order.
