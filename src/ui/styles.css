@@ -55,7 +55,11 @@ html, body {
   pointer-events: none;
 }
 
-#ui > * { pointer-events: auto; }
+/* Interface layers take the pointer by default, at zero specificity so each
+   component's own rule wins: as \`#ui > *\` this outranked every closed panel's
+   \`pointer-events: none\`, and the invisible full-screen panel layers swallowed
+   every click and drag meant for the world and the HUD. */
+:where(#ui) > * { pointer-events: auto; }
 
 button, input, select { font-family: inherit; font-size: inherit; color: inherit; }
 

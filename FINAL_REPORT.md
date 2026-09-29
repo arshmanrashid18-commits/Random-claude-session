@@ -87,7 +87,11 @@ Peoples grow logistically to a plateau near 2,900; animals diversify through spe
 (13 → 42 species, then extinctions bring it to 34). Before the slot fix the same run
 ended with 17,578 building entries and 6.9 ms/tick.
 
-Monkey test (`npm run monkey`): five minutes of random play against the real game —
+Monkey test (`npm run monkey`): first a pointer check — the centre of the screen must hit
+the world, a drag must turn the planet, a HUD button must open its panel and closing it
+must give the world back (added after the first human player found that no click or drag
+reached the game: an invisible panel layer swallowed them, QUALITY_LOG). Then five minutes
+of random play against the real game —
 drags, zooms, clicks, hotkeys, power casts, terraforming strokes, panels, settings,
 quick save and a page reload — failing on any console error or warning. Two runs on the
 final code, both with **zero console errors or warnings**: seed 1337 at 1280×720 (36

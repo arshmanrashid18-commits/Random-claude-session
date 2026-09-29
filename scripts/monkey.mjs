@@ -44,6 +44,26 @@ await page.waitForFunction(() => window.__genesis !== undefined, null, { timeout
 await page.evaluate(() => window.__genesis.ready);
 await page.evaluate(() => window.__genesis.command({ kind: 'boundless', on: true }));
 
+// Real pointer input must reach the world and the HUD: a random run that only
+// checks the console once passed while an invisible panel layer swallowed every
+// click and drag (the game could not be played with a mouse at all).
+{
+  const hitOf = (x, y) => page.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return el ? (el.id || el.className?.baseVal || el.className || el.tagName) : 'none'; }, [x, y]);
+  const centre = await hitOf(W / 2, H / 2);
+  if (centre !== 'view') { console.log(`FAIL: the pointer at the centre of the screen hits "${centre}", not the world canvas`); process.exit(1); }
+  const f0 = await page.evaluate(() => { const f = window.__genesis.game.renderer.camera.target.focus; return [f.x, f.y, f.z]; });
+  await page.mouse.move(W / 2, H / 2); await page.mouse.down(); await page.mouse.move(W / 2 + 160, H / 2, { steps: 8 }); await page.mouse.up();
+  await page.evaluate(() => window.__genesis.renderFrames(2));
+  const f1 = await page.evaluate(() => { const f = window.__genesis.game.renderer.camera.target.focus; return [f.x, f.y, f.z]; });
+  if (Math.hypot(f1[0] - f0[0], f1[1] - f0[1], f1[2] - f0[2]) < 1e-3) { console.log('FAIL: dragging the planet did not turn it'); process.exit(1); }
+  await page.click('button[aria-label="chronicle"]', { timeout: 30_000 });
+  if (!(await page.evaluate(() => document.querySelector('.modal-wrap.open')))) { console.log('FAIL: clicking the Chronicle button opened nothing'); process.exit(1); }
+  await page.click('.modal-wrap.open .modal-head button[aria-label="Close"]', { timeout: 30_000 });
+  const after = await hitOf(W / 2, H / 2);
+  if (after !== 'view') { console.log(`FAIL: after closing a panel the centre hits "${after}"`); process.exit(1); }
+  console.log('pointer check ok: the world and the HUD take clicks and drags');
+}
+
 const keys = ['Space', 'Period', 'Comma', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyR', 'KeyF', 'Equal', 'Minus', 'KeyH', 'KeyL', 'KeyO', 'KeyY', 'KeyJ', 'KeyK', 'KeyU', 'KeyI', 'Slash', 'Backquote', 'F3', 'Escape', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM', 'KeyT', 'KeyP', 'F5'];
 const counts = {};
 const note = (k) => { counts[k] = (counts[k] ?? 0) + 1; };

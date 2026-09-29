@@ -360,6 +360,20 @@ Pass 9 findings acted on:
 | Village untouched inside the meteor's scorch; fireball a "glass dome" | open | impact damage to buildings is drawn only as the population loss; the dome is the crater lake under the fireball's glare |
 | Blurry terrain in the opening frame, orbit vs ground palette | open | region-cell climate and vegetation fields (64 per face) are the colour source at that height — the art-language gap above |
 
+### Found in play by the user: no mouse input after Begin
+
+The first person to play it could not click, drag or press anything once play began.
+Hit-testing in a real browser showed every point on screen landing on a closed panel's
+invisible full-screen layer. The cause was one rule, `#ui > * { pointer-events: auto }`:
+an id selector, it outranked every component's own `pointer-events: none`, so closed
+panels (opacity 0, covering the screen) swallowed all pointer input. It had been there
+since the first HUD; every harness run drove the game through its scripting API or only
+counted console errors, so nothing ever checked that a real click reached the world. The
+rule now has zero specificity (`:where(#ui) > *`), and the monkey test first asserts
+that the centre of the screen hits the world canvas, that a drag turns the planet, and
+that a HUD button opens its panel and closing it gives the world back. Run against the
+old CSS the check fails at once; on the fix it passes.
+
 ## Delight pass
 
 Small touches nobody asked for, each verified in a screenshot or in play:
