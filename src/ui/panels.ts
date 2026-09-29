@@ -342,11 +342,13 @@ export class EcologyPanel extends Modal {
     c.setLineDash([]);
     // End labels, nudged apart so none overlap (each keeps its line's colour).
     ends.sort((a, b) => a.y - b.y);
-    const gap = 22;
-    for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + gap);
-    const over = ends.length ? ends[ends.length - 1].y - bottom : 0;
-    if (over > 0) for (const e of ends) e.y -= over;
-    for (let k = ends.length - 2; k >= 0; k--) ends[k].y = Math.min(ends[k].y, ends[k + 1].y - gap);
+    // Within the plot, top and bottom (the highest label was cut by the edge).
+    const gap = Math.min(22, (bottom - top - 14) / Math.max(1, ends.length - 1));
+    for (let k = 0; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, k ? ends[k - 1].y + gap : top + 14);
+    if (ends.length && ends[ends.length - 1].y > bottom) {
+      ends[ends.length - 1].y = bottom;
+      for (let k = ends.length - 2; k >= 0; k--) ends[k].y = Math.min(ends[k].y, ends[k + 1].y - gap);
+    }
     c.font = '19px Inter, system-ui, sans-serif';
     c.textAlign = 'left';
     for (const e of ends) {
