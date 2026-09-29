@@ -198,6 +198,11 @@ void main() {
       float camR = length(ro);
       if (camR > CLOUD_R0 && tc0.x > 0.0) ce = tc0.x; // from above: stop at the inner shell
       else if (camR < CLOUD_R0) { cs = max(tc0.y, 0.0); }
+      // The march's step size and erosion detail come from the segment the ray
+      // would cross with nothing in the way: taken from the segment cut short
+      // by terrain, they jumped at every silhouette and drew a vertical seam
+      // through clouds banked against a mountain.
+      float ceFull = ce;
       ce = min(ce, sceneDist);
       // From low altitude the far deck is faded out beyond this distance (see
       // below); ending the march there keeps the step size the same for sky and
@@ -205,10 +210,10 @@ void main() {
       // bands along silhouettes and at the inner shell's tangent).
       float camAlt0 = length(ro) - PLANET_R;
       float horizonD = sqrt(max(dot(ro, ro) - PLANET_R * PLANET_R, 1.0));
-      if (camAlt0 < 260.0) ce = min(ce, horizonD * 0.85);
+      if (camAlt0 < 260.0) { ce = min(ce, horizonD * 0.85); ceFull = min(ceFull, horizonD * 0.85); }
       if (ce > cs && tc1.y > 0.0) {
         int steps = uCloudSteps;
-        float seg = ce - cs;
+        float seg = max(ceFull - cs, 1e-3);
         float dt = seg / float(steps);
         float jitter = hash13(vec3(gl_FragCoord.xy, uTime * 60.0));
         float mu = dot(rd, uSunDir);
@@ -229,6 +234,7 @@ void main() {
         for (int i = 0; i < 48; i++) {
           if (i >= steps || cloudT < 0.03) break;
           float t = cs + (float(i) + jitter) * dt;
+          if (t > ce) break;
           vec3 p = ro + rd * t;
           float dens = cloudDensity(p, lod);
           if (camAlt < 700.0) dens *= smoothstep(nearFade * 0.35, nearFade, t);
@@ -330,7 +336,11 @@ void main() {
       }
       // From far out, curtains against space are edge-on slivers at the limb
       // (they read as colour fringing): only over the night side there.
-      if (sky) aur *= 1.0 - smoothstep(500.0, 1400.0, length(ro) - PLANET_R);
+      float farA = smoothstep(500.0, 1400.0, length(ro) - PLANET_R);
+      if (sky) aur *= 1.0 - farA;
+      // ...and over the ground near the limb too, where they are seen edge-on
+      // as stray green specks along the lit rim.
+      else aur *= mix(1.0, smoothstep(0.15, 0.45, dot(normalize(ro + rd * sceneDist), -rd)), farA);
     }
     vec3 Tfull = exp(-tau);
     vec3 background = sceneCol;
@@ -421,7 +431,8 @@ void main() {
     float camAltR = length(uCamPos) - PLANET_R;
     // Against a bright sky (never black space), or in front of distant land.
     float reach = (sky ? (1.0 - smoothstep(40.0, 110.0, camAltR)) * smoothstep(0.25, 0.7, skyGlow) : clamp((sceneDist - 250.0) / 350.0, 0.0, 1.0)) * rbAlt;
-    result += rainbow(rd) * uRainbow * reach * uSunIntensity * 0.035;
+    // (faint: a bow is a veil of colour over the sky, not a painted stripe)
+    result += rainbow(rd) * uRainbow * reach * uSunIntensity * 0.02;
   }
   outColor = vec4(result, 1.0);
 }

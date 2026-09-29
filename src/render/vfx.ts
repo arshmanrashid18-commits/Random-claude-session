@@ -783,7 +783,12 @@ export class Vfx {
           const screenUp = new V().setFromMatrixColumn(c.camera.matrixWorld, 1);
           screenUp.addScaledVector(up, -screenUp.dot(up));
           if (screenUp.lengthSq() < 1e-6) screenUp.set(up.z, 0, -up.x);
-          const dir = screenUp.normalize().multiplyScalar(0.8).addScaledVector(up, 0.6).normalize();
+          // ...coming in on a slant (straight down the screen it drew a
+          // perfectly vertical column).
+          const screenRight = new V().setFromMatrixColumn(c.camera.matrixWorld, 0);
+          screenRight.addScaledVector(up, -screenRight.dot(up));
+          const side = (e.id % 2 ? 1 : -1) * 0.45;
+          const dir = screenUp.normalize().multiplyScalar(0.8).addScaledVector(screenRight.normalize(), side).addScaledVector(up, 0.6).normalize();
           const camDist = c.camera.position.distanceTo(ground);
           path = { dir, dist: Math.min(620, Math.max(80, camDist * 0.55)), prev: null };
           this.meteorEntry.set(e.id, path);
@@ -810,7 +815,8 @@ export class Vfx {
           const t = (s + this.rand()) / steps;
           const w = from.clone().lerp(p, t);
           const age = 1 - t; // older along the wake
-          const v = entry.clone().multiplyScalar(1 + this.rand() * 2).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(0.8));
+          // (older puffs drift and spread: a wake that widens and wanders)
+          const v = entry.clone().multiplyScalar(1 + this.rand() * 2).add(new V(this.sym(), this.sym(), this.sym()).multiplyScalar(0.8 + age * 2.2));
           if (this.rand() < 0.6 * q) this.add.emit(this.time, w.x, w.y, w.z, v.x, v.y, v.z, 0.5 + this.rand() * 0.6 - age * 0.3, 2.5, 5, 0, 0.8, 2.6, 1.1, 0.35, 0.9, Shape.Flame, this.rand());
           this.alpha.emit(this.time, w.x, w.y, w.z, v.x * 0.3, v.y * 0.3, v.z * 0.3, 7 + this.rand() * 5, 2.5 + age * 4, 11 + age * 6, 0, 0.3, 0.32, 0.29, 0.27, 0.5, Shape.Smoke, this.rand());
         }
@@ -995,7 +1001,8 @@ export class Vfx {
       this.add.emit(this.time, p.x, p.y, p.z, dir.x, dir.y, dir.z, 0.6, 1.2, 0.4, 0, 0, 6, 6, 7, 1, Shape.Streak, this.rand());
     }
     // Whales and leaping fish in coastal seas.
-    if (day && alt < 260 && this.time > this.nextSplash) {
+    // (only near the camera: from higher up the spray is a single white pixel)
+    if (day && alt < 110 && this.time > this.nextSplash) {
       this.nextSplash = this.time + 3 + this.rand() * 6;
       const p = this.around(up, Math.min(200, alt + 60), data, 0);
       const d = p.clone().normalize();

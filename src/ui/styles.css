@@ -24,6 +24,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Lining, tabular figures everywhere: the display face's old-style numerals made
+   "Year 11" read as "Year II" and "0" as "O". */
+html, body, button, input, select { font-variant-numeric: lining-nums tabular-nums; }
 
 html, body {
   margin: 0;

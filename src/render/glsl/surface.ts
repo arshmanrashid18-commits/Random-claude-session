@@ -333,9 +333,15 @@ SurfaceInfo terrainSurface(vec3 dir, vec3 wp, float h, vec3 N, float cavity, flo
   col = mix(col, snowCol, snowAmt);
 
   // --- surface effects: burn scars, ash, development
-  float burn = surf.r;
-  col = mix(col, srgb(vec3(0.08, 0.07, 0.06)), burn * 0.85);
-  col = mix(col, srgb(vec3(0.35, 0.34, 0.33)), surf.g * 0.8);
+  // Burn scars and ash fall are patchy: straight from the region cells they were
+  // even discs of dark splats and a flat grey disc. Noise breaks them into char,
+  // a singed rim and drifts of ash.
+  float bn = snoise(dir * 320.0) * 0.6 + snoise(dir * 1100.0) * 0.4;
+  float burn = smoothstep(0.08, 0.6, surf.r * (1.0 + bn * 0.45));
+  col = mix(col, col * vec3(0.72, 0.6, 0.45), smoothstep(0.02, 0.2, surf.r) * (1.0 - burn) * 0.6);
+  col = mix(col, srgb(vec3(0.09, 0.075, 0.06)), burn * 0.85);
+  float ash = smoothstep(0.05, 0.55, surf.g * (1.0 + bn * 0.6));
+  col = mix(col, srgb(vec3(0.3, 0.29, 0.28)) * (0.8 + 0.3 * bn), ash * 0.8);
   col = mix(col, srgb(vec3(0.45, 0.38, 0.30)), surf.a * 0.35 * (1.0 - snowAmt));
 
   // Ambient occlusion from cavity (concave valleys darker).

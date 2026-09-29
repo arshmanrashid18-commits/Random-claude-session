@@ -265,7 +265,9 @@ void main() {
   // Night: the lights of settlements.
   vec4 surf = texture(uSurfaceTex, ruv);
   float night = smoothstep(0.02, -0.12, mu);
-  if (h > 0.0) color += townLights(dir, surf.a, vDist, night);
+  // (sampled through the same warp as the lava: straight from the coarse region
+  // cells a town's glow was a hard-edged square)
+  if (h > 0.0 && night > 0.0) color += townLights(dir, texture(uSurfaceTex, regionUV(normalize(dir + lw * 0.012))).a, vDist, night);
   // Borders between peoples, seen from afar.
   if (uBorders > 0.0) {
     float own;
@@ -420,7 +422,7 @@ vec4 shadeWater(vec3 wp, vec3 dir, float depth, float dist, float lakeMode) {
   vec3 foamCol = vec3(0.9, 0.95, 1.0) * (sunCol * max(mu, 0.0) * 0.3 + skyAmbient(dir, dir, L) * uSunIntensity * 0.06);
   // Inland water mirrors less of the pale analytic sky (lakes read as flat
   // silver sheets); their own dark body colour carries them.
-  vec3 col = bodyLit * alpha + refl * fres * mix(1.0, 0.6, lakeT) + spec;
+  vec3 col = bodyLit * alpha + refl * fres * mix(1.0, 0.6, lakeT) + spec * mix(1.0, 0.45, lakeT);
   float a = clamp(max(alpha, fres * 0.9), 0.0, 1.0);
   // At night the lamps of a town shimmer on its river and harbour (dark water
   // punched black holes through every lit town seen from afar).

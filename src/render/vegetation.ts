@@ -31,7 +31,7 @@ const E = (x: number, y: number, z: number) => new THREE.Euler(x, y, z);
 /** Simplified silhouettes for distant trees (a fifth of the triangles). */
 function buildFarModel(type: VegType): THREE.BufferGeometry | null {
   const b = new MeshBuilder();
-  const bark = lin(0x5a4230), barkLight = lin(0xb9b2a4);
+  const bark = lin(0x5a4230), barkLight = lin(0x9a948a); // birch bark: pale, but not paper-white poles
   switch (type) {
     case 'broadleaf':
       b.cylinder(0.2, 0.36, 3.4, 4, V3(0, -0.4, 0), { color: bark, ao: 0.4 });
@@ -79,7 +79,7 @@ function buildFarModel(type: VegType): THREE.BufferGeometry | null {
 export function buildModel(type: VegType, far = false): THREE.BufferGeometry {
   if (far) { const g = buildFarModel(type); if (g) return g; }
   const b = new MeshBuilder();
-  const bark = lin(0x5a4230), barkLight = lin(0xb9b2a4);
+  const bark = lin(0x5a4230), barkLight = lin(0x9a948a); // birch bark: pale, but not paper-white poles
   switch (type) {
     case 'broadleaf': {
       b.cylinder(0.2, 0.36, 3.2, 7, V3(0, -0.4, 0), { color: bark, jitter: 0.15, ao: 0.4 });
@@ -533,7 +533,8 @@ export class Vegetation {
       broad * 0.62 * cluster,          // broadleaf
       conifer * 0.72 * cluster,        // conifer
       tropical * 0.7 * cluster,        // palm
-      xeric * xeric * 0.12 * Math.max(0, 1 - grass * 1.6), // cactus (true desert only)
+      // cactus: true desert only, never among the trees of a woodland
+      xeric * xeric * 0.12 * Math.max(0, 1 - grass * 1.6) * Math.max(0, 1 - (broad + conifer + tropical) * 4),
       shrub * 0.12 + grass * 0.02,     // bush
       moss * 0.05 + conifer * 0.02,    // snag
       0.012 + xeric * 0.03,            // rock
@@ -581,7 +582,8 @@ export class Vegetation {
     if (slope > 0.9 && type !== 6) return;
     const temp = data.sampleRegion(data.climateCPU, face, a, b, 0) * 80 - 40;
     const snow = Math.min(1, data.sampleRegion(data.climateCPU, face, a, b, 2) * 1.8);
-    const autumn = type === 0 || type === 8 ? Math.max(0, Math.min(1, (12 - temp) / 8)) * Math.max(0, Math.min(1, (temp + 4) / 6)) : 0;
+    // (leaves are down before the snow lies: no red crowns on a snowfield)
+    const autumn = (type === 0 || type === 8 ? Math.max(0, Math.min(1, (12 - temp) / 8)) * Math.max(0, Math.min(1, (temp + 4) / 6)) : 0) * (1 - snow);
     // Loose rocks stay smaller than a hut (boulders as big as houses broke the
     // sense of scale); cliffs still gather the larger ones.
     const baseScale = [1.0, 1.05, 0.95, 0.9, 1.0, 1.0, 0.5, 1.0, 1.0][type];

@@ -117,26 +117,27 @@ uses at most a few percent of the worker's time.
 
 ### Rendering
 
-Measured with `node scripts/perf.mjs` (1280×720, world advanced 5 years, 12 frames per
-view, headless Chromium + SwiftShader):
+Measured with `node scripts/perf.mjs` (1280×720, world advanced 5 years, 20 frames per
+view, headless Chromium + SwiftShader; each preset pinned by the URL, re-measured after
+the governor fix, DECISIONS 61):
 
 | Quality | View | Main-thread CPU ms/frame | Draw calls | Triangles | SwiftShader wall ms/frame |
 |---|---|---|---|---|---|
-| low | orbit | 1.78 | 31 | 0.13 M | 1328 |
-| low | village | 3.11 | 49 | 0.60 M | 4276 |
-| low | forest | 2.28 | 52 | 0.44 M | 4841 |
-| medium | orbit | 1.91 | 39 | 0.15 M | 2623 |
-| medium | village | 4.74 | 75 | 1.41 M | 10134 |
-| medium | forest | 3.48 | 81 | 1.05 M | 10945 |
-| high | orbit | 2.66 | 39 | 0.16 M | 4152 |
-| high | village | 4.72 | 75 | 1.91 M | 20292 |
-| high | forest | 4.88 | 81 | 1.61 M | 14424 |
-| ultra | orbit | 2.12 | 39 | 0.17 M | 3520 |
-| ultra | village | 5.61 | 75 | 2.54 M | 17650 |
-| ultra | forest | 3.42 | 81 | 2.20 M | 19323 |
+| low | orbit | 2.11 | 31 | 0.15 M | 1223 |
+| low | village | 3.28 | 48 | 0.61 M | 3454 |
+| low | forest | 2.84 | 51 | 0.48 M | 3445 |
+| medium | orbit | 2.58 | 39 | 0.20 M | 2011 |
+| medium | village | 4.79 | 73 | 1.51 M | 7211 |
+| medium | forest | 3.84 | 79 | 1.22 M | 7136 |
+| high | orbit | 2.66 | 39 | 0.24 M | 3217 |
+| high | village | 4.72 | 73 | 2.16 M | 13538 |
+| high | forest | 4.11 | 79 | 1.84 M | 13153 |
+| ultra | orbit | 2.49 | 39 | 0.37 M | 3807 |
+| ultra | village | 5.79 | 73 | 2.86 M | 17261 |
+| ultra | forest | 4.37 | 79 | 2.59 M | 16343 |
 
-The main thread spends at most 5.6 ms per frame at any preset, leaving more than
-11 ms of a 16.7 ms (60 fps) frame for the GPU; draw calls never exceed 81.
+The main thread spends at most 5.8 ms per frame at any preset, leaving more than
+10 ms of a 16.7 ms (60 fps) frame for the GPU; draw calls never exceed 79.
 
 What these numbers are: *main-thread CPU* per frame (scene update + draw submission),
 draw calls and triangles, measured in headless Chromium. This container has no GPU —

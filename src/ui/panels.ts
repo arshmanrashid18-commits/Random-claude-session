@@ -297,7 +297,9 @@ export class EcologyPanel extends Modal {
     d.history.forEach((h, i) => { if (!this.hidden.has(i)) for (const v of h) max = Math.max(max, v); });
     // Square-root scale: small populations stay readable beside a boom (on a
     // linear axis six species lay flat along zero), with round tick values.
-    const top = 16, bottom = H - 34, left = 70;
+    // The right margin holds a label at the end of each line: thirteen series
+    // share eight hues, so the legend alone could not tell them apart.
+    const top = 16, bottom = H - 34, left = 70, right = 170;
     const yOf = (v: number) => bottom - Math.sqrt(Math.max(0, v) / max) * (bottom - top);
     const nice = (v: number) => {
       const p = 10 ** Math.floor(Math.log10(Math.max(1, v)));
@@ -311,7 +313,7 @@ export class EcologyPanel extends Modal {
     c.textAlign = 'right';
     for (const v of [0, ...ticks]) {
       const y = yOf(v);
-      c.beginPath(); c.moveTo(left, y); c.lineTo(W, y); c.stroke();
+      c.beginPath(); c.moveTo(left, y); c.lineTo(W - right, y); c.stroke();
       c.fillText(v.toLocaleString(), left - 10, y + 7);
     }
     const n = Math.max(...d.history.map((h) => h.length), 2);
@@ -319,8 +321,9 @@ export class EcologyPanel extends Modal {
     c.textAlign = 'left';
     c.fillText(`${years.toFixed(0)} years ago`, left, H - 4);
     c.textAlign = 'right';
-    c.fillText('now', W - 4, H - 4);
+    c.fillText('now', W - right, H - 4);
     c.textAlign = 'left';
+    const ends: { y: number; name: string; color: string }[] = [];
     d.history.forEach((h, i) => {
       if (this.hidden.has(i) || h.length < 2) return;
       const st = speciesStyle(d.species, i);
@@ -329,13 +332,27 @@ export class EcologyPanel extends Modal {
       c.setLineDash(st.dash);
       c.beginPath();
       h.forEach((v, k) => {
-        const x = left + ((k + (n - h.length)) / (n - 1)) * (W - left - 6);
+        const x = left + ((k + (n - h.length)) / (n - 1)) * (W - left - right);
         const y = yOf(v);
         if (k === 0) c.moveTo(x, y); else c.lineTo(x, y);
       });
       c.stroke();
+      if ((d.alive[i] ?? 0) > 0) ends.push({ y: yOf(h[h.length - 1]), name: d.species[i].name, color: st.color });
     });
     c.setLineDash([]);
+    // End labels, nudged apart so none overlap (each keeps its line's colour).
+    ends.sort((a, b) => a.y - b.y);
+    const gap = 22;
+    for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + gap);
+    const over = ends.length ? ends[ends.length - 1].y - bottom : 0;
+    if (over > 0) for (const e of ends) e.y -= over;
+    for (let k = ends.length - 2; k >= 0; k--) ends[k].y = Math.min(ends[k].y, ends[k + 1].y - gap);
+    c.font = '19px Inter, system-ui, sans-serif';
+    c.textAlign = 'left';
+    for (const e of ends) {
+      c.fillStyle = e.color;
+      c.fillText(e.name, W - right + 12, e.y + 6);
+    }
   }
 
   private drawMap(d: EcologyData): void {

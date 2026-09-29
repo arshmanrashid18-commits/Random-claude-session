@@ -77,8 +77,11 @@ function block(P: Parts, pal: Palette, g: number, style: number, w: number, d: n
     // accents are what make a village pop against the land.
     b.cylinder(w * 0.565, w * 0.575, 0.22, 10, V(x, h * 0.62, z), P.p({ slot: 1 }));
     b.cone(w * 0.85, h * 1.2, 10, V(x, h - 0.05, z), P.p({ color: roofC, jitter: 0.12 }));
-    // A painted cap at the apex: the people's colour, seen from above.
-    b.cone(w * 0.26, h * 0.36, 10, V(x, h - 0.05 + h * 1.2 * 0.7, z), P.p({ slot: 1 }));
+    // A smoke-hole collar and a short finial at the apex (a cap painted in the
+    // people's colour made every hut read as a map pin from above).
+    const apex = h - 0.05 + h * 1.2 * 0.78;
+    b.cylinder(w * 0.16, w * 0.2, h * 0.12, 8, V(x, apex, z), P.p({ color: trim, jitter: 0.1 }));
+    b.cylinder(0.05, 0.07, h * 0.3, 4, V(x, apex, z), P.p({ color: lin(0x5a4632) }));
     b.box(0.5, 0.9, 0.12, V(x, 0, z + w * 0.58), P.p({ slot: 2 }));
     return;
   }

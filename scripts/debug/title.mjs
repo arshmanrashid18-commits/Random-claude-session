@@ -19,10 +19,14 @@ await page.evaluate(() => window.__genesis.ready);
 await page.evaluate(() => window.__genesis.renderFrames(4));
 await page.screenshot({ path: `${out}/title.png` });
 await page.click('[data-act="scenarios"]');
+// Park the pointer: left over a card after the click, it lifted that card
+// (hover) out of line with its row.
+await page.mouse.move(2, 2);
 await page.evaluate(() => window.__genesis.renderFrames(2));
 await page.screenshot({ path: `${out}/title-scenarios.png` });
 await page.click('[data-act="back"]');
 await page.click('[data-act="new"]');
+await page.mouse.move(2, 2);
 await page.evaluate(() => window.__genesis.renderFrames(2));
 await page.screenshot({ path: `${out}/title-new.png` });
 await page.click('[data-act="back"]');
