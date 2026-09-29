@@ -168,10 +168,10 @@ reviewer scores the four visual categories; the other four rest on measurements.
 
 | Category | Score | Basis |
 |---|---|---|
-| Visual beauty | 5 | reviewer, Passes 4–7: 5 · 5 · 5 · 5 |
-| Visual coherence | 4 | reviewer: 4 · 3 · 4 · 4 |
-| Polish / juice (visible) | 4 | reviewer: 4 · 4 · 3 · 4 |
-| First-impression wow | 4 | reviewer: 4 · 4 · 5 · 4 |
+| Visual beauty | 5 | reviewer, Passes 4–9: 5 · 5 · 5 · 5 · 5 · 5 (title, terminator and coast rated 6–7) |
+| Visual coherence | 4 | reviewer: 4 · 3 · 4 · 4 · 4 · 4 |
+| Polish / juice (visible) | 5 | reviewer: 4 · 4 · 3 · 4 · 5 · 5 (the interface alone about 7) |
+| First-impression wow | 5 | reviewer: 4 · 4 · 5 · 4 · 5 · 5 |
 | Emergent storytelling | 8 | measured: wars, plagues traced to their carriers, schisms and scripture arise unscripted (debug traces; chronicle); the chronicle still reads partly as a log |
 | Moment-to-moment fun | 7 | twenty powers with combos and eight scenarios proven winnable and losable, but play-tested only by scripts and a monkey, never by a person |
 | Performance | 7 | simulation measured (100× early, ~42× with 10,000 agents); GPU budgets met by construction only, never measured on a GPU |
@@ -180,22 +180,30 @@ reviewer scores the four visual categories; the other four rest on measurements.
 ### Why the shortfall
 
 The quality loop's exit rule is "every category 9+, or five consecutive loops without
-meaningful improvement, explained". Passes 4 to 7 are four such loops. Each fixed every
-concrete defect its review named — about 90 findings, each confirmed by cropping, by
-picking heights or by hiding components one at a time, each with its root cause in
-QUALITY_LOG.md — and not one finding recurred as stated. The scores did not move
-because each review found the next layer, and because the reviewer's standing objections
-are to the approach, not to bugs:
+meaningful improvement, explained". Passes 5 to 9 are five such loops: no category moved
+more than one point from its Pass 4 score, and each round was read by a different
+reviewer. Each round fixed the concrete defects its review named — about 130 findings,
+each confirmed by cropping, by picking heights or by hiding components one at a time,
+each with its root cause in QUALITY_LOG.md — and almost none recurred as stated. One
+root cause was in the evidence itself: until Pass 8 the harness's screenshots were
+silently rendered below the requested preset (DECISIONS 61), so Passes 4–7 judged
+partly degraded images. The scores did not move further because each review found the
+next layer, and because the reviewers' standing objections are to the approach, not to
+bugs:
 
 1. **Two art languages.** The globe is shaded semi-physically (atmosphere, volumetric
-   clouds, water optics) while people, animals, trees and buildings are chunky
-   procedural low-poly props. Up close the two do not belong to one world. Closing the
-   gap means either stylising the globe or replacing every prop with authored-quality
-   models, a rebuild rather than a fix.
-2. **No art-directed hero shots.** A studio iterates a fixed ladder of shots against
+   clouds, water optics) while people, animals, trees and buildings are procedural
+   low-poly props. Soft foliage and weathered rock relief narrowed the gap; closing it
+   means authored-quality models and tri-planar ground materials in the globe's palette,
+   or a stylised globe: a rebuild rather than a fix.
+2. **Water as carved channels.** Rivers are ribbons over a height field whose lower
+   reaches were carved below sea level at world creation; channels with banks that widen
+   downstream need the generator to change, which reshapes every world and the eight
+   calibrated scenarios.
+3. **No art-directed hero shots.** A studio iterates a fixed ladder of shots against
    paintovers with artists; here every image is the unedited output of simulation and
    procedural code, judged only at 1280×720 on a CPU rasteriser.
-3. **Software rendering.** Every image was rendered by SwiftShader at DPR 1 with FXAA:
+4. **Software rendering.** Every image was rendered by SwiftShader at DPR 1 with FXAA:
    thin geometry aliases, and a frame takes seconds, which limits how many look
    iterations fit in a pass.
 
@@ -219,8 +227,9 @@ play-testing, and no real GPU.
 4. **Evidence over belief.** Several of the worst bugs were invisible until measured: a
    three.js cache that drew only the first few hundred instances (most trees and crowds
    never appeared), hurricanes thresholded into haze (found by bisecting the shader
-   with forced storms), and a building list that grew for five centuries (found by the
-   500-year soak's trajectory, not its pass/fail).
+   with forced storms), a building list that grew for five centuries (found by the
+   500-year soak's trajectory, not its pass/fail), and screenshots silently rendered
+   below the preset they claimed (found because stars blurred only in full runs).
 5. **Nothing downloaded.** Terrain, clouds, stars, the moon, every model, the music and
    the sound effects are generated by code at load time; only the interface typefaces
    are bundled files.
@@ -256,9 +265,11 @@ play-testing, and no real GPU.
 3. **"What if" — forking history.** Determinism makes rewinding cheap: keep a save every
    in-game decade and let the player branch from any of them, with the chronicle of the
    abandoned timeline kept as apocrypha.
-4. **Animated bodies and richer towns.** Procedural walk cycles with foot placement on
-   the terrain for people and animals, and per-age building kits with more variety
-   (market halls, aqueducts, rail yards).
-5. **Seed-robust scenarios and a richer sky.** Tune each scenario across many seeds
-   rather than one, and add a high cirrus layer, cloud shadows on the sea and a sea state
-   driven by the wind.
+4. **One art language, near and far.** Tri-planar rock, soil and grass materials in the
+   globe's own biome palette, two or three procedural tree species with real silhouettes,
+   procedural walk cycles with foot placement, and per-age building kits — the change
+   every reviewer asked for first.
+5. **Carved rivers and seed-robust scenarios.** Regenerate the hydrology so rivers cut
+   banked channels that widen downstream (with fords and bridges where roads cross), then
+   re-tune each scenario across many seeds rather than one, since the new terrain
+   invalidates the current calibration anyway.

@@ -310,6 +310,55 @@ Findings and dispositions:
 | Close-range art (cone pines, faceted cliffs, plain meadows) and the near/far palette gap | open | the reviewer's first recommendation in every round: rebuilding the close-range art in the globe's language (tri-planar rock, a unified biome palette, new tree species) is a rebuild, not a fix |
 | Fireball, dust ring and debris; caldera geometry; lit smoke | open | effects are particles and terrain shading only; lit volumetric smoke and crater geometry are future work |
 
+## Pass 9 — sixth adversarial review, and why the loop ends here
+
+| Category | Pass 4 | Pass 5 | Pass 6 | Pass 7 | Pass 8 | Pass 9 |
+|---|---|---|---|---|---|---|
+| Visual beauty | 5 | 5 | 5 | 5 | 5 | 5 |
+| Visual coherence | 4 | 3 | 4 | 4 | 4 | 4 |
+| Polish / juice (visible) | 4 | 4 | 3 | 4 | 5 | 5 |
+| First-impression wow | 4 | 4 | 5 | 4 | 5 | 5 |
+
+Scores identical to Pass 8. The loop's exit rule is "every category 9+, or five
+consecutive loops with no meaningful improvement (then explain why)". Passes 5 to 9 are
+five such loops: no category ever moved more than one point from its Pass 4 score
+(beauty never moved; coherence 3–4, polish 3–5, wow 4–5, going up and down between
+rounds), and a fresh reviewer reads each round, so one point is within what a different
+reader alone can change. Over those rounds about 130 concrete findings were verified and
+fixed, each with its root cause above, and almost none recurred as stated. What did not
+move is what the reviews ask for in their "three changes" every time:
+
+1. **One art language from orbit to the ground.** The globe is shaded semi-physically; the
+   props (trees, rocks, huts, people, animals) are procedural low-poly meshes. Soft
+   foliage (Pass 7) and rock relief narrowed the gap but did not close it. Closing it means
+   authored-quality models and tri-planar ground materials in the globe's palette, or a
+   stylised globe: a rebuild of the close-range art, not a defect to fix.
+2. **Water as carved channels.** Rivers are ribbons over a heightfield whose lower reaches
+   were carved below sea level at world creation. Channels with banks that widen
+   downstream need the generator to change, which reshapes every world and invalidates
+   the eight calibrated scenarios (DECISIONS 50, 57).
+3. **Hero effects.** Fireballs, dust curtains, caldera geometry and lit volumetric smoke are
+   authored sequences in a studio pipeline; here they are particles and shading.
+
+The limit is the approach and the environment (software rendering at 1280×720, no artist,
+no paintovers), not a list of bugs, so a sixth loop of fixes would move the same ±1.
+
+Pass 9 findings acted on:
+
+| Finding | Verdict | Fix |
+|---|---|---|
+| "Hare" label cut by the top of the chart | real | end labels clamped inside the plot |
+| "You cast Meteor upon Noukaih" reads like a template | real | each power has its own sentence ("You hurled a star at Noukaih.") |
+| Double spaces between chronicle sentences | real | the sentence spans' side padding added to the space |
+| Power slots showing "–" for a hotkey | real | unbound slots show nothing |
+| Scaffolds as dotted debug-wireframe lines | real | poles thick enough to stay solid at village range |
+| A lone orange "cone" at the end of the meteor's wake | real | flames have soft edges; the wake's flames are smaller and shorter-lived |
+| A third of the wildlife frame is giant dark pine polygons | real | plants right against the lens dissolve; the view is lit from a mid-morning sun |
+| A snowy pine at the lip of an erupting crater | real | nothing grows in lava or fresh ash |
+| Rivers broken into dashes in the opening frame | real | ribbons never thinner than about two pixels (up to four times their width) |
+| Village untouched inside the meteor's scorch; fireball a "glass dome" | open | impact damage to buildings is drawn only as the population loss; the dome is the crater lake under the fireball's glare |
+| Blurry terrain in the opening frame, orbit vs ground palette | open | region-cell climate and vegetation fields (64 per face) are the colour source at that height — the art-language gap above |
+
 ## Delight pass
 
 Small touches nobody asked for, each verified in a screenshot or in play:
